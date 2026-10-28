@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder values until parts are bought. Do not use for a real farm."
+  },
+  "sensors": {},
+  "pumps": {},
+  "valves": {},
+  "fans": {}
+}

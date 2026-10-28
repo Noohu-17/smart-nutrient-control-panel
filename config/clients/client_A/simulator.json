@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder values until Track 3 fills this file in T3-2. Track 3 owns this file. Do not use for a real farm. speedOptions is real (contract 11.4).",
+    "placeholderKeys": ["driftPerHour", "plantUptake"]
+  },
+  "speedOptions": [0, 1, 60, 288],
+  "driftPerHour": { "ec": 0.02, "ph": 0.03, "solTempC": 0.2 },
+  "plantUptake": { "waterLPerBenchPerDay": 12 }
+}

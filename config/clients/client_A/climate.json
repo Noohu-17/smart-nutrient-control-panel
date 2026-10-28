@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder values until the farm team confirms the air temperature and humidity set-points. Do not use for a real farm. Chiller range, manual minutes and fogger rules are real (handoff, contract 2.3 and 14).",
+    "placeholderKeys": ["setpoints.airTempMaxC", "setpoints.airRhMax"]
+  },
+  "fanStages": { "min": 0, "maxStageFrom": "layout.climate.fans" },
+  "chillerSetpointC": { "min": 18, "max": 28 },
+  "manualMinutes": { "min": 5, "max": 240 },
+  "foggerRunMin": [2, 3, 5],
+  "foggerBlockAboveRh": 85,
+  "setpoints": { "airTempMaxC": 30.0, "airRhMax": 85 }
+}
