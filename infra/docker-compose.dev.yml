@@ -1,0 +1,49 @@
+# Local development stack: PostgreSQL with TimescaleDB, and the Mosquitto MQTT broker.
+#
+# DEV ONLY. MQTT has no TLS and no passwords, and the database uses a default password.
+# Staging uses per-device MQTT accounts and ACLs (contract sections 3 and 4).
+# Both ports are bound to 127.0.0.1, so nothing is reachable from the network.
+#
+# Run from the repo root:
+#   docker compose -f infra/docker-compose.dev.yml up -d      start
+#   docker compose -f infra/docker-compose.dev.yml ps         both services should be "healthy"
+#   docker compose -f infra/docker-compose.dev.yml down       stop (add -v to also delete the database)
+#
+# Defaults can be overridden with environment variables or an infra/.env file:
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT
+
+name: sna-dev
+
+services:
+  db:
+    image: timescale/timescaledb:2.30.2-pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sna}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sna-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-sna}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  mqtt:
+    image: eclipse-mosquitto:2.0.22
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "healthcheck", "-m", "ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  db-data:
