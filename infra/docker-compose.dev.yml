@@ -1,16 +1,18 @@
-# Local development stack: PostgreSQL with TimescaleDB, and the Mosquitto MQTT broker.
+# Local development stack: PostgreSQL with TimescaleDB, the Mosquitto MQTT broker,
+# and the FastAPI back end (backend/).
 #
 # DEV ONLY. MQTT has no TLS and no passwords, and the database uses a default password.
 # Staging uses per-device MQTT accounts and ACLs (contract sections 3 and 4).
-# Both ports are bound to 127.0.0.1, so nothing is reachable from the network.
+# All ports are bound to 127.0.0.1, so nothing is reachable from the network.
 #
 # Run from the repo root:
-#   docker compose -f infra/docker-compose.dev.yml up -d      start
-#   docker compose -f infra/docker-compose.dev.yml ps         both services should be "healthy"
-#   docker compose -f infra/docker-compose.dev.yml down       stop (add -v to also delete the database)
+#   docker compose -f infra/docker-compose.dev.yml up -d --build   start (rebuilds the api image)
+#   docker compose -f infra/docker-compose.dev.yml ps              every service should be "healthy"
+#   curl http://localhost:8000/api/health                           {"status":"OK","database":"UP","broker":"UP"}
+#   docker compose -f infra/docker-compose.dev.yml down            stop (add -v to also delete the database)
 #
 # Defaults can be overridden with environment variables or an infra/.env file:
-#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT, API_PORT
 
 name: sna-dev
 
@@ -42,6 +44,30 @@ services:
       test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "healthcheck", "-m", "ok"]
       interval: 10s
       timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build: ../backend
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-sna}
+      DB_USER: ${POSTGRES_USER:-sna}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sna-dev-only}
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=8)"]
+      interval: 10s
+      timeout: 10s
       retries: 5
     restart: unless-stopped
 
