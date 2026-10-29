@@ -9,10 +9,13 @@
 #   docker compose -f infra/docker-compose.dev.yml up -d --build   start (rebuilds the api image)
 #   docker compose -f infra/docker-compose.dev.yml ps              every service should be "healthy"
 #   curl http://localhost:8000/api/health                           {"status":"OK","database":"UP","broker":"UP"}
+#   docker compose -f infra/docker-compose.dev.yml exec api alembic upgrade head    build or update the database
+#   docker compose -f infra/docker-compose.dev.yml exec api python -m app.db.seed   load the client's layout.json
 #   docker compose -f infra/docker-compose.dev.yml down            stop (add -v to also delete the database)
 #
 # Defaults can be overridden with environment variables or an infra/.env file:
-#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT, API_PORT
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT, API_PORT,
+#   CLIENT (the config pack under config/clients/ that the api reads; default client_A)
 
 name: sna-dev
 
@@ -57,6 +60,9 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-sna-dev-only}
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"
+      CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+    volumes:
+      - ../config:/config:ro  # the client config packs (contract 2.5), read only
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
