@@ -1,0 +1,198 @@
+/* =====================================================================
+   Design tokens · Smart Nutrient Portal (Phase 2A)
+   Copied from the prototype's "Design system" board and its CSS.
+   This is the only place raw values live: every component and screen
+   uses these variables, never hex codes or pixel numbers.
+
+   The prototype is light-only: it defines no dark palette. When dark
+   values are designed, add them in the block at the bottom of this file.
+   ===================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---------- Brand and surfaces */
+  --color-sidebar: #0c4e3a;
+  --color-sidebar-active: #1e6b52;
+  --color-sidebar-raised: #115a44;
+  --color-sidebar-hover: #135c46;
+  --color-sidebar-border: #2b6b55;
+  --color-sidebar-overline: #8fbfab;
+  --color-logo: #1a7a55;
+  --color-primary: #146c43;
+  --color-primary-hover: #0b4f3a;
+  --color-primary-border: #b9d6c8; /* secondary button and hover card border */
+  --color-bg: #eef4f1;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f5f9f7;
+  --color-surface-detail: #f8fbf9; /* expanded rows, detail boxes */
+  --color-stage: #e1eae5; /* behind fixed boards (design system, phone) */
+  --color-border: #dce7e2;
+  --color-input-border: #c9d8d1; /* also the switch "off" track */
+  --color-line: #e6eeea; /* dividers inside cards and tables */
+
+  /* ---------- Text */
+  --text-primary: #10231c;
+  --text-secondary: #4f625a;
+  --text-label: #3d4f48; /* form labels, close icon */
+  --text-muted: #5b6b65; /* captions and disabled reasons */
+  --text-on-dark: #e6f2ec;
+  --text-on-dark-muted: #a9cdbe;
+  --text-on-primary: #ffffff;
+
+  /* ---------- Status: always pair the colour with a word */
+  --status-success-bg: #dcf2e5;
+  --status-success-fg: #0f5d38;
+  --status-warning-bg: #fff1df;
+  --status-warning-fg: #9a4a06;
+  --status-warning-border: #f3d7a8;
+  --status-warning-text: #6b3304; /* body text inside a warning banner */
+  --status-warning-action-border: #e7c38f; /* Acknowledge button */
+  --status-warning-marker: #c2610c; /* range-bar marker when out of band */
+  --status-critical-bg: #fde7e7;
+  --status-critical-fg: #a61b12;
+  --status-critical-action: #b42318; /* danger button, stop icon */
+  --status-critical-action-hover: #8f1b12;
+  --status-critical-hover-bg: #fff6f5; /* Stop button hover */
+  --status-critical-border: #f5c2bf;
+  --status-critical-text: #7a1610; /* body text inside a critical banner */
+  --status-critical-text-secondary: #8a2a22;
+  --status-info-bg: #e3eefd;
+  --status-info-fg: #1a55b0;
+  --status-info-text: #1a4a96;
+  --status-neutral-bg: #eef2f0;
+  --status-neutral-fg: #45534d;
+  --disabled-bg: #f1f4f3;
+  --disabled-fg: #6b7a74;
+  --disabled-border: #dce3e0;
+  --dashed-border: #b7c6bf; /* "Phase 2B" placeholders */
+
+  /* Status dots and counts on the dark sidebar */
+  --dot-ok: #4ade80;
+  --dot-warn: #fbbf24;
+  --dot-warn-text: #3d2600;
+  --dot-crit: #e5484d;
+  --dot-live: #16a34a;
+
+  /* NFT table cells */
+  --table-growing-bg: #f2faf5;
+  --table-growing-border: var(--target-band);
+  --table-ready-bg: #fff8ee;
+  --table-ready-border: var(--status-warning-border);
+  --table-cleaning-bg: #f3f7fe;
+  --table-cleaning-border: #bfd4f6;
+
+  /* Toasts */
+  --toast-bg: #10231c;
+  --toast-bad-bg: #7a1610;
+  --toast-good-bg: #0f5d38;
+
+  /* ---------- Data */
+  --stock-a: #15803d;
+  --stock-b: #c2410c;
+  --stock-acid: #7c3aed;
+  --water: #3b82f6;
+  --target-band: #a7dcbe;
+  --track: #e6eeea;
+  --chart-outside: #8fa39a; /* outside temperature line */
+
+  /* ---------- Focus */
+  --focus-ring-color: #3b82f6;
+  --focus-ring: 3px solid var(--focus-ring-color);
+  --focus-ring-offset: 2px;
+
+  /* ---------- Type · Figtree, tabular numbers */
+  --font-sans: 'Figtree', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, Menlo, Consolas, monospace;
+
+  --text-page-size: 34px;
+  --text-page-line: 40px; /* weight 800 */
+  --text-page-size-sm: 28px;
+  --text-page-line-sm: 34px; /* page title on phones */
+  --text-metric-size: 26px;
+  --text-metric-line: 32px; /* weight 800 */
+  --text-metric-lg-size: 30px;
+  --text-metric-lg-line: 38px;
+  --text-modal-size: 22px;
+  --text-modal-line: 28px; /* dialog title */
+  --text-section-size: 20px;
+  --text-section-line: 26px; /* weight 700 */
+  --text-card-size: 18px;
+  --text-card-line: 24px; /* weight 700 */
+  --text-lead-size: 16px; /* page subtitle */
+  --text-body-size: 15px;
+  --text-body-line: 22px; /* weight 400–700 */
+  --text-label-size: 14px;
+  --text-label-line: 20px; /* weight 400–600 */
+  --text-caption-size: 13px;
+  --text-caption-line: 18px; /* weight 400–700 */
+  --text-overline-size: 11px;
+  --text-overline-tracking: 0.08em; /* 700, caps */
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+  --weight-extrabold: 800;
+
+  /* ---------- Spacing (px scale from the board) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  /* in cards 12–18 · between cards 16 · between sections 24 */
+  --gap-card: var(--space-4);
+  --gap-section: var(--space-6);
+
+  /* ---------- Corner radius */
+  --radius-flag: 6px;
+  --radius-badge: 8px;
+  --radius-button-sm: 9px;
+  --radius-button: 10px;
+  --radius-tile: 12px;
+  --radius-banner: 14px;
+  --radius-card: 16px;
+  --radius-modal: 18px;
+  --radius-phone: 36px;
+  --radius-pill: 999px;
+
+  /* ---------- Sizes and layout */
+  --touch-min: 44px; /* every tap target */
+  --touch-main: 48px; /* main actions */
+  --button-sm: 36px;
+  --sidebar-width: 240px;
+  --content-max: 1180px;
+  --page-pad-block: 28px;
+  --page-pad-inline: 32px;
+  --phone-width: 390px; /* test width from the Track 2 guide */
+
+  /* ---------- Elevation */
+  --shadow-board: 0 2px 12px rgba(16, 35, 28, 0.12);
+  --shadow-drawer: -12px 0 40px rgba(16, 35, 28, 0.18);
+  --shadow-modal: 0 20px 60px rgba(16, 35, 28, 0.3);
+  --shadow-toast: 0 8px 24px rgba(0, 0, 0, 0.25);
+  --overlay: rgba(12, 30, 24, 0.45);
+
+  /* ---------- Layers */
+  --z-topbar: 60;
+  --z-drawer: 70;
+  --z-modal: 80;
+  --z-toast: 90;
+
+  /* ---------- Motion */
+  --duration-fast: 0.15s;
+  --duration-base: 0.2s;
+}
+
+/* ---------------------------------------------------------------------
+   Dark theme: not in the prototype yet. When it is designed, redefine
+   only the colour tokens here (sizes, spacing and radius stay the same):
+
+   @media (prefers-color-scheme: dark) {
+     :root:not([data-theme='light']) { color-scheme: dark; ... }
+   }
+   :root[data-theme='dark'] { color-scheme: dark; ... }
+   --------------------------------------------------------------------- */
