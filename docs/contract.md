@@ -1,9 +1,11 @@
-# Smart Nutrient Advisor: interface contract
+# Smart Nutrient Advisor — Phase A Interface Contract
 
-**Version:** v0.7 (draft for review, Phase A edition) · **Date:** 23 Oct 2026 · **Lives at:** `docs/contract.md`
+**Version:** v0.8 (draft for review, Phase A edition) · **Lives at:** `docs/contract.md`
 **Owners:** Track 1 (back end and cloud, editor) · Track 3 (simulator farm behaviour and controller rules) · Track 4 (simulator core and playground control) · Track 2 (app, sections 11–13)
-**Status:** DRAFT. Nothing here is final until the contract session approves it. Items marked **[OPEN]** need a decision; see section 15.
+**Status:** v0.8 full contract — lock review draft. Items marked **[OPEN]** still need a team decision; see section 15.
 
+> **Locked: items A to F** — A: conventions (§1); B: names and IDs (§2.1–2.3); C: layout/configuration pack (§2.4–2.5); D: transport, topics and envelope (§3–5); E: device status and telemetry (§6.1–6.4); F: organization/site scoping and configuration-driven counts (OPEN-11 and OPEN-12 principles).
+>
 This document is the single agreement between every part of the Phase A system: the farm simulator, the back end and the app. If code and this document disagree, the code is wrong. If this document is wrong, fix it by pull request (section 16).
 
 The app's screens and behaviour come from the **Phase 2A Build Handoff** and its design canvas. This contract follows the handoff; section 0 lists the few places where it deliberately differs.
@@ -63,7 +65,7 @@ Anything else found along the way is added by pull request (section 16).
 | Format | UTF-8 JSON. One JSON object per MQTT message. |
 | Field names | `lowerCamelCase`. |
 | Enum values | `UPPER_SNAKE_CASE` strings, for example `"REMOTE"`, `"ALL_OPERATIONS"`. |
-| Time | ISO-8601 in **UTC** with `Z`, millisecond precision: `"2026-11-09T04:54:00.000Z"`. People see IST; machines store UTC. |
+| Time | ISO-8601 in **UTC** with `Z`, millisecond precision: `"2026-11-09T04:54:00.000Z"`. People see IST; machines store UTC. `ts` is always **real time**. On playground sites the simulator adds `simTs`, the simulated time (11.4). |
 | IDs | Commands and messages use **UUID v4** strings. Farm things use the fixed IDs in section 2. |
 | Units | Fixed per field (table below). Units are never sent in the value. |
 | Missing or failed sensor | Send `null` for the value and set its quality (section 6.1). Never send a fake 0. |
@@ -127,13 +129,15 @@ The layout is **read from configuration**, never hard-coded. Everything must wor
 | `{zone}-DT-A`, `{zone}-DT-B`, `{zone}-DT-ACID` | Day-tanks (concentrate) | ZC | — (level only) |
 | `{zone}-CIRC` | Circulation pump | ZC | **Never.** No command may stop it. |
 | `{zone}-REFILL` | Reservoir refill valve or pump | ZC | Only through a `REFILL` command |
-| `FANS` (`FAN1` … `FAN4`) | 4 × 42″ exhaust fans, staged 0–4 | CC1 | Stage 0–4, in climate MANUAL mode only. Turning fans to 0 also stops the pad pump. |
+| `FANS` (configured IDs, e.g. `FAN1` … `FAN4` at SIET) | Exhaust fans; current SIET layout has 4, with maximum stage derived from configured fan count | CC1 | Stage 0 through the configured maximum, in climate MANUAL mode only. Turning fans to 0 also stops the pad pump. |
 | `PAD1` | Cooling pad pump | CC1 | On/off in MANUAL mode only; needs fans at stage 1 or more |
 | `CH1`, `CH2` | Solution chillers (C1 → Z1, C2 → Z2 on the revamp plan) | CC1 | On/off and setpoint 18–28 °C, in MANUAL mode only |
 | `SHADE1` | 50 % retractable shade screen | CC1 | Open/close, in MANUAL mode only |
 | `HAF1` | HAF circulation fans along the central aisle | CC1 | On/off, in MANUAL mode only |
 | `FOG1` | Foggers | CC1 | **Not installed in this phase.** Reserved ID; the app shows “Not available”. If added: 2, 3 or 5 min runs, blocked when RH > 85 %. |
 | `CURT1` … | Roll-up curtain motors, if motorised | CC1 | **[OPEN-3]** |
+
+**Configuration rule:** fan identifiers and maximum stage come from `layout.json`; the current SIET layout has four fans, but neither fan count nor stage limits may be hard-coded. Zones, benches, channels, sensors, and dosing lines are likewise configuration-driven.
 
 Dosing lines in v0 are A, B and ACID (pH down). A pH-up line is **[OPEN-4]**. Equipment that is not installed or reports offline is shown as “Not available” with disabled controls, never hidden.
 
@@ -186,9 +190,12 @@ config/clients/client_A/          ← first demo pack (SIET Polyhouse 1 values)
 ├── features.json      feature switches (below)
 ├── users.json         demo users and roles (no real passwords in git)
 ├── simulator.json     drift rates, plant uptake, equipment effects, speed options
-└── scenarios.json     “Set up your farm” presets and allowed ranges: regions, seasons, weather patterns,
-                       crops and growth stages, starting water state, power and internet reliability,
-                       saved scenarios, and the “Things to try” list for the playground panel
+├── hardware.json      simulated component behaviour: sensor accuracy and response, pump rates, valve and fan delays (placeholders until parts are bought)
+├── io_map.json        logical names (PUMP_A, FLOAT_HIGH …) to controller I/O channels (placeholders until the panel I/O list exists)
+└── scenarios.json     “Set up your farm” presets and allowed ranges: layout options, regions, seasons,
+                       weather patterns, crops and growth stages, starting water state, power and
+                       internet reliability; the failure-drill catalogue (11.4.3); the values a user may
+                       set and hold, with their ranges (11.4.2); and the “Things to try” list
 ```
 
 `features.json` for Phase A:
@@ -226,6 +233,8 @@ Root: `farm/{site}/…`. For Phase 2, `{site}` is `siet-ph1`.
 | `farm/{site}/climate/telemetry` | CC1 → cloud | 0 | No | 6.2 Climate telemetry |
 | `farm/{site}/power/state` | PM1 → cloud | 1 | **Yes** | 6.3 Power state |
 | `farm/{site}/device/{deviceId}/status` | each device → cloud | 1 | **Yes** | 6.4 Device status (+ last will) |
+| `farm/{site}/zone/{zone}/state` | ZC → cloud | 1 | **Yes** | 6.8 Zone state (on every change) |
+| `farm/{site}/climate/state` | CC1 → cloud | 1 | **Yes** | 6.9 Climate state (on every change) |
 | `farm/{site}/zone/{zone}/event` | ZC → cloud | 1 | No | 6.5 Event |
 | `farm/{site}/climate/event` | CC1 → cloud | 1 | No | 6.5 Event |
 | `farm/{site}/zone/{zone}/cmd` | cloud → ZC | 1 | **Never** | 7.2–7.3 Dose, refill |
@@ -272,10 +281,11 @@ Every MQTT message has these fields at the top level:
 |---|---|
 | `type` | Message type (sections 6–7). |
 | `msgId` | UUID, unique per message. Used to drop duplicates. |
-| `ts` | When the reading was taken or the event happened (not when it was sent). |
+| `ts` | Real time (UTC) when the reading was taken or the event happened (not when it was sent). |
 | `device` | Who sent it. Must match the MQTT client ID (the broker ACL enforces this). |
 | `bootId` | Increases by 1 every time the device restarts (the simulator increases it on a simulated reboot). |
 | `seq` | Increases by 1 per message within a boot. `(bootId, seq)` gives exact order and shows gaps. |
+| `simTs` | Playground sites only: the simulated time when the reading was taken or the event happened. Omitted on real farms. |
 
 Cloud → farm messages use the same envelope with `"device": "CLOUD"`.
 
@@ -389,9 +399,14 @@ Sent once when something happens. These are facts the farm sees. Alerts (who get
   "zone": "Z1",
   "kind": "ESTOP_PRESSED",
   "severity": "CRITICAL",
+  "message": "E-STOP pressed on the Zone A dosing cabinet",
+  "systemAction": "All dosing and refill in Zone A stopped; circulation keeps running",
+  "nextStep": "Check the cabinet, release the E-STOP, then press Resume in the app",
   "detail": { "source": "ZC1 panel" }
 }
 ```
+
+Every event answers three questions (PRD rule 7): `message` (what happened), `systemAction` (what the farm already did about it) and `nextStep` (what a person should do). The back end copies them into the alert.
 
 | `kind` | Severity |
 |---|---|
@@ -456,6 +471,35 @@ Sent by `GW1` after its cloud link comes back, before replaying buffered message
 
 `commands` lists every command whose `CMD_STATE` changed while the link was down. After this, the gateway replays the buffered messages in `(device, bootId, seq)` order.
 
+### 6.8 Zone state, `ZONE_STATE` (retained)
+
+Sent **on every change** (and with each telemetry message), so the app sees a pump start or a stop at once instead of waiting for the next reading. Telemetry continues to include the shared equipment, mode, E-STOP/stopped, and running-operation fields so each telemetry message is a complete snapshot. Where a field appears in both telemetry and state, `ZONE_STATE` is authoritative for screen updates.
+
+```json
+{
+  "v": 1, "type": "ZONE_STATE", "msgId": "…", "ts": "…", "site": "siet-ph1", "device": "ZC1", "bootId": 412, "seq": 18241,
+  "zone": "Z1",
+  "mode": "REMOTE",
+  "estop": false,
+  "stopped": false,
+  "outputs": { "Z1-CIRC": "ON", "Z1-REFILL": "CLOSED", "Z1-DOSE-A": "ON", "Z1-DOSE-B": "OFF", "Z1-DOSE-ACID": "OFF" },
+  "operation": { "cmdId": "6f1c…", "kind": "DOSE", "state": "EXECUTING", "line": "A" },
+  "latches": [],
+  "configVersion": 7
+}
+```
+
+| Field | Values |
+|---|---|
+| `stopped` | `true` after a STOP, E-STOP, power cut or reboot, until a person sends `RESUME` (7.8). Nothing restarts by itself. |
+| `operation` | The running dose or refill, or `null`. |
+| `latches` | Faults the controller has locked out until a person clears them, for example `CABINET_POWER_CUT` (stuck relay), `LOW_LOW`, `LEAK`. |
+| `configVersion` | The limits version the controller is using (7.7), so the app can show “Approved · waiting for controller” until it matches. |
+
+### 6.9 Climate state, `CLIMATE_STATE` (retained)
+
+Same idea for CC1: `mode`, `manualUntil`, `stopped`, `equipment` (as in 6.2) and `latches`, sent on every change. Climate telemetry retains the shared equipment, mode, stopped/E-STOP, and running-operation fields as a complete snapshot; `CLIMATE_STATE` is authoritative for screen updates when fields overlap.
+
 ---
 
 ## 7. Cloud → farm messages
@@ -517,7 +561,7 @@ Published to `farm/{site}/stop`; every controller acts on the parts it owns.
 | `ZONE` (`target.zone` required) | Dosing and refill in that zone | Everything else |
 | `ALL_EQUIPMENT` | Dosing, refill, fans, pad pump, chillers | **Circulation** (never stopped remotely) |
 
-A running dose ends in `STOPPED` with the amounts delivered so far. As in the handoff, every role, Viewer included, may send a STOP; `ALL_EQUIPMENT` always asks for confirmation and warns that the house will heat up **[OPEN-8]**.
+A running dose ends in `STOPPED` with the amounts delivered so far. **Stopping is always allowed** (PRD rule 1): every role, Viewer included, may send any STOP, and no STOP waits for a check or a confirmation dialog. After `ALL_EQUIPMENT`, the app shows a warning that the house will heat up. What was stopped **stays stopped** (`stopped: true` in 6.8 and 6.9) until a person sends `RESUME` (7.8).
 
 ### 7.5 `CLIMATE_MODE`
 
@@ -558,6 +602,22 @@ Accepted only in `MANUAL` mode; otherwise rejected with `NOT_MANUAL`. Equipment 
 ```
 
 The controller keeps the config, reports `configVersion` in its status, and **keeps using the last good config** if the cloud is unreachable. Auto-refill: `startBelowPct` < `stopAtPct`, both 5–100 %; `maxRunMin` 1–60. The per-dose limit of 300 mL per line follows the handoff; the other limit values are placeholders until the agronomy numbers arrive **[OPEN-5]**.
+
+### 7.8 `RESUME`
+
+```json
+{ "…envelope": "…", "kind": "RESUME", "target": { "zone": "Z1" } }
+```
+
+Ends a stop for one zone (`target.zone`) or for climate (`target: { "scope": "CLIMATE" }`) after a person has reviewed what happened (PRD rule 5: nothing resumes by itself). Interrupted doses and refills are **not** restarted; the person starts a new one if needed. Refused with `ESTOP` while the E-STOP is still pressed, and with `FAULT_LATCHED` while a latch is active.
+
+### 7.9 `CLEAR_FAULT`
+
+```json
+{ "…envelope": "…", "kind": "CLEAR_FAULT", "target": { "zone": "Z1" }, "fault": "CABINET_POWER_CUT" }
+```
+
+Clears a latch (6.8) after the part has been repaired, for example the cabinet power cut after a stuck relay. Owner only. The zone then still needs `RESUME`.
 
 ---
 
@@ -607,6 +667,8 @@ Any other transition is a bug. The back end refuses it and logs it.
 4. **One operation per zone.** A dose or refill arriving while another runs in that zone is refused with `BUSY`.
 5. **Journal first.** The controller writes the command to its journal *before* energising any pump.
 6. **No replay after reboot.** After a restart, any journalled command still `ACCEPTED` or `EXECUTING` is reported as `PARTIAL` or `FAILED` with reason `REBOOT_MID_DOSE` and the measured amounts. It is never resumed.
+7. **Unknown means blocked** (PRD rule 3). If the cloud can’t tell what state a zone is in (controller offline, a command still `DISPATCHED` or `UNKNOWN`, stale readings), every new **start** command in that zone is refused with `STATE_UNKNOWN` until the state is known. Stops are never blocked.
+8. **Stopped stays stopped.** While a zone is `stopped` (6.8), start commands are refused with `ZONE_STOPPED` until a person sends `RESUME`.
 
 ### 8.4 Reason codes
 
@@ -639,6 +701,9 @@ Any other transition is a bug. The back end refuses it and logs it.
 | `FEATURE_OFF` | cloud, farm | The feature is switched off for this site (for example climate Automatic or auto-refill in Phase A). |
 | `CIRC_PROTECTED` | farm | Attempt to switch circulation (always refused). |
 | `INVALID_COMMAND` | farm | Schema or value error. |
+| `STATE_UNKNOWN` | cloud | The zone’s state isn’t known (offline controller, unconfirmed command, stale readings). |
+| `ZONE_STOPPED` | cloud, farm | The zone was stopped and hasn’t been resumed. |
+| `FAULT_LATCHED` | farm | A latched fault (for example `CABINET_POWER_CUT`) must be cleared first. |
 
 ---
 
@@ -646,14 +711,18 @@ Any other transition is a bug. The back end refuses it and logs it.
 
 In Phase A the farm simulator plays every controller (`ZC1`, `ZC2`, `CC1`, `PM1`). These rules make it behave like one, so the back end, the app and the scenario tests see realistic behaviour.
 
+The simulated controllers are written the way the real controller firmware will be: a fixed-rate loop, explicit state machines, and access to sensors, outputs and non-volatile memory only through a small hardware abstraction layer (HAL). Their behaviour is also captured as language-neutral test vectors (JSON), so the same tests can later check the C++ firmware. Details: simulator guide, section 9.
+
 1. Run its **own safety checks** on every command (E-STOP, REMOTE, BUSY, limits, 24 h totals from its own counters, day-tank and reservoir levels, fresh sensors) and refuse with a reason code (8.4). Never trust that the cloud checked.
 2. Journal before acting; never replay after a reboot (8.3). The journal is kept in memory; a “reboot mid-dose” fault ends the dose as `PARTIAL` with `REBOOT_MID_DOSE`.
 3. Keep the last good config in memory and keep working through a simulated internet drop.
 4. Never switch circulation from a remote command.
 5. Climate automation belongs on **CC1**; the cloud only sets the mode and manual overrides. In Phase A `climateAutomatic` is off, so CC1 acts only on manual commands and refuses `AUTOMATIC` with `FEATURE_OFF`.
-6. Report every state change with `CMD_STATE` at QoS 1.
-7. Message times come from the simulator’s clock, which may run fast in the playground (time rule, section 1).
+6. Report every command state change with `CMD_STATE` at QoS 1, and every change of outputs, mode, stop or latches with `ZONE_STATE` / `CLIMATE_STATE` (retained).
+7. `ts` is real time; on playground sites `simTs` carries the simulator’s clock, which may run fast (11.4).
 8. Keep 24-hour totals per line from its own counters.
+9. After a STOP, E-STOP, power cut or reboot, stay stopped until `RESUME`; keep latches until `CLEAR_FAULT` (7.8, 7.9). Nothing restarts by itself.
+10. Every `EVENT` carries `message`, `systemAction` and `nextStep` (6.5).
 
 ---
 
@@ -703,7 +772,9 @@ Base: `https://{host}/api`. JSON in and out. The full schema is generated by Fas
 | `POST /commands/{cmdId}/cancel` | Cancel before dispatch | Requester, Owner |
 | `POST /zones/{zoneId}/refill` `{ "action": "START", "targetPct": 90 }` | Refill control | Owner, Agronomist, Operator |
 | `PATCH /zones/{zoneId}/auto-refill` | Auto-refill settings | Owner, Agronomist |
-| `POST /stop` `{ "scope": "ALL_OPERATIONS" }` | Stop (7.4) | **All roles, Viewer included** (handoff) |
+| `POST /stop` `{ "scope": "ALL_OPERATIONS" }` | Stop (7.4); never checked, never asks for confirmation | **All roles, Viewer included** (handoff, PRD rule 1) |
+| `POST /resume` `{ "zone": "Z1" }` or `{ "scope": "CLIMATE" }` | Resume after a stop, once reviewed (7.8) | Owner, Agronomist, Operator |
+| `POST /zones/{zoneId}/clear-fault` `{ "fault": "CABINET_POWER_CUT" }` | Clear a latched fault after repair (7.9) | Owner |
 | `GET /climate` | Climate state | All |
 | `POST /climate/mode` `{ "mode": "MANUAL", "minutes": 30 }` | Climate mode | Owner, Agronomist, Operator |
 | `POST /climate/equipment/{equipmentId}` `{ "action": "SET_STAGE", "value": 3 }` | Manual equipment control (7.6) | Owner, Agronomist, Operator |
@@ -736,6 +807,7 @@ Response `201`:
   "lines": [ { "line": "A", "ml": 120 }, { "line": "B", "ml": 120 }, { "line": "ACID", "ml": 30 } ],
   "projected": { "ec": 1.63, "ph": 6.0 },
   "checks": [
+    { "id": "STATE_KNOWN",      "result": "PASS",  "message": "Zone 1 state known: nothing unconfirmed, not stopped" },
     { "id": "DEVICES_ONLINE",   "result": "PASS",  "message": "ZC1 and sensors online" },
     { "id": "ESTOP",            "result": "PASS",  "message": "No E-STOP pressed" },
     { "id": "ZONE_REMOTE",      "result": "PASS",  "message": "Zone 1 is in REMOTE" },
@@ -762,13 +834,15 @@ Available only on sites whose config has `"features": { "playground": true }`. T
 
 | Method and path | Purpose | Roles |
 |---|---|---|
-| `GET /sim/state` | Current scenario, simulated clock and date, speed, weather, active faults | All |
+| `GET /sim/state` | Current scenario, simulated clock and date, speed, weather, active failure drills, held values | All |
 | `POST /sim/speed` `{ "x": 60 }` | Clock speed: 0 (pause), 1, 60 or 288 (one day in five minutes) | Owner, Agronomist, Operator |
-| `POST /sim/faults` `{ "kind": "LEAK", "target": "Z1", "on": true }` | Switch a fault or event on or off (list below) | Owner, Agronomist, Operator |
+| `POST /sim/faults` `{ "kind": "LEAK", "target": "Z1", "on": true }` | **Trigger** a failure drill (`"on": true`) or **Fix** it (`"on": false`). The catalogue is in 11.4.3 | Owner, Agronomist, Operator |
+| `POST /sim/holds` `{ "target": "Z1", "metric": "ph", "value": 7.2, "gradual": true }` | **Set a value and hold it** (11.4.2) | Owner, Agronomist, Operator |
+| `DELETE /sim/holds/{target}/{metric}` · `POST /sim/holds/release-all` | **Release** one held value, or all of them | Owner, Agronomist, Operator |
 | `POST /sim/reset` | Back to the start of the current scenario: all faults off, levels and readings reset | Owner |
-| `GET /sim/scenario-options` | The presets and allowed ranges from `scenarios.json` for the “Set up your farm” screen, and the **“Things to try”** list (label, one-line hint, and the fault or screen it relates to) shown in the playground panel | All |
+| `GET /sim/scenario-options` | The presets and allowed ranges from `scenarios.json` for the “Set up your farm” screen, and the **“Things to try”** list (label, one-line hint, and the fault or screen it relates to) shown in the Simulator screen | All |
 | `POST /sim/scenario` (body below) | Start a run from these starting conditions: resets the simulated farm, sets the clock and weather, plants the chosen crops | Owner, Agronomist, Operator |
-| `GET /sim/scenarios` · `POST /sim/scenarios` · `DELETE /sim/scenarios/{id}` | List, save and delete named scenarios for repeat demos | Read: all · save/delete: Owner, Agronomist |
+| `GET /sim/scenarios` · `POST /sim/scenarios` · `DELETE /sim/scenarios/{id}` | List, save and delete named farm setups (layout, environment and starting conditions) so a user can load them again | Read: all · save/delete their own: Owner, Agronomist, Operator (provisional, **[OPEN-15]**) |
 
 **Scenario (starting conditions).** Every value must be one of the options or inside the range given by `scenarios.json`; anything else is refused with `422`. Nothing here is fixed in code.
 
@@ -805,13 +879,81 @@ Available only on sites whose config has `"features": { "playground": true }`. T
 | `power`, `internet` | `STABLE`, `OCCASIONAL_CUTS`, `FREQUENT_CUTS`; `STABLE`, `FLAKY`, `LONG_OUTAGE` | Power cuts, generator and UPS events; internet drops and “Result unknown” during the run |
 | `equipment` | Within what the layout config allows | Shows what each piece of equipment is worth |
 
-**Time on playground sites.** The simulator’s clock can run up to 288× faster. Message `ts` values are **simulated time**, so charts and history show the simulated day; the back end uses each message’s **arrival time** for staleness, command expiry and offline detection, and heartbeats are sent in real time. The app shows the simulated date and time next to the “Simulated farm” banner.
+**Time on playground sites.** The simulator’s clock can run up to 288× faster. Every message’s `ts` stays **real time**, so staleness, command expiry, offline detection and alert timers work exactly as on a real farm. The simulated time travels in `simTs`: on playground sites, charts and history plot `simTs`, so they show the simulated day. The app shows the simulated date and time next to the “Simulated farm” banner.
 
-Starting conditions are **illustrative, not an agronomic forecast**: the app says so on the setup screen. Plant growth may show visually on the Farm view, but no yield numbers are produced. Events during a run still use `POST /sim/faults`.
-
-Fault and event `kind`s: `EC_DRIFT_LOW` · `EC_DRIFT_HIGH` · `PH_DRIFT` · `SENSOR_FAULT` · `SENSOR_STALE` · `NO_FLOW` · `LEAK` · `RESERVOIR_LOW` · `DAYTANK_LOW` · `ESTOP` · `ZONE_MODE` (`value`: `LOCAL` or `MAINT`) · `HOT_AFTERNOON` · `CHILLER_FAULT` · `POWER_CUT` · `GENERATOR` · `UPS_LOW` · `LINK_DROP` · `DEVICE_OFFLINE` · `REBOOT_MID_DOSE`.
+Starting conditions are **illustrative, not an agronomic forecast**: the app says so on the setup screen. Plant growth may show visually on the Farm view, but no yield numbers are produced. Events during a run use `POST /sim/faults` and `POST /sim/holds`.
 
 A fault only changes what the simulated farm does or reports. Everything the user then sees (blocked doses, alerts, history, reports) comes through the normal contract messages and back-end rules, exactly as it would on a real farm.
+
+#### 11.4.1 Playground flow, and what is still being finalised
+
+> **Note:** this section fixes the **flow** of the playground and the **shape** of the calls. The set-value behaviour (11.4.2), the failure-drill catalogue (11.4.3) and the Farm view (11.4.4) are now agreed, based on the virtual-farm prototype. Still open: the exact layout fields, the final list of scenarios and presets, and who may save setups. **[OPEN-15]**, **[OPEN-16]**
+
+**The flow (agreed):**
+
+1. The user **signs in**. Playground sites have **two screens**, which can be open side by side: the **Control panel** (the normal app, the people’s side) and the **Simulator** screen (the farm’s side). The Simulator screen exists only on playground sites.
+2. On the Simulator screen, the user goes through the **setup steps**:
+   1. **Farm layout:** for example the number of zones, growing tables (or benches and channels) per zone, and which equipment and sensors are fitted.
+   2. **Environment and starting conditions:** region, month, start time, weather, crops and stages, starting water state, raw water, power and internet reliability.
+   3. **Review and start.** The simulator builds the farm from this setup and the Farm view draws it.
+3. The user **plays**:
+   - **On the Control panel (the people):** dose, refill, stop, resume, climate. These are the same commands, checks and states as everywhere else.
+   - **On the Simulator screen (the farm):** set a value and hold it (11.4.2), trigger and fix failure drills (11.4.3), press the E-STOP, change the weather, speed, pause and reset. The Simulator screen has **no buttons for people’s actions** (no dose, refill or stop), and the Control panel has no farm-side controls.
+   - **Watch the farm:** the Farm view (11.4.4) on the Simulator screen shows pumps, valves, tanks, fans and sensors changing live, and a **farm activity** list shows each command the farm received, who sent it and the controller’s answer (from `GET /operations`).
+
+   Every Simulator-screen action goes through the back end to the simulator (signed in, role-checked, audit-logged); the simulator’s own control API is never exposed. The results come back as normal contract messages, so every tab (Overview, Zone, Alerts, History) reacts as it would on a real farm.
+4. **Save (optional):** the user can save their farm setup (layout, environment and starting conditions) under a name and load it again later (`/sim/scenarios`). Saved setups are stored in the database for that user and organisation, not as files in the repo. Real client sites keep their config packs and are not affected.
+
+**Kept open until finalised:**
+
+- **Where the layout comes from (agreed).** On real sites, from the client’s config pack (set at commissioning). On playground sites, from the layout the user edits on the Simulator screen, sent with `POST /sim/scenario` and stored by the back end. The simulator never announces its own layout.
+- **What the layout setup contains.** Starting point, from the prototype: polyhouse size; number of exhaust fans; pads, foggers (installed or not), shade and HAF fans; per zone the reservoir size, day-tank sizes, sensors fitted, and benches and channels. `POST /sim/scenario` will gain a `layout` block for playground sites.
+- **The full list of scenarios and presets** in `scenarios.json`, and which roles may save setups.
+
+**Rule:** all of these lists live in the client’s `scenarios.json`. `GET /sim/scenario-options` returns them, the app builds the setup steps and the playground controls from that response, and the simulator validates against the same file. Adding or removing an item is then a **config change, not a contract or code change**. The field names in the scenario example above are **provisional** until OPEN-15 is closed.
+
+**Several users at once:** the proposal is that each user gets their **own sandbox playground farm**, created when they finish setup and removed after a period without use, so one person’s setup never changes another person’s farm. **[OPEN-16]**
+
+#### 11.4.2 Set a value and hold it
+
+The user can set a reading to a value and keep it there, to see how the app, the alerts and the controllers react. The values that can be set, and their ranges, come from `scenarios.json` (the sensors’ full measuring ranges, for example EC 0–10 mS/cm, pH 0–14, solution temperature 0–50 °C, reservoir level 0–100 %).
+
+| Rule | Detail |
+|---|---|
+| What can be set | Per zone: `ec`, `ph`, `solTempC`, `circFlowLpm`, `reservoirPct`, `dayTankPct.A` / `.B` / `.ACID` (from the zone’s `doseLines`). Polyhouse: `airTempC`, `airRh`. |
+| It changes the farm, not just the sensor | A held value changes the **simulated water or air itself**, so the controllers’ own safety logic reacts too (for example a held low reservoir blocks dosing). To fake **only the sensor** (a faulty probe), use a failure drill instead (11.4.3: `PROBE_DRIFT`, `STUCK_READING`, `IMPOSSIBLE_READING`, `SENSOR_OFFLINE`). |
+| Gradual by default | With `"gradual": true` (default), EC, pH and temperature move to the new value over about two readings, as real water would, so a “changed faster than water can” rule does not mistake it for a faulty probe. `"gradual": false` jumps at once. |
+| Held until released | The simulator keeps the value there against drift until the user releases it (`DELETE /sim/holds/…` or release all). The controllers keep reporting it, and the back end raises the matching alerts. |
+| Released when people act on it | A dose releases `ec`, `ph` and the dosed day-tanks; a refill releases `reservoirPct` (and `ec`, `ph`, which dilute); a chiller command releases `solTempC`. The action then has its real effect. |
+| Air is a load, not a pin | Raising `airTempC` (or `airRh`) adds a lasting heat load (or moisture), like strong sun or closed vents. It is not pinned: when the user raises the fan stage, turns on the pads or closes the shade, the temperature really falls. Releasing removes the load. |
+| Shown and logged | Held values appear in `GET /sim/state`, in the Simulator screen and on the Farm view, and every set and release is written to the audit log. |
+
+#### 11.4.3 Failure drills
+
+Each drill has a **Trigger** and a **Fix**. Trigger breaks the part; Fix repairs it. Anything the farm or the back end locked out because of it (a stopped zone, a blocked dose, an open alert) still waits for a person to act in the app, as on a real farm. The catalogue lives in `scenarios.json`, with for each drill: `kind`, a title, a one-line explanation, what **Fix** does, its target (zone, zone sensor, dosing line, polyhouse or device), any parameters, and its code in the PRD’s failure list. Starting catalogue:
+
+| Group | `kind` (PRD failure code) |
+|---|---|
+| Sensing | `PROBE_DRIFT` (F1) · `IMPOSSIBLE_READING` (F2) · `STUCK_READING` (F3) · `SENSOR_OFFLINE` · `DAYTANK_SENSOR_STUCK` (F4) |
+| Chemistry | `STOCK_STRENGTH` weak or strong stock (F5) · `LINES_SWAPPED` (F7) · `WRONG_STOCK` (F22) · `EC_DRIFT_LOW` · `EC_DRIFT_HIGH` · `PH_DRIFT` |
+| Pumps and valves | `NO_FLOW` pump runs, nothing flows (F8) · `PUMP_STUCK_ON` stuck relay (F9) · `REFILL_VALVE_STUCK_OPEN` (F10) · `CIRCULATION_FAILURE` (F11) · `CHILLER_FAULT` runs, no cooling (F12) |
+| Water | `NO_WATER_SUPPLY` (F29) · `HIDDEN_LEAK` unexplained level drop (F30) · `LEAK` leak sensor wet (F17) · `RESERVOIR_LOW` · `DAYTANK_LOW` · `DRAIN_TO_LOW_LOW` (F18, one-off) · `BIG_REFILL` dilutes the reservoir (F31, one-off) |
+| Climate and rooms | `FAN_FAILURE` · `PAD_PUMP_FAILURE` · `PAD_CLOGGED` · `HEATWAVE` (F20) · `HOT_AFTERNOON` · `ELECTRICAL_ROOM_HOT` (F19) |
+| Safety and modes | `ESTOP` press / release (F23) · `ZONE_MODE` (`value`: `LOCAL` or `MAINT`) |
+| Power | `POWER_CUT` controller restarts with all outputs off (F15) · `GENERATOR` · `UPS_LOW` · `REBOOT_MID_DOSE` |
+| Connectivity and data | `LINK_DROP` internet lost, now or right after the next dose (F13, F14, F28) · `DEVICE_OFFLINE` · `SENSOR_STALE` · `CLOCK_DRIFT` (F16) |
+
+Adding, removing or rewording a drill is a change to `scenarios.json`, not to this contract. A drill only changes what the simulated farm does or reports: everything the user then sees comes through the normal contract messages and back-end rules.
+
+#### 11.4.4 Farm view
+
+On playground sites the **Simulator screen** shows a **2D Farm view**:
+
+- **Polyhouse plan:** benches and channels (flowing or not), cooling pads, exhaust fans (running stage), shade, HAF fans, foggers, air sensors with their readings, the outside weather sensor and the electrical room.
+- **One process diagram per zone:** dosing cabinet with the Stock A, Stock B and acid day-tanks and pumps, E-STOP, raw-water refill valve, reservoir with its level and the low-low and high-high marks, EC, pH, temperature (and DO, if fitted) probes, chiller, leak sensor, circulation pump and channel flow.
+- **Clicking a sensor or tank** opens its set-value control (11.4.2); held values and active drills are marked on the drawing.
+
+It is drawn from `GET /farm` (layout) and moved only by the normal live data: readings and equipment states from 6.1 and 6.2 over the WebSocket, plus `ZONE_STATE` and `CLIMATE_STATE` (6.8, 6.9), which arrive on every change, and `sim_state` (section 12). No extra endpoint is needed, and nothing in the drawing is fixed in code: it follows the layout config, for 1 zone or more.
 
 ---
 
@@ -827,10 +969,12 @@ Every message: `{ "type": "…", "ts": "…", "data": { … } }`.
 |---|---|
 | `reading` | `{ "zone": "Z1", "readings": {…}, "quality": {…} }` or climate readings with `"zone": null` |
 | `command_state` | `{ "cmdId", "kind", "zone", "state", "reason", "lines" }` |
-| `alert` | `{ "id", "kind", "severity", "status", "zone", "message" }` |
+| `alert` | `{ "id", "kind", "severity", "status", "zone", "message", "systemAction", "nextStep" }` (PRD rule 7) |
+| `zone_state` · `climate_state` | Same fields as 6.8 and 6.9, sent on every change |
 | `device_state` | `{ "deviceId", "online", "lastSeen", "fw" }` |
 | `power_state` | Same fields as 6.3 |
 | `mode_change` | `{ "zone": "Z1", "mode": "MAINT" }` or `{ "climate": "MANUAL", "manualUntil": "…" }` |
+| `sim_state` | Playground sites only: `{ "speed", "simTime", "faults": [ … ], "holds": [ … ] }`, sent when any of them changes |
 
 ---
 
@@ -839,7 +983,9 @@ Every message: `{ "type": "…", "ts": "…", "data": { … } }`.
 | Action | Owner | Agronomist | Operator | Viewer |
 |---|---|---|---|---|
 | See everything | ✔ | ✔ | ✔ | ✔ |
-| Stop all operations, Stop zone, Stop all equipment | ✔ | ✔ | ✔ | ✔ |
+| Stop all operations, Stop zone, Stop all equipment (no confirmation) | ✔ | ✔ | ✔ | ✔ |
+| Resume after a stop | ✔ | ✔ | ✔ | — |
+| Clear a latched fault | ✔ | — | — | — |
 | Dose, refill, climate mode and equipment | ✔ | ✔ | ✔ | — |
 | Acknowledge alerts, crop cycles, record day-tank refills, export | ✔ | ✔ | ✔ | — |
 | Edit recipes, apply a recipe, auto-refill settings | ✔ | ✔ | — | — |
@@ -877,39 +1023,44 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | # | Question | Owner |
 |---|---|---|
 | OPEN-2 | Resolved by the handoff: chillers switch on/off and take a setpoint (18–28 °C) in Manual mode. | — |
-| OPEN-3 | Are the roll-up curtains motorised? If so, add `CURT*` equipment. | Lead (vendor) |
+| OPEN-3 | Are the roll-up curtains motorised? If so, add `CURT*` equipment. | Project team (vendor) |
 | OPEN-4 | Is a pH-up line needed (`BASE`)? | Agronomy |
-| OPEN-5 | Real numbers: 24 h limits, EC ceiling, pH bounds, EC/pH targets, minimum reservoir (placeholders until then; the 300 mL per-dose limit and 50 L day-tanks come from the handoff). | Lead + agronomy |
-| OPEN-8 | The handoff lets every role, Viewer included, use all Stop buttons. Keep that for “Stop all equipment” too (it heats the house), or limit Viewers to Stop all operations and Stop zone? | Lead |
+| OPEN-5 | Real numbers: 24 h limits, EC ceiling, pH bounds, EC/pH targets, minimum reservoir (placeholders until then; the 300 mL per-dose limit and 50 L day-tanks come from the handoff). | Agronomy |
+| OPEN-8 | Resolved: every role, Viewer included, may use every Stop button, with no confirmation dialog (PRD rule 1). The app warns afterwards that the house will heat up. | — |
 | OPEN-9 | 14 states, including `REJECTED`, `STOPPED` and the reserved `AWAITING_2ND_APPROVAL`. Confirm the “App shows” wording in 8.1. | Track 1 + Track 2 |
 | OPEN-10 | Should STOP commands have a longer expiry than doses (a stop arriving late is usually still wanted, except `ALL_EQUIPMENT`)? | Track 1 + Track 3 |
 | OPEN-11 | **Several clients later:** add an organisation layer (organisation → sites → zones). Proposed: every database table, API call and message carries `org_id` / `site_id` from day one, even with one value; users and data are kept separate per organisation. | Track 1 |
 | OPEN-12 | **No fixed equipment assumptions:** the highest fan stage equals the number of fans in the layout config, and dosing lines come from `doseLines` in the config. No code, screen or check may assume exactly 4 fans or exactly A, B and ACID. | Tracks 1, 2, 3 |
 | OPEN-14 | **Per-site feature switches:** a `features` block in each site’s config (for example `playground`, `demoFarm`, `climateAutomatic`, `autoRefill`, `secondApproval`, `foggers`; see 2.5), read by the API and the app, so each client can turn features on or off without code changes. | Tracks 1 + 2 |
+| OPEN-15 | **Playground setup contents:** set-value behaviour (11.4.2), failure drills (11.4.3) and the Farm view (11.4.4) are now agreed. Still open: the exact layout fields, the final list of scenarios and presets, and which roles may save setups. Finalise before the contract is approved; until then 11.4.1 applies. | Tracks 2 + 4 |
+| OPEN-16 | **Several users at once:** one private sandbox playground farm per user (created at setup, removed after inactivity, with a cap on how many run at once), or one shared playground used by one person at a time? Proposed: one sandbox per user. | Project team, Tracks 1 + 4 |
 
 ---
 
 ## 16. Changing this contract
 
-1. Changes only by **pull request** to `docs/contract.md`, together with the matching JSON Schema and example files in `docs/contract/schemas/` and `docs/contract/examples/`.
+1. Changes to this contract must be made by **pull request** to `docs/contract.md`, together with the matching JSON Schema and example files in `docs/contract/schemas/` and `docs/contract/examples/`.
 2. The pull request needs approval from Track 1, Track 3 and Track 4 (and Track 2 for sections 11–13).
 3. **Additive** changes (a new optional field, a new event kind, a new reason code) keep `"v": 1`. Receivers already ignore unknown fields.
 4. **Breaking** changes (renaming, removing or changing the meaning of a field) bump `"v"`. The back end accepts both versions until all devices are updated.
 5. CI validates every example against its schema. The simulator and back end load the same schemas, so a mismatch fails the build.
 6. Record every change in the changelog below.
 
----
-
 ## 17. Changelog
 
-| Version | Date | Change | By |
+| Version | Change | By |
 |---|---|---|
-| v0 | 22 Oct 2026 | First draft for the contract session, built from the tech stack, app and back-end guides and the revamp layout. | Lead |
-| v0.1 | 22 Oct 2026 | Aligned with the Phase 2A Build Handoff: web app only, four roles, zone names A/B mapped to Z1/Z2, fan stage, shade, HAF fans, chiller setpoint, air temperature by position, dissolved oxygen, 3-minute offline, 5 % mismatch, 50 L day-tanks, Stop for every role, second approval off, dose estimate endpoint. | Lead |
-| v0.2 | 22 Oct 2026 | Added scalability decisions OPEN-11 to OPEN-14 (organisation and site IDs, no fixed equipment counts, gateway device adapter, per-site feature switches); fan stage follows the number of fans. | Lead |
-| v0.3 | 22 Oct 2026 | Re-phased: Phase A = web app, back end, cloud and farm simulator with playground; Phase B = firmware and gateway; Phase C = real farm. Added simulator control endpoints (11.4), what the simulator must implement (9) and its gateway emulation (10). | Lead |
-| v0.4 | 22 Oct 2026 | Phase A is manual only: climate Automatic and auto-refill switched off by feature switches (`FEATURE_OFF`); Phase D added for automation (the handoff’s 2B); all farm values in per-client configuration packs (2.5, `config/clients/client_A/`). | Lead |
-| v0.5 | 23 Oct 2026 | “Set up your farm” scenarios: starting conditions (region, month, time, weather, crops and stages, water state, raw water, power and internet reliability, equipment) via `POST /sim/scenario`, presets in `scenarios.json`, saved scenarios. Time rule for playground sites (simulated `ts`, arrival time for staleness and expiry). | Lead |
-| v0.6 | 23 Oct 2026 | Dropped the auto-playing demo story from Phase A (`POST /sim/story` removed); added a “Things to try” list from `scenarios.json`; pause = speed 0. | Lead |
-| v0.6.1 | 23 Oct 2026 | Phase A broker not exposed to the internet; Phase A alerts are in the app only. | Lead |
-| v0.7 | 23 Oct 2026 | Phase A edition: every device is played by the simulator; sections 3, 9 and 10 describe only what the simulator does; broker internal only; later-phase items (firmware, real gateway, local mode, third-party hardware) moved out to `phase-2-later-phases.html`; OPEN-1, 6, 7 and 13 moved there too. | Lead |
+| v0 | First draft for the contract session, built from the tech stack, app and back-end guides and the revamp layout. | Project team |
+| v0.1 | Aligned with the Phase 2A Build Handoff: web app only, four roles, zone names A/B mapped to Z1/Z2, fan stage, shade, HAF fans, chiller setpoint, air temperature by position, dissolved oxygen, 3-minute offline, 5 % mismatch, 50 L day-tanks, Stop for every role, second approval off, dose estimate endpoint. | Project team |
+| v0.2 | Added scalability decisions OPEN-11 to OPEN-14 (organisation and site IDs, no fixed equipment counts, gateway device adapter, per-site feature switches); fan stage follows the number of fans. | Project team |
+| v0.3 | Re-phased: Phase A = web app, back end, cloud and farm simulator with playground; Phase B = firmware and gateway; Phase C = real farm. Added simulator control endpoints (11.4), what the simulator must implement (9) and its gateway emulation (10). | Project team |
+| v0.4 | Phase A is manual only: climate Automatic and auto-refill switched off by feature switches (`FEATURE_OFF`); Phase D added for automation (the handoff’s 2B); all farm values in per-client configuration packs (2.5, `config/clients/client_A/`). | Project team |
+| v0.5 | “Set up your farm” scenarios: starting conditions (region, month, time, weather, crops and stages, water state, raw water, power and internet reliability, equipment) via `POST /sim/scenario`, presets in `scenarios.json`, saved scenarios. Time rule for playground sites (simulated `ts`, arrival time for staleness and expiry). | Project team |
+| v0.6 | Dropped the auto-playing demo story from Phase A (`POST /sim/story` removed); added a “Things to try” list from `scenarios.json`; pause = speed 0. | Project team |
+| v0.6.1 | Phase A broker not exposed to the internet; Phase A alerts are in the app only. | Project team |
+| v0.7 | Phase A edition: every device is played by the simulator; sections 3, 9 and 10 describe only what the simulator does; broker internal only; later-phase items (firmware, real gateway, local mode, third-party hardware) moved out to `phase-2-later-phases.html`; OPEN-1, 6, 7 and 13 moved there too. | Project team |
+| v0.7.1 | Playground flow added (11.4.1): sign in → setup steps (layout, environment, starting conditions) → play with the control panel and playground actions → optionally save the farm setup. Layout fields, “set value” actions and the scenario list kept open (OPEN-15); sandbox per user proposed (OPEN-16). | Project team |
+| v0.7.2 | Simulated controllers built firmware-style behind a HAL, with realistic simulated hardware; `hardware.json` and `io_map.json` added to the config pack (2.5); test vectors noted in §9. | Project team |
+| v0.7.3 | Playground, based on the virtual-farm prototype: set a value and hold it (11.4.2, `/sim/holds`), failure-drill catalogue with Trigger and Fix and PRD codes (11.4.3), 2D Farm view and farm activity list (11.4.4), `sim_state` WebSocket message; OPEN-15 narrowed; dates removed. | Project team |
+| v0.8 | Aligned with the PRD rules and the virtual-farm design: two screens on playground sites (Control panel and Simulator screen, 11.4.1); `ZONE_STATE` and `CLIMATE_STATE` sent on every change (6.8, 6.9); `RESUME` and `CLEAR_FAULT` (7.8, 7.9) and “stopped stays stopped”; “unknown means blocked” (8.3, `STATE_UNKNOWN` check); no confirmation for any stop (OPEN-8 resolved); events and alerts carry `message`, `systemAction`, `nextStep`; `ts` is real time with `simTs` for simulated time; layout source agreed. | Project team |
+| v0.8 lock | Items A to F locked; fan IDs and top stage from config; `ZONE_STATE` authoritative where it overlaps telemetry. | Project team |
