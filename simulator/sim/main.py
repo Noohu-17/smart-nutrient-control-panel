@@ -8,8 +8,12 @@ import sys
 
 from dotenv import load_dotenv
 
-from .devices.base import connect_forever
+from .config import load_site
+from .devices.base import SimDevice
 from .settings import SIM_ROOT, Settings, load_settings
+from .state import next_boot_ids
+
+log = logging.getLogger("sim")
 
 # The devices the simulator plays (contract 2.2), in layout.json's "devices" shape.
 # Temporary: T4-4 replaces this with the list read from the client's layout.json.
@@ -23,9 +27,13 @@ DEVICES = (
 
 
 async def run(settings: Settings) -> None:
+    site = load_site(settings.client_dir)
+    boot_ids = next_boot_ids(settings.state_dir / "boot_ids.json", [d["id"] for d in DEVICES])
+    devices = [SimDevice(d["id"], d["kind"], site, boot_ids[d["id"]]) for d in DEVICES]
+    log.info("playing %s on site %s (bootId %s)", ", ".join(d.id for d in devices), site, boot_ids)
     async with asyncio.TaskGroup() as tasks:
-        for device in DEVICES:
-            tasks.create_task(connect_forever(settings, device["id"]))
+        for device in devices:
+            tasks.create_task(device.run(settings))
 
 
 def main() -> None:
@@ -40,7 +48,7 @@ def main() -> None:
         with asyncio.Runner(loop_factory=loop_factory) as runner:
             runner.run(run(settings))
     except KeyboardInterrupt:
-        logging.getLogger("sim").info("stopped")
+        log.info("stopped")
 
 
 if __name__ == "__main__":

@@ -13,14 +13,19 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 SIM_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = SIM_ROOT.parent
 PASSWORD_PREFIX = "MQTT_PASSWORD_"
 
 
 @dataclass(frozen=True)
 class Settings:
+    """client_dir: the client's config pack; state_dir: what survives a restart (bootId)."""
+
     mqtt_host: str
     mqtt_port: int
     log_level: str
+    client_dir: Path
+    state_dir: Path
     device_passwords: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     def login(self, device_id: str) -> tuple[str | None, str | None]:
@@ -44,9 +49,19 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         mqtt_host=env.get("MQTT_HOST", "localhost"),
         mqtt_port=port,
         log_level=env.get("LOG_LEVEL", "INFO").upper(),
+        client_dir=_path(env.get("SIM_CLIENT_DIR"), REPO_ROOT / "config" / "clients" / "client_A"),
+        state_dir=_path(env.get("SIM_STATE_DIR"), SIM_ROOT / ".state"),
         device_passwords={
             key.removeprefix(PASSWORD_PREFIX): value
             for key, value in env.items()
             if key.startswith(PASSWORD_PREFIX) and value
         },
     )
+
+
+def _path(value: str | None, default: Path) -> Path:
+    """A path from the environment; relative paths are relative to simulator/."""
+    if not value:
+        return default
+    path = Path(value)
+    return path if path.is_absolute() else SIM_ROOT / path
