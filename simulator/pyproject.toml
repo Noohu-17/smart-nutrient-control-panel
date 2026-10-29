@@ -1,0 +1,16 @@
+# Tool settings for the simulator. Dependencies are pinned in requirements.txt.
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = ["broker: needs an MQTT broker on MQTT_HOST:MQTT_PORT; skipped when none is running"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "UP", "I", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["sim"]
