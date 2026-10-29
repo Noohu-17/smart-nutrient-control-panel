@@ -3,10 +3,62 @@
   "_meta": {
     "client": "client_A",
     "placeholder": true,
-    "note": "Placeholder values until Track 3 fills this file in T3-2. Track 3 owns this file. Do not use for a real farm. speedOptions is real (contract 11.4).",
-    "placeholderKeys": ["driftPerHour", "plantUptake"]
+    "note": "Farm-model values filled in T3-2; Track 3 owns this file. None is verified by agronomy yet: each is a placeholder, a virtual-farm prototype value or calibrated to a contract example (see sources). Do not use for a real farm. speedOptions is real (contract 11.4); model.numerics are solver settings, not farm values.",
+    "placeholderKeys": [
+      "model.ecPerGramPerL", "model.rawWater", "model.doseLines", "model.refill",
+      "model.phDrift", "model.solutionTemp", "model.plantUptake", "model.initialState"
+    ],
+    "sources": {
+      "model.ecPerGramPerL": "PLACEHOLDER: k in EC = k*M/V; 1.0 is the Track 3 guide's placeholder. Only k x nutrientGPerMl is observable, so a jar test of each stock fixes the product.",
+      "model.rawWater.ecMsCm": "PROTOTYPE: virtual-farm runbook, 'raw water is EC 0.3 and pH 7.2'. Measure the SIET supply.",
+      "model.rawWater.ph": "PROTOTYPE: virtual-farm runbook, 'raw water is EC 0.3 and pH 7.2'. Measure the SIET supply.",
+      "model.rawWater.tempC": "PLACEHOLDER: no source. Measure the supply water at the polyhouse.",
+      "model.doseLines.A.nutrientGPerMl": "CONTRACT-EXAMPLE: calibrated so contract 6.6's illustrative dose (A 120 + B 120 mL into 936 L) raises EC by about 0.12 mS/cm. Needs a jar test of the real stock.",
+      "model.doseLines.B.nutrientGPerMl": "CONTRACT-EXAMPLE: as model.doseLines.A.nutrientGPerMl.",
+      "model.doseLines.A.phChangePerMlPer1000L": "PLACEHOLDER: stock A treated as pH-neutral.",
+      "model.doseLines.B.phChangePerMlPer1000L": "PLACEHOLDER: stock B treated as pH-neutral.",
+      "model.doseLines.ACID.nutrientGPerMl": "PLACEHOLDER: the acid's own EC contribution is ignored.",
+      "model.doseLines.ACID.phChangePerMlPer1000L": "CONTRACT-EXAMPLE: contract 6.6, 30 mL acid takes 936 L from pH 6.21 to 6.02 (-0.0059). The runbook's 100 mL story implies about -0.0048. Needs a titration of the SIET water with the real acid.",
+      "model.refill": "PLACEHOLDER: refill flow through the open valve, no source. Measure at the inlet.",
+      "model.phDrift.targetPh": "PROTOTYPE: assumes the solution drifts toward the raw water's pH (runbook 7.2).",
+      "model.phDrift.timeConstantH": "PLACEHOLDER: gives about +0.2 pH per day from 5.8. Agronomy to confirm from farm logs.",
+      "model.solutionTemp.airCouplingWPerK": "PLACEHOLDER: gives a time constant of about 6 h at 1200 L (4.7 h at 936 L).",
+      "model.plantUptake.referenceAirTempC": "PLACEHOLDER: no source.",
+      "model.plantUptake.waterChangePerDegC": "PLACEHOLDER: +3 % water uptake per degree C above reference; no source.",
+      "model.plantUptake.crops": "PLACEHOLDER: Track 3 order-of-magnitude estimate (about 225 plants per bench, 0.15-0.2 L per plant per day when grown), nutrient chosen so EC falls about 0.05 per day at 4 benches. BASIL copies LETTUCE: no crop-specific source. Agronomy to replace.",
+      "model.initialState": "CONTRACT-EXAMPLE: contract 6.1 telemetry example (78 %, EC 1.62, pH 6.04, 23.4 C). Scenarios may override.",
+      "model.numerics": "NUMERICAL: solver settings, not farm values."
+    }
   },
   "speedOptions": [0, 1, 60, 288],
-  "driftPerHour": { "ec": 0.02, "ph": 0.03, "solTempC": 0.2 },
-  "plantUptake": { "waterLPerBenchPerDay": 12 }
+  "model": {
+    "ecPerGramPerL": 1.0,
+    "rawWater": { "ecMsCm": 0.3, "ph": 7.2, "tempC": 26.0 },
+    "doseLines": {
+      "A":    { "nutrientGPerMl": 0.47, "phChangePerMlPer1000L": 0.0 },
+      "B":    { "nutrientGPerMl": 0.47, "phChangePerMlPer1000L": 0.0 },
+      "ACID": { "nutrientGPerMl": 0.0,  "phChangePerMlPer1000L": -0.0059 }
+    },
+    "refill": { "flowLpm": 30.0 },
+    "phDrift": { "targetPh": 7.2, "timeConstantH": 168.0 },
+    "solutionTemp": { "airCouplingWPerK": 230.0 },
+    "plantUptake": {
+      "referenceAirTempC": 25.0,
+      "waterChangePerDegC": 0.03,
+      "crops": {
+        "LETTUCE": {
+          "SEEDLING": { "waterLPerBenchPerH": 0.4, "nutrientGPerBenchPerH": 0.8 },
+          "GROWING":  { "waterLPerBenchPerH": 1.5, "nutrientGPerBenchPerH": 3.0 },
+          "READY":    { "waterLPerBenchPerH": 2.0, "nutrientGPerBenchPerH": 3.6 }
+        },
+        "BASIL": {
+          "SEEDLING": { "waterLPerBenchPerH": 0.4, "nutrientGPerBenchPerH": 0.8 },
+          "GROWING":  { "waterLPerBenchPerH": 1.5, "nutrientGPerBenchPerH": 3.0 },
+          "READY":    { "waterLPerBenchPerH": 2.0, "nutrientGPerBenchPerH": 3.6 }
+        }
+      }
+    },
+    "initialState": { "reservoirPct": 78, "ecMsCm": 1.62, "ph": 6.04, "solTempC": 23.4 },
+    "numerics": { "maxSubstepS": 60, "maxSubstepsPerCall": 100000 }
+  }
 }

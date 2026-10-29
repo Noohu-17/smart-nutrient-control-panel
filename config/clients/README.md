@@ -34,7 +34,7 @@ JSON has no comments, so placeholder status is written into the files:
   | :--- | :--- | :--- |
   | `limits.json` | `limits.maxPerDoseMl.A` and `.B` (300 mL each, from the handoff) | everything else, including `limits.maxPerDoseMl.ACID` (OPEN-5) |
   | `climate.json` | fan stages, chiller setpoint range, manual minutes, fogger rules | `setpoints.airTempMaxC`, `setpoints.airRhMax` |
-  | `simulator.json` | `speedOptions` | `driftPerHour`, `plantUptake` (Track 3 fills this file in T3-2) |
+  | `simulator.json` | `speedOptions`, `model.numerics` (solver settings) | everything else under `model` (the farm model's rates, T3-2); each value's source is in `_meta.sources` |
 
   Every other file except `layout.json` and `features.json` is placeholder throughout.
 
