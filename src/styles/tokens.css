@@ -1,5 +1,5 @@
 /* =====================================================================
-   Design tokens · Smart Nutrient Portal (Phase 2A)
+   Design tokens · Smart Nutrient Advisor (Phase 2A)
    Copied from the prototype's "Design system" board and its CSS.
    This is the only place raw values live: every component and screen
    uses these variables, never hex codes or pixel numbers.
@@ -19,6 +19,9 @@
   --color-sidebar-border: #2b6b55;
   --color-sidebar-overline: #8fbfab;
   --color-logo: #1a7a55;
+  --color-topbar: #10231c; /* app shell top bar */
+  --color-topbar-raised: #1b3329; /* connection chip */
+  --color-topbar-label: #c6e0d4;
   --color-primary: #146c43;
   --color-primary-hover: #0b4f3a;
   --color-primary-border: #b9d6c8; /* secondary button and hover card border */
@@ -73,6 +76,7 @@
   --dot-warn-text: #3d2600;
   --dot-crit: #e5484d;
   --dot-live: #16a34a;
+  --dot-off: #8a9a93; /* not connected / offline */
 
   /* NFT table cells */
   --table-growing-bg: #f2faf5;
@@ -164,6 +168,8 @@
   --touch-main: 48px; /* main actions */
   --button-sm: 36px;
   --sidebar-width: 240px;
+  --topbar-height: 52px;
+  --bottom-tabs-height: 64px; /* phone tab bar */
   --content-max: 1180px;
   --page-pad-block: 28px;
   --page-pad-inline: 32px;
