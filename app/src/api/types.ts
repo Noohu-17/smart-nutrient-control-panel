@@ -20,6 +20,16 @@ export type FarmZone = {
   benches: Bench[];
 };
 
+/** Per-site switches (contract §2.5, features.json). */
+export type Features = {
+  playground: boolean;
+  demoFarm: boolean;
+  climateAutomatic: boolean;
+  autoRefill: boolean;
+  secondApproval: boolean;
+  foggers: boolean;
+};
+
 export type Farm = {
   v: number;
   site: string;
@@ -39,6 +49,7 @@ export type Farm = {
   };
   power: { monitor: string; generator: boolean; ups: boolean };
   devices?: { id: string; kind: string; zone?: string }[];
+  features: Features;
 };
 
 /* ---------- GET /api/zones/{zoneId} (contract §6.1, ZONE_TELEMETRY) ---------- */

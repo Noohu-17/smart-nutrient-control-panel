@@ -1,7 +1,9 @@
 // src/mocks/handlers.test.ts · T2-4 · the fake API answers like the contract says
 import { describe, expect, it } from "vitest";
+import configFeatures from "../../../config/clients/client_A/features.json";
 import configLayout from "../../../config/clients/client_A/layout.json";
 import type { Farm, ZoneTelemetry } from "../api/types";
+import mockFeatures from "./data/features.json";
 import mockLayout from "./data/layout.json";
 
 const get = (path: string) => fetch(`/api${path}`);
@@ -24,6 +26,12 @@ describe("fake API (MSW)", () => {
 
   it("the mock layout is an exact copy of config/clients/client_A/layout.json", () => {
     expect(mockLayout).toEqual(configLayout);
+  });
+
+  it("GET /api/farm carries the features, a copy of config/clients/client_A/features.json", async () => {
+    const farm = (await (await get("/farm")).json()) as Farm;
+    expect(farm.features).toEqual(configFeatures);
+    expect(mockFeatures).toEqual(configFeatures);
   });
 
   it("GET /api/zones/Z1 returns telemetry shaped like contract §6.1", async () => {

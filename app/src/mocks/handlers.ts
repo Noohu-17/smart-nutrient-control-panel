@@ -25,6 +25,8 @@ export const handlers = [
     await networkDelay();
     if (currentScenario() === "farm-error")
       return apiError(500, "INTERNAL", "The farm layout could not be loaded");
+    if (currentScenario() === "no-playground")
+      return HttpResponse.json({ ...farmLayout, features: { ...farmLayout.features, playground: false } });
     return HttpResponse.json(farmLayout);
   }),
 
