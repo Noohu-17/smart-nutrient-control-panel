@@ -7,7 +7,7 @@ markers = ["broker: needs an MQTT broker on MQTT_HOST:MQTT_PORT; skipped when no
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py313"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "UP", "I", "SIM"]

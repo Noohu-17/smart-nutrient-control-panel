@@ -54,6 +54,7 @@ from `layout.json`.
 
 ```
 cd simulator
+pip install -r requirements-dev.txt   # once: test and lint tools
 pytest -q            # unit tests; broker tests run too when the dev broker is up, else they skip
 pytest -q -m broker  # only the tests against a real broker
 ```

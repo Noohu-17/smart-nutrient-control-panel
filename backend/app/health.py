@@ -34,7 +34,7 @@ async def check_database(settings: Settings) -> str:
             )
             async with conn:
                 await conn.execute("SELECT 1")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a health check reports DOWN, it never crashes
         log.warning("database health check failed: %r", exc)
         return DOWN
     return UP
@@ -70,7 +70,7 @@ async def check_broker(settings: Settings) -> str:
             ),
             timeout=settings.health_timeout_s + 1,
         )
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a health check reports DOWN, it never crashes
         log.warning("broker health check failed: %r", exc)
         return DOWN
     if not accepted:
