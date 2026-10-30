@@ -10,7 +10,7 @@ describe("fake API (MSW)", () => {
   it("GET /api/health says ok", async () => {
     const res = await get("/health");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ status: "ok" });
+    expect(await res.json()).toEqual({ status: "OK", database: "UP", broker: "UP" });
   });
 
   it("GET /api/farm returns Zone A and Zone B from layout.json", async () => {
