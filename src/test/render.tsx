@@ -1,0 +1,14 @@
+import { QueryClientProvider } from "@tanstack/react-query";
+import { render } from "@testing-library/react";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { makeQueryClient } from "../app/queryClient";
+import { routes } from "../app/routes";
+
+/** Render the whole app at a path, backed by the fake API. */
+export function renderAt(path: string) {
+  return render(
+    <QueryClientProvider client={makeQueryClient({ retry: false })}>
+      <RouterProvider router={createMemoryRouter(routes, { initialEntries: [path] })} />
+    </QueryClientProvider>,
+  );
+}
