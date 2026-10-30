@@ -22,6 +22,7 @@ from typing import Any
 
 import aiomqtt
 
+from ..clock import SimClock
 from ..messages import Envelope, device_status, offline_status, status_topic
 from ..settings import Settings
 
@@ -91,6 +92,9 @@ class SimDevice:
     current status at once. If the simulator dies, the broker publishes the
     last will (offline). A clean stop discards the will, so the device then
     publishes the same offline status itself.
+
+    On playground sites pass the simulator's clock: every message then also
+    carries simTs. Heartbeats stay on real time whatever the clock's speed.
     """
 
     def __init__(
@@ -100,6 +104,7 @@ class SimDevice:
         site: str,
         boot_id: int,
         *,
+        clock: SimClock | None = None,
         heartbeat_s: float = HEARTBEAT_S,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         monotonic: Callable[[], float] = time.monotonic,
@@ -107,12 +112,14 @@ class SimDevice:
         self.id, self.kind = device_id, kind
         self.topic = status_topic(site, device_id)
         self.envelope = Envelope(site, device_id, boot_id)
+        self.clock = clock
         self.heartbeat_s = heartbeat_s
         self._now, self._monotonic = now, monotonic
         self._booted = monotonic()
 
     def status(self) -> dict[str, Any]:
-        header = self.envelope.next("DEVICE_STATUS", self._now())
+        sim_ts = self.clock.now() if self.clock else None
+        header = self.envelope.next("DEVICE_STATUS", self._now(), sim_ts)
         uptime_s = int(self._monotonic() - self._booted)
         return device_status(header, uptime_s=uptime_s, gateway=self.kind == "GATEWAY")
 

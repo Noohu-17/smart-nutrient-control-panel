@@ -5,32 +5,34 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+from datetime import UTC, datetime
 
 from dotenv import load_dotenv
 
-from .config import load_site
+from .clock import SimClock
+from .config import load_devices, load_site, load_speed_options, playground_enabled
 from .devices.base import SimDevice
 from .settings import SIM_ROOT, Settings, load_settings
 from .state import next_boot_ids
 
 log = logging.getLogger("sim")
 
-# The devices the simulator plays (contract 2.2), in layout.json's "devices" shape.
-# Temporary: T4-4 replaces this with the list read from the client's layout.json.
-DEVICES = (
-    {"id": "GW1", "kind": "GATEWAY"},
-    {"id": "ZC1", "kind": "ZONE_CONTROLLER"},
-    {"id": "ZC2", "kind": "ZONE_CONTROLLER"},
-    {"id": "CC1", "kind": "CLIMATE_CONTROLLER"},
-    {"id": "PM1", "kind": "POWER_MONITOR"},
-)
-
 
 async def run(settings: Settings) -> None:
     site = load_site(settings.client_dir)
-    boot_ids = next_boot_ids(settings.state_dir / "boot_ids.json", [d["id"] for d in DEVICES])
-    devices = [SimDevice(d["id"], d["kind"], site, boot_ids[d["id"]]) for d in DEVICES]
+    layout_devices = load_devices(settings.client_dir)  # one SimDevice per entry (contract 2.2)
+    # The simulated day starts now; scenario start times (contract 11.4) come later.
+    clock = SimClock(datetime.now(UTC), settings.sim_speed, load_speed_options(settings.client_dir))
+    playground = playground_enabled(settings.client_dir)
+    boot_ids = next_boot_ids(
+        settings.state_dir / "boot_ids.json", [d["id"] for d in layout_devices]
+    )
+    devices = [
+        SimDevice(d["id"], d["kind"], site, boot_ids[d["id"]], clock=clock if playground else None)
+        for d in layout_devices
+    ]
     log.info("playing %s on site %s (bootId %s)", ", ".join(d.id for d in devices), site, boot_ids)
+    log.info("clock speed x%g; simTs in messages: %s", clock.speed, "yes" if playground else "no")
     async with asyncio.TaskGroup() as tasks:
         for device in devices:
             tasks.create_task(device.run(settings))

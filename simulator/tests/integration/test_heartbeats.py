@@ -1,10 +1,13 @@
-"""Heartbeats, clean stop and last will against a real broker (T4-2)."""
+"""Heartbeats, clean stop and last will against a real broker (T4-2), and the device
+list from layout.json (T4-4)."""
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 import uuid
@@ -13,13 +16,13 @@ from datetime import UTC, datetime
 import aiomqtt
 import pytest
 
-from sim.config import load_site
+from sim.config import load_devices, load_site
 from sim.devices.base import SimDevice
-from sim.main import DEVICES
 from sim.messages import offline_status, utc_ts
-from sim.settings import SIM_ROOT
+from sim.settings import SIM_ROOT, load_settings
 
 pytestmark = pytest.mark.broker
+DEVICES = load_devices(load_settings().client_dir)
 DEVICE_IDS = {d["id"] for d in DEVICES}
 
 
@@ -38,9 +41,22 @@ async def watch_statuses(settings, site, done, timeout_s=15.0):
     return latest
 
 
-def all_online_since(started):
-    return lambda latest: set(latest) >= DEVICE_IDS and all(
-        latest[d].get("online") and latest[d].get("ts", "") >= started for d in DEVICE_IDS)
+async def statuses_during(settings, site, seconds):
+    """Every status received within `seconds` of subscribing; retained ones arrive first."""
+    received = []
+    async with aiomqtt.Client(settings.mqtt_host, settings.mqtt_port,
+                              identifier=f"test-{uuid.uuid4().hex[:8]}") as client:
+        await client.subscribe(f"farm/{site}/device/+/status", qos=1)
+        with contextlib.suppress(TimeoutError):
+            async with asyncio.timeout(seconds):
+                async for message in client.messages:
+                    received.append(json.loads(message.payload))
+    return received
+
+
+def all_online_since(started, device_ids=DEVICE_IDS):
+    return lambda latest: set(latest) >= device_ids and all(
+        latest[d].get("online") and latest[d].get("ts", "") >= started for d in device_ids)
 
 
 def all_offline(latest):
@@ -86,3 +102,28 @@ def test_last_will_says_offline_when_the_simulator_is_killed(broker, run, tmp_pa
 
     assert all(online[d]["bootId"] == 1 for d in DEVICE_IDS)  # fresh state dir: first boot
     assert all(offline[d] == offline_status(d) for d in DEVICE_IDS)
+
+
+def test_removing_zc2_from_layout_json_removes_its_heartbeat(broker, run, tmp_path):
+    client_dir = shutil.copytree(broker.client_dir, tmp_path / "client")
+    layout = json.loads((client_dir / "layout.json").read_text(encoding="utf-8"))
+    layout["devices"] = [d for d in layout["devices"] if d["id"] != "ZC2"]
+    (client_dir / "layout.json").write_text(json.dumps(layout), encoding="utf-8")
+    remaining = DEVICE_IDS - {"ZC2"}
+
+    site, started = load_site(client_dir), utc_ts(datetime.now(UTC))
+    simulator = subprocess.Popen(
+        [sys.executable, "-m", "sim.main"], cwd=SIM_ROOT,
+        env={**os.environ, "SIM_CLIENT_DIR": str(client_dir), "SIM_STATE_DIR": str(tmp_path)},
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        online = run(watch_statuses(broker, site, all_online_since(started, remaining)))
+        later = run(statuses_during(broker, site, 3.0))  # ZC2 would have started with the rest
+    finally:
+        simulator.kill()
+        simulator.wait(timeout=10)
+
+    assert set(online) >= remaining
+    fresh_zc2 = [s for s in later if s["device"] == "ZC2" and s.get("ts", "") >= started]
+    assert fresh_zc2 == [], "ZC2 was removed from layout.json but still sent a heartbeat"

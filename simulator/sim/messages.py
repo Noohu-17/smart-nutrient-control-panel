@@ -33,9 +33,10 @@ class Envelope:
         self.site, self.device_id, self.boot_id = site, device_id, boot_id
         self.seq = 0
 
-    def next(self, msg_type: str, ts: datetime) -> dict[str, Any]:
+    def next(self, msg_type: str, ts: datetime, sim_ts: datetime | None = None) -> dict[str, Any]:
+        """ts is real time; sim_ts (playground sites only) becomes simTs."""
         self.seq += 1
-        return {
+        header = {
             "v": 1,
             "type": msg_type,
             "msgId": str(uuid.uuid4()),
@@ -45,6 +46,9 @@ class Envelope:
             "bootId": self.boot_id,
             "seq": self.seq,
         }
+        if sim_ts is not None:
+            header["simTs"] = utc_ts(sim_ts)
+        return header
 
 
 def device_status(envelope: dict[str, Any], *, uptime_s: int, gateway: bool) -> dict[str, Any]:

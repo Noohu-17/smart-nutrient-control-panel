@@ -37,8 +37,26 @@ Watch them without MQTT Explorer:
 docker compose -f infra/docker-compose.dev.yml exec mqtt mosquitto_sub -v -t "farm/+/device/+/status"
 ```
 
-The device list (GW1, ZC1, ZC2, CC1, PM1) is a temporary constant in `sim/main.py`; T4-4 reads it
-from `layout.json`.
+## Devices (layout.json)
+
+The simulator plays one device per entry in the client's `layout.json` `"devices"` list, read once
+at start: GW1, ZC1, ZC2, CC1 and PM1 for client_A. Each entry needs a unique `id` (like `ZC1`) and a
+`kind`: `GATEWAY`, `ZONE_CONTROLLER`, `CLIMATE_CONTROLLER` or `POWER_MONITOR`. Otherwise the
+simulator refuses to start and says which entry is wrong.
+
+Remove an entry and restart: that device no longer connects or sends heartbeats. The broker keeps
+its last retained status, which says offline, because the device said so when it last stopped.
+
+## Simulated clock (contract 11.4)
+
+`sim/clock.py` keeps the simulated time. `SIM_SPEED` sets the speed: `0` pauses, `1` is real time,
+`60` is one hour per real minute, `288` is one day in five minutes. Allowed speeds come from
+`simulator.json` `speedOptions`. The simulated day starts when the simulator starts.
+
+Every message's `ts` stays real time. On playground sites (`features.json` `"playground": true`)
+messages also carry `simTs`, the simulated time. Heartbeats run on real time at any speed, even
+when paused. `SimClock.tick()` gives the simulated seconds since the previous tick, the `dt` that
+the farm model's step will take.
 
 ## Settings (`.env` or environment)
 
@@ -47,6 +65,7 @@ from `layout.json`.
 | `MQTT_HOST`, `MQTT_PORT` | `localhost`, `1883` | Broker address |
 | `MQTT_PASSWORD_<DEVICE>` | unset | Password for that device's login (username = device ID). Unset = anonymous (dev broker) |
 | `LOG_LEVEL` | `INFO` | Python logging level |
+| `SIM_SPEED` | `1` | Simulated clock speed, one of `speedOptions` |
 | `SIM_CLIENT_DIR` | `../config/clients/client_A` | The client's config pack |
 | `SIM_STATE_DIR` | `.state` | Where bootIds are kept between runs |
 

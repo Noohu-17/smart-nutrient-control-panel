@@ -26,6 +26,7 @@ class Settings:
     log_level: str
     client_dir: Path
     state_dir: Path
+    sim_speed: float
     device_passwords: Mapping[str, str] = field(default_factory=dict, repr=False)
 
     def login(self, device_id: str) -> tuple[str | None, str | None]:
@@ -45,12 +46,18 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         raise ValueError(f"MQTT_PORT must be a whole number, got {port_text!r}") from None
     if not 1 <= port <= 65535:
         raise ValueError(f"MQTT_PORT must be 1-65535, got {port}")
+    speed_text = env.get("SIM_SPEED", "1")
+    try:
+        speed = float(speed_text)
+    except ValueError:
+        raise ValueError(f"SIM_SPEED must be a number, got {speed_text!r}") from None
     return Settings(
         mqtt_host=env.get("MQTT_HOST", "localhost"),
         mqtt_port=port,
         log_level=env.get("LOG_LEVEL", "INFO").upper(),
         client_dir=_path(env.get("SIM_CLIENT_DIR"), REPO_ROOT / "config" / "clients" / "client_A"),
         state_dir=_path(env.get("SIM_STATE_DIR"), SIM_ROOT / ".state"),
+        sim_speed=speed,  # checked against simulator.json speedOptions by SimClock
         device_passwords={
             key.removeprefix(PASSWORD_PREFIX): value
             for key, value in env.items()
