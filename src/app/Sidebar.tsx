@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useFarm } from "../api/hooks";
 import { Icon } from "../components/Icon";
-import { navMonitor, NAV_SYSTEM, type NavItem } from "./nav";
+import { navMonitor, navSystem, type NavItem } from "./nav";
 
 function Group({ title, items, onNavigate }: { title: string; items: NavItem[]; onNavigate: () => void }) {
   return (
@@ -39,7 +39,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
         <span>{farm.data?.name ?? "…"}</span>
       </div>
       <Group title="Monitor" items={navMonitor(farm.data?.zones ?? [])} onNavigate={onNavigate} />
-      <Group title="System" items={NAV_SYSTEM} onNavigate={onNavigate} />
+      <Group title="System" items={navSystem(farm.data?.features.playground)} onNavigate={onNavigate} />
     </nav>
   );
 }

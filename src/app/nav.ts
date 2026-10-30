@@ -10,7 +10,10 @@ export const navMonitor = (zones: FarmZone[]): NavItem[] => [
   ...zones.map((z) => ({ to: zonePath(z.id), label: z.name, icon: "layers" as const })),
   { to: "/climate", label: "Climate", icon: "therm" },
 ];
-export const NAV_SYSTEM: NavItem[] = [
+
+/** System group. The Simulator exists only on playground sites (contract 11.4.1). */
+export const navSystem = (playground = false): NavItem[] => [
   { to: "/alerts", label: "Alerts", icon: "bell" },
   { to: "/history", label: "History", icon: "clock" },
+  ...(playground ? [{ to: "/simulator", label: "Simulator", icon: "sliders" as const }] : []),
 ];

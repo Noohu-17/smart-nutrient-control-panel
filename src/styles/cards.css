@@ -142,3 +142,48 @@
   font-size: var(--text-caption-size);
   color: var(--text-muted);
 }
+
+/* ---------- simulator */
+.empty-note {
+  margin: 0;
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  color: var(--text-muted);
+}
+.farm-plan {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.plan-house {
+  fill: var(--color-surface-subtle);
+  stroke: var(--color-input-border);
+}
+.plan-split {
+  stroke: var(--dashed-border);
+  stroke-dasharray: 6 4;
+}
+.plan-bench {
+  fill: var(--color-surface);
+  stroke: var(--color-border);
+}
+.plan-channel {
+  stroke: var(--status-info-fg);
+}
+.plan-pad {
+  fill: var(--status-info-bg);
+  stroke: var(--status-info-fg);
+}
+.plan-fan {
+  fill: var(--status-neutral-bg);
+  stroke: var(--status-neutral-fg);
+}
+.plan-zone {
+  fill: var(--text-primary);
+  font-size: var(--text-label-size);
+  font-weight: var(--weight-bold);
+}
+.plan-label {
+  fill: var(--text-muted);
+  font-size: var(--text-caption-size);
+}
