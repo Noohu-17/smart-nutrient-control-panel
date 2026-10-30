@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
+import { useFarm } from "../api/hooks";
 import { Icon } from "../components/Icon";
-import { NAV_MONITOR, NAV_SYSTEM, type NavItem } from "./nav";
-import { SITE_NAME } from "./site";
+import { navMonitor, NAV_SYSTEM, type NavItem } from "./nav";
 
 function Group({ title, items, onNavigate }: { title: string; items: NavItem[]; onNavigate: () => void }) {
   return (
@@ -18,6 +18,7 @@ function Group({ title, items, onNavigate }: { title: string; items: NavItem[]; 
 }
 
 export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
+  const farm = useFarm();
   return (
     <nav className={`side${open ? " open" : ""}`} aria-label="Main">
       <div className="brand">
@@ -35,9 +36,9 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
       </div>
       <div className="site-pick">
         <small>Site</small>
-        <span>{SITE_NAME}</span>
+        <span>{farm.data?.name ?? "…"}</span>
       </div>
-      <Group title="Monitor" items={NAV_MONITOR} onNavigate={onNavigate} />
+      <Group title="Monitor" items={navMonitor(farm.data?.zones ?? [])} onNavigate={onNavigate} />
       <Group title="System" items={NAV_SYSTEM} onNavigate={onNavigate} />
     </nav>
   );

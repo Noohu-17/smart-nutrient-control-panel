@@ -1,17 +1,22 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { useFarm } from "../api/hooks";
 import { Icon } from "../components/Icon";
-import { ZONES, zonePath } from "./nav";
+import { zonePath } from "../config/readings";
 
 /** Phone navigation: four tabs + More (opens the full menu). */
 export function BottomTabs({ onMore, moreOpen }: { onMore: () => void; moreOpen: boolean }) {
   const { pathname } = useLocation();
+  const firstZone = useFarm().data?.zones[0];
   return (
     <nav className="ptabs" aria-label="Tabs">
       <NavLink to="/" end>
         <Icon name="grid" />
         Home
       </NavLink>
-      <NavLink to={zonePath(ZONES[0].id)} className={pathname.startsWith("/zone/") ? "active" : undefined}>
+      <NavLink
+        to={firstZone ? zonePath(firstZone.id) : "/"}
+        className={pathname.startsWith("/zone/") ? "active" : undefined}
+      >
         <Icon name="layers" />
         Zones
       </NavLink>

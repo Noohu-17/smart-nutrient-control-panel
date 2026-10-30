@@ -1,0 +1,112 @@
+/* Zone cards and reading tiles (Overview, zone page). Tokens only. */
+
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: var(--gap-card);
+}
+
+.zone-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+}
+.zone-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.zone-card-head h2 {
+  margin: 0;
+  font-size: var(--text-section-size);
+  line-height: var(--text-section-line);
+  font-weight: var(--weight-bold);
+}
+.zone-card-head a {
+  color: inherit;
+  text-decoration: none;
+}
+.zone-card-head a:hover {
+  text-decoration: underline;
+}
+
+/* no data from the zone: dashed and muted, values show "--" */
+.zone-card.offline {
+  border-style: dashed;
+  border-color: var(--dashed-border);
+  background: var(--disabled-bg);
+}
+.zone-card.offline .tile {
+  background: var(--color-surface);
+  color: var(--disabled-fg);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) 10px;
+  border-radius: var(--radius-pill);
+  background: var(--status-neutral-bg);
+  color: var(--status-neutral-fg);
+  font-size: var(--text-caption-size);
+  font-weight: var(--weight-semibold);
+}
+.chip-live {
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+}
+.chip-offline {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  border: 1px solid var(--disabled-border);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-tile);
+  background: var(--color-surface-subtle);
+}
+.tile.warn {
+  background: var(--status-warning-bg);
+}
+.tile-label {
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  color: var(--text-secondary);
+}
+.tile-value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+.tile-value b {
+  font-size: var(--text-metric-size);
+  line-height: var(--text-metric-line);
+  font-weight: var(--weight-extrabold);
+}
+.tile-value small {
+  font-size: var(--text-caption-size);
+  color: var(--text-muted);
+}
+.tile-note {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--weight-semibold);
+  color: var(--status-warning-fg);
+}
+.zone-card.offline .tile-note {
+  color: var(--disabled-fg);
+}
