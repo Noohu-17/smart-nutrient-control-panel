@@ -1,0 +1,28 @@
+# Runs the back-end tests, including the contract-model tests, which read docs/contract.md.
+# Build from the repo root, so the contract is in the build context:
+#   docker build -f backend/Dockerfile.test -t sna-backend-test .
+#   docker run --rm sna-backend-test
+# To test against a locally edited contract without rebuilding, mount docs/ over the copy:
+#   docker run --rm -v "$PWD/docs:/repo/docs:ro" sna-backend-test
+FROM python:3.13.16-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_ROOT_USER_ACTION=ignore
+
+WORKDIR /repo/backend
+
+COPY backend/requirements.txt backend/requirements-dev.txt ./
+RUN pip install -r requirements-dev.txt
+
+COPY docs/contract.md /repo/docs/contract.md
+COPY backend/pytest.ini ./
+COPY backend/app ./app
+COPY backend/tests ./tests
+
+RUN useradd --create-home --uid 10001 tester
+USER tester
+
+CMD ["python", "-m", "pytest", "-v", "-p", "no:cacheprovider"]
