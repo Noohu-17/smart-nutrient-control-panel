@@ -9,6 +9,7 @@ export const SCENARIOS = {
   "z2-stale": "Zone B last reading is 5 minutes old",
   "z1-estop": "E-STOP pressed on the Zone A dosing cabinet",
   "farm-error": "GET /api/farm fails (500)",
+  "api-degraded": "Back end up, but database or broker down (503 DEGRADED)",
   slow: "Every answer takes 3 s, to see the loading states",
 } as const;
 

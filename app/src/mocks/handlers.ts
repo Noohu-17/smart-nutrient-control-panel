@@ -14,7 +14,11 @@ const networkDelay = () => delay(currentScenario() === "slow" ? 3000 : 300);
 
 export const handlers = [
   // GET /api/health · uptime check (contract §11.2, public)
-  http.get("/api/health", () => HttpResponse.json({ status: "ok" })),
+  http.get("/api/health", () =>
+  currentScenario() === "api-degraded"
+    ? HttpResponse.json({ status: "DEGRADED", database: "DOWN", broker: "UP" }, { status: 503 })
+    : HttpResponse.json({ status: "OK", database: "UP", broker: "UP" }),
+),
 
   // GET /api/farm · layout (contract §2.4). Zone names come from here, never from screen code.
   http.get("/api/farm", async () => {

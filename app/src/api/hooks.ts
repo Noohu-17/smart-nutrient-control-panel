@@ -9,7 +9,7 @@ const ONE_MINUTE = 60_000;
 export function useHealth() {
   return useQuery({
     queryKey: ["health"],
-    queryFn: () => getJson<{ status: string }>("/health"),
+    queryFn: () => getJson<{ status: string; database: string; broker: string }>("/health"),
     refetchInterval: 30_000,
     retry: false,
   });
