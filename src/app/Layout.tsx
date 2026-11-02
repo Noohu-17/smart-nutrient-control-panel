@@ -1,12 +1,16 @@
 import { useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { useSession } from "../auth/session";
 import { BottomTabs } from "./BottomTabs";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 
-/** Top bar · sidebar on desktop · bottom tabs + menu sheet on phone. */
+/** Top bar · sidebar on desktop · bottom tabs + menu sheet on phone. Signed-in people only. */
 export function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const { role } = useSession();
+  const { pathname } = useLocation();
+  if (!role) return <Navigate to="/sign-in" replace state={{ from: pathname }} />;
   return (
     <>
       <TopBar />

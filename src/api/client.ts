@@ -15,16 +15,16 @@ export class ApiError extends Error {
 
 const isJson = (response: Response) => (response.headers.get("content-type") ?? "").includes("json");
 
-async function request(path: string): Promise<Response> {
+async function request(path: string, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(`/api${path}`);
+    return await fetch(`/api${path}`, init);
   } catch {
     throw new ApiError("Couldn’t reach the server", 0, "NETWORK");
   }
 }
 
-export async function getJson<T>(path: string): Promise<T> {
-  let response = await request(path);
+async function send<T>(path: string, init?: RequestInit): Promise<T> {
+  let response = await request(path, init);
 
   // Development: an HTML page instead of JSON means the fake API worker went to sleep and
   // Vite answered with index.html. Wake the worker and ask once more.
@@ -32,7 +32,7 @@ export async function getJson<T>(path: string): Promise<T> {
     const { reactivateMocking } = await import("../mocks/browser");
     reactivateMocking();
     await new Promise((resolve) => setTimeout(resolve, 200));
-    response = await request(path);
+    response = await request(path, init);
   }
 
   if (!isJson(response)) {
@@ -50,3 +50,13 @@ export async function getJson<T>(path: string): Promise<T> {
 
   return (await response.json()) as T;
 }
+
+export const getJson = <T>(path: string) => send<T>(path);
+
+/** POST with a JSON body. Extra headers carry Idempotency-Key (§11.1). */
+export const postJson = <T>(path: string, body?: unknown, headers: Record<string, string> = {}) =>
+  send<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });

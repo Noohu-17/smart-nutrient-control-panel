@@ -1,6 +1,6 @@
-import { useFarm } from "../api/hooks";
-import { FarmPlan } from "../features/simulator/FarmPlan";
-import { Placeholder } from "./Placeholder";
+import { useFarm } from "../../api/hooks";
+import { Placeholder } from "../../components/Placeholder";
+import { FarmPlan } from "./FarmPlan";
 
 /** Simulator screen, the farm's side of a playground site. It has no buttons for people's
     actions: dose, refill and stop stay on the control panel (contract 11.4.1). */

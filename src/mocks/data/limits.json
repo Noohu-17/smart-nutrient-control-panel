@@ -1,0 +1,43 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder values until the agronomy numbers arrive (OPEN-5). Do not use for a real farm. Only limits.maxPerDoseMl.A and limits.maxPerDoseMl.B (300 mL each, from the handoff) are real. limits.maxPerDoseMl.ACID (100 mL) is a placeholder.",
+    "placeholderKeys": [
+      "zones.*.limits.maxPerDoseMl.ACID",
+      "zones.*.limits.max24hMl",
+      "zones.*.limits.ecCeiling",
+      "zones.*.limits.phMin",
+      "zones.*.limits.phMax",
+      "zones.*.limits.minReservoirPctToDose",
+      "zones.*.dose.maxDurationS",
+      "zones.*.dose.mixWaitS",
+      "zones.*.dose.tolerancePct"
+    ]
+  },
+  "zones": {
+    "Z1": {
+      "limits": {
+        "maxPerDoseMl": { "A": 300, "B": 300, "ACID": 100 },
+        "max24hMl": { "A": 1500, "B": 1500, "ACID": 400 },
+        "ecCeiling": 2.4,
+        "phMin": 5.5,
+        "phMax": 6.8,
+        "minReservoirPctToDose": 30
+      },
+      "dose": { "maxDurationS": 600, "mixWaitS": 300, "tolerancePct": 5 }
+    },
+    "Z2": {
+      "limits": {
+        "maxPerDoseMl": { "A": 300, "B": 300, "ACID": 100 },
+        "max24hMl": { "A": 1500, "B": 1500, "ACID": 400 },
+        "ecCeiling": 2.4,
+        "phMin": 5.5,
+        "phMax": 6.8,
+        "minReservoirPctToDose": 30
+      },
+      "dose": { "maxDurationS": 600, "mixWaitS": 300, "tolerancePct": 5 }
+    }
+  }
+}

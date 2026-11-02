@@ -1,13 +1,17 @@
-import { LockedButton } from "../../components/LockedButton";
+import { RoleButton } from "../../components/RoleButton";
 
-const NOT_BUILT = "Dosing and refill arrive in a later task";
+const goToDoseCard = () => document.getElementById("dose-card")?.scrollIntoView({ block: "start" });
 
-/** The zone's start actions. Shown on the Overview card and the zone page, never hidden. */
-export function ZoneActions() {
+/** The zone's actions, locked per role (contract §13). The zone page adds the less common ones. */
+export function ZoneActions({ full = false }: { full?: boolean }) {
   return (
     <div className="actions">
-      <LockedButton reason={NOT_BUILT}>Dose</LockedButton>
-      <LockedButton reason={NOT_BUILT}>Refill</LockedButton>
+      <RoleButton perm="operate" onClick={full ? goToDoseCard : undefined}>
+        Dose
+      </RoleButton>
+      <RoleButton perm="operate">Refill</RoleButton>
+      {full && <RoleButton perm="recipe">Change recipe</RoleButton>}
+      {full && <RoleButton perm="clearFault">Clear fault</RoleButton>}
     </div>
   );
 }

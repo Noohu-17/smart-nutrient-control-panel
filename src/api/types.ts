@@ -82,5 +82,27 @@ export type ZoneTelemetry = {
   activeCmdId: string | null;
 };
 
+/* ---------- POST /api/dose-requests (contract §11.3) ---------- */
+export type DoseLineAmount = { line: DoseLine; ml: number };
+
+export type DoseRequestBody = { zone: string; lines: DoseLineAmount[] };
+
+export type CheckResult = "PASS" | "WARN" | "BLOCK";
+
+export type DoseCheck = { id: string; result: CheckResult; message: string };
+
+export type DoseRequest = {
+  id: string;
+  zone: string;
+  lines: DoseLineAmount[];
+  projected: { ec: number | null; ph: number | null };
+  checks: DoseCheck[];
+  estimate: { durationMin: number; totalMl: number };
+  canConfirm: boolean;
+};
+
+/* ---------- POST /api/dose-requests/{id}/confirm (contract §11.3, states §8.1) ---------- */
+export type DoseConfirmed = { cmdId: string; state: "DISPATCHED" };
+
 /* ---------- errors (contract §11.1) ---------- */
 export type ApiErrorBody = { error: { code: string; message: string; details?: unknown } };

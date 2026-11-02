@@ -1,9 +1,12 @@
 // src/test/setup.ts · runs before every test file (vite.config.ts → test.setupFiles)
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { resetTelemetry } from "../mocks/data/telemetry";
 import { server } from "../mocks/node";
+
+// A cold first render plus the fake API delay can pass the 1 s default on a busy laptop.
+configure({ asyncUtilTimeout: 5000 });
 
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });

@@ -4,11 +4,13 @@ import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { makeQueryClient } from "./app/queryClient";
 import { routes } from "./app/routes";
+import { SessionProvider } from "./auth/SessionProvider";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/layout.css";
 import "./styles/components.css";
 import "./styles/cards.css";
+import "./styles/dosing.css";
 
 const router = createBrowserRouter(routes);
 const queryClient = makeQueryClient();
@@ -28,9 +30,11 @@ async function enableMocking() {
 void enableMocking().then(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
+      <SessionProvider>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </SessionProvider>
     </StrictMode>,
   );
 });

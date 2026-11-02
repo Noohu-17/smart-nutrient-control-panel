@@ -1,10 +1,11 @@
 import { Link, useParams } from "react-router-dom";
-import { useFarm } from "../api/hooks";
-import { EmptyState } from "../components/EmptyState";
-import { ReadingCard } from "../components/ReadingCard";
-import { StatusChip } from "../components/StatusChip";
-import { ZONE_READINGS } from "../config/readings";
-import { ZoneActions } from "../features/zones/ZoneActions";
+import { useFarm } from "../../api/hooks";
+import { EmptyState } from "../../components/EmptyState";
+import { ReadingCard } from "../../components/ReadingCard";
+import { StatusChip } from "../../components/StatusChip";
+import { ZONE_READINGS } from "../../config/readings";
+import { DoseCard } from "../dosing/DoseCard";
+import { ZoneActions } from "./ZoneActions";
 
 /** Zone page skeleton: name and benches from GET /api/farm, reading cards still empty. */
 export function ZonePage() {
@@ -40,8 +41,10 @@ export function ZonePage() {
                 <ReadingCard key={spec.key} spec={spec} value={null} />
               ))}
             </div>
-            <ZoneActions />
+            <ZoneActions full />
           </section>
+
+          <DoseCard key={zone.id} zone={zone} />
 
           <section className="zone-card" aria-labelledby="benches-title">
             <header className="zone-card-head">

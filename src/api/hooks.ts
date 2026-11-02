@@ -1,7 +1,7 @@
 // src/api/hooks.ts · TanStack Query hooks. Screens call these, never fetch.
-import { useQueries, useQuery } from "@tanstack/react-query";
-import { getJson } from "./client";
-import type { Farm, ZoneTelemetry } from "./types";
+import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { getJson, postJson } from "./client";
+import type { DoseConfirmed, DoseRequest, DoseRequestBody, Farm, ZoneTelemetry } from "./types";
 
 const ONE_MINUTE = 60_000;
 
@@ -40,4 +40,19 @@ export function useZone(zoneId: string | undefined) {
 /** Telemetry for several zones at once (the Overview). Same cache keys as useZone. */
 export function useZones(zoneIds: string[]) {
   return useQueries({ queries: zoneIds.map(zoneQueryOptions) });
+}
+
+/** Run the safety checks for a dose (§11.3). No side effects: nothing is sent to the farm. */
+export function useDoseReview() {
+  return useMutation({
+    mutationFn: (body: DoseRequestBody) => postJson<DoseRequest>("/dose-requests", body),
+  });
+}
+
+/** Create and dispatch the command for a reviewed dose. */
+export function useConfirmDose() {
+  return useMutation({
+    mutationFn: ({ id, key }: { id: string; key: string }) =>
+      postJson<DoseConfirmed>(`/dose-requests/${id}/confirm`, undefined, { "Idempotency-Key": key }),
+  });
 }
