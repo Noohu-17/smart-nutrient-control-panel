@@ -523,6 +523,17 @@ Sent **on every change** (and with each telemetry message), so the app sees a pu
 
 Same idea for CC1: `mode`, `manualUntil`, `stopped`, `equipment` (as in 6.2) and `latches`, sent on every change. Climate telemetry retains the shared equipment, mode, stopped/E-STOP, and running-operation fields as a complete snapshot; `CLIMATE_STATE` is authoritative for screen updates when fields overlap.
 
+```json
+{
+  "v": 1, "type": "CLIMATE_STATE", "msgId": "…", "ts": "…", "site": "siet-ph1", "device": "CC1", "bootId": 77, "seq": 9121,
+  "mode": "MANUAL",
+  "manualUntil": "2026-11-09T05:54:00.000Z",
+  "stopped": false,
+  "equipment": { "fanStage": 2, "FAN1": "ON", "FAN2": "ON", "FAN3": "OFF", "FAN4": "OFF", "PAD1": "ON", "SHADE1": "OPEN", "HAF1": "ON", "CH1": { "state": "ON", "setpointC": 22.0 }, "CH2": { "state": "ON", "setpointC": 22.0 }, "FOG1": "NOT_INSTALLED" },
+  "latches": []
+}
+```
+
 ---
 
 ## 7. Cloud → farm messages
@@ -1185,6 +1196,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v0.8 lock | Items A to F locked; fan IDs and top stage from config; `ZONE_STATE` authoritative where it overlaps telemetry. | Project team |
 | v0.8 part 1 | Configured defaults, `503` for the health check, optional power fields, quality rule (T1-9). | Track 1 |
 | v1.0 | Contract part 2 (T1-10): `CMD_STATE` fields, mix wait and state-to-reason table (6.6); `RESUME` and `CLEAR_FAULT` topics (4, 7.8, 7.9); lifecycle per command kind, `UNKNOWN` resolution, `FAULT_DURING` and `CANCELLED` (8); check order and persistence (9); link-drop behaviour (10); `GET /farm` and `GET /zones/{zoneId}` responses (11.2); reading rate and 24-hour totals on simulated time (11.4); WebSocket rules (12); `dayTankL` to 0.1 L (1); climate alarm limits (6.2); OPEN-9, 10, 15 and 16 resolved. All changes keep `"v": 1` (16). | Track 1 |
+| v1.0, 6.9 example | JSON example for `CLIMATE_STATE` (6.9), agreed in the T1-14 review. The message itself doesn't change, so it keeps `"v": 1` (16). | Track 1 |
 
 ### v1.0 section review
 
