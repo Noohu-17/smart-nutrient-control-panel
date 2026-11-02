@@ -40,7 +40,7 @@ export function ZonePage() {
                 <ReadingCard key={spec.key} spec={spec} value={null} />
               ))}
             </div>
-            <ZoneActions />
+            <ZoneActions full />
           </section>
 
           <section className="zone-card" aria-labelledby="benches-title">
