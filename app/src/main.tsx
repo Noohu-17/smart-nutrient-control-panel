@@ -7,6 +7,7 @@ import { routes } from "./app/routes";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/layout.css";
+import "./styles/components.css";
 import "./styles/cards.css";
 
 const router = createBrowserRouter(routes);

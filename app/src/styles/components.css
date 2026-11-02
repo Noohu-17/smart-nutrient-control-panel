@@ -1,0 +1,159 @@
+/* Shared components: StatusChip, ReadingCard, LockedButton, EmptyState. Tokens only. */
+
+/* ---------- StatusChip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) 10px;
+  border-radius: var(--radius-pill);
+  background: var(--status-neutral-bg);
+  color: var(--status-neutral-fg);
+  font-size: var(--text-caption-size);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+.chip-ok {
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+}
+.chip-warn {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+}
+.chip-crit {
+  background: var(--status-critical-bg);
+  color: var(--status-critical-fg);
+}
+.chip-off {
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+  border: 1px solid var(--disabled-border);
+}
+
+/* ---------- ReadingCard: green in target, amber outside, grey when stale or missing */
+.readings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+}
+.reading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid transparent;
+  border-left-width: 4px;
+  border-radius: var(--radius-tile);
+  background: var(--color-surface-subtle);
+}
+.reading-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  color: var(--text-secondary);
+}
+.reading-value {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+.reading-value b {
+  font-size: var(--text-metric-size);
+  line-height: var(--text-metric-line);
+  font-weight: var(--weight-extrabold);
+}
+.reading-value small {
+  font-size: var(--text-caption-size);
+  color: var(--text-muted);
+}
+.reading-status {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  font-weight: var(--weight-semibold);
+}
+.reading-ok {
+  border-left-color: var(--dot-ok);
+}
+.reading-ok .reading-status {
+  color: var(--status-success-fg);
+}
+.reading-warn {
+  border-left-color: var(--dot-warn);
+  background: var(--status-warning-bg);
+}
+.reading-warn .reading-status {
+  color: var(--status-warning-fg);
+}
+.reading-off {
+  border-left-color: var(--disabled-border);
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+}
+.reading-off .reading-status {
+  color: var(--disabled-fg);
+}
+
+/* ---------- LockedButton: disabled, lock icon, one-line reason underneath */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.lbtn {
+  display: inline-flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-weight: var(--weight-semibold);
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+}
+.btn:disabled {
+  border-color: var(--disabled-border);
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+}
+.lbtn-reason {
+  max-width: 28ch;
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  color: var(--text-muted);
+}
+
+/* ---------- EmptyState */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-5);
+  border: 1px dashed var(--dashed-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  text-align: center;
+}
+.empty-state h2 {
+  margin: 0;
+  font-size: var(--text-card-size);
+  line-height: var(--text-card-line);
+  font-weight: var(--weight-bold);
+}
+.empty-state p {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--text-secondary);
+}

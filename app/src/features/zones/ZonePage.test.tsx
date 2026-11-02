@@ -23,7 +23,7 @@ describe("Zone page", () => {
     renderAt("/zone/Z1");
     const readings = within((await screen.findByRole("heading", { name: "Readings" })).closest("section")!);
     for (const label of ["EC", "pH", "Solution temp", "Reservoir level"]) {
-      expect(readings.getByText(label).closest(".tile")).toHaveTextContent("--");
+      expect(readings.getByRole("group", { name: label })).toHaveTextContent("--");
     }
   });
 
