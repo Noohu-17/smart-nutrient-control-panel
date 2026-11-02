@@ -1,7 +1,7 @@
 // src/mocks/handlers.test.ts · T2-4 · the fake API answers like the contract says
 import { describe, expect, it } from "vitest";
-import configFeatures from "../../../config/clients/client_A/features.json";
-import configLayout from "../../../config/clients/client_A/layout.json";
+import configFeatures from "../../config/clients/client_A/features.json";
+import configLayout from "../../config/clients/client_A/layout.json";
 import type { Farm, ZoneTelemetry } from "../api/types";
 import mockFeatures from "./data/features.json";
 import mockLayout from "./data/layout.json";

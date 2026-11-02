@@ -1,0 +1,46 @@
+{
+  "v": 1,
+  "site": "siet-ph1",
+  "name": "SIET Polyhouse 1",
+  "timezone": "Asia/Kolkata",
+  "zones": [
+    {
+      "id": "Z1", "name": "Zone A", "controller": "ZC1",
+      "reservoir": { "id": "R1", "usableL": 1200 },
+      "dosingCabinet": "D1",
+      "doseLines": ["A", "B", "ACID"],
+      "sensors": { "dissolvedOxygen": false },
+      "dayTanks": { "A": { "usableL": 50 }, "B": { "usableL": 50 }, "ACID": { "usableL": 50 } },
+      "benches": [
+        { "id": "Z1-B1", "channels": 6, "lengthM": 8.5 },
+        { "id": "Z1-B2", "channels": 6, "lengthM": 8.5 },
+        { "id": "Z1-B3", "channels": 6, "lengthM": 8.5 },
+        { "id": "Z1-B4", "channels": 6, "lengthM": 8.5 }
+      ]
+    },
+    {
+      "id": "Z2", "name": "Zone B", "controller": "ZC2",
+      "reservoir": { "id": "R2", "usableL": 1200 },
+      "dosingCabinet": "D2",
+      "doseLines": ["A", "B", "ACID"],
+      "sensors": { "dissolvedOxygen": false },
+      "dayTanks": { "A": { "usableL": 50 }, "B": { "usableL": 50 }, "ACID": { "usableL": 50 } },
+      "benches": [
+        { "id": "Z2-B1", "channels": 6, "lengthM": 8.5 },
+        { "id": "Z2-B2", "channels": 6, "lengthM": 8.5 },
+        { "id": "Z2-B3", "channels": 6, "lengthM": 8.5 },
+        { "id": "Z2-B4", "channels": 6, "lengthM": 8.5 }
+      ]
+    }
+  ],
+  "nursery": { "tables": 6 },
+  "climate": { "controller": "CC1", "fans": ["FAN1", "FAN2", "FAN3", "FAN4"], "padPumps": ["PAD1"], "chillers": { "Z1": "CH1", "Z2": "CH2" }, "shade": ["SHADE1"], "haf": ["HAF1"], "foggers": [], "airSensors": ["PAD_END", "MIDDLE", "FAN_END"] },
+  "power": { "monitor": "PM1", "generator": true, "ups": true },
+  "devices": [
+    { "id": "GW1", "kind": "GATEWAY" },
+    { "id": "ZC1", "kind": "ZONE_CONTROLLER", "zone": "Z1" },
+    { "id": "ZC2", "kind": "ZONE_CONTROLLER", "zone": "Z2" },
+    { "id": "CC1", "kind": "CLIMATE_CONTROLLER" },
+    { "id": "PM1", "kind": "POWER_MONITOR" }
+  ]
+}
