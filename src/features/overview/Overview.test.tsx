@@ -30,7 +30,7 @@ describe("Overview", () => {
       ["Solution temp", 23.4, 1],
       ["Reservoir level", 78, 0],
     ] as const) {
-      const shown = zoneA.getByText(label).closest(".tile")!.querySelector("b")!.textContent!;
+      const shown = zoneA.getByRole("group", { name: label }).querySelector("b")!.textContent!;
       expect(shown.split(".")[1]?.length ?? 0).toBe(decimals);
       expect(Number(shown)).toBeCloseTo(seed, 0);
     }
@@ -51,7 +51,7 @@ describe("Overview", () => {
     renderAt("/");
     const zoneB = await card("Zone B");
     await zoneB.findByText("Live", undefined, WAIT);
-    const ec = zoneB.getByText("EC").closest(".tile")!;
+    const ec = zoneB.getByRole("group", { name: "EC" });
     expect(ec).toHaveTextContent("--");
     expect(ec).toHaveTextContent("Sensor fault");
   });
@@ -68,7 +68,7 @@ describe("Overview", () => {
     renderAt("/");
     const zoneA = await card("Zone A");
     expect(await zoneA.findByText("Offline", undefined, WAIT)).toBeInTheDocument();
-    expect(zoneA.getByText("EC").closest(".tile")).toHaveTextContent("--");
+    expect(zoneA.getByRole("group", { name: "EC" })).toHaveTextContent("--");
     expect(zoneA.getByRole("heading", { name: "Zone A" }).closest("section")).toHaveClass("offline");
   });
 });

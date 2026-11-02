@@ -1,8 +1,10 @@
 import { Link } from "react-router-dom";
 import { useZone } from "../../api/hooks";
 import type { FarmZone } from "../../api/types";
-import { ReadingTile } from "../../components/ReadingTile";
-import { EMPTY_VALUE, formatReading, QUALITY_TEXT, ZONE_READINGS, zonePath } from "../../config/readings";
+import { ReadingCard } from "../../components/ReadingCard";
+import { StatusChip } from "../../components/StatusChip";
+import { ZONE_READINGS, zonePath } from "../../config/readings";
+import { ZoneActions } from "../zones/ZoneActions";
 
 /** Overview card for one zone: its latest readings, or an Offline look when there are none. */
 export function ZoneCard({ zone }: { zone: FarmZone }) {
@@ -17,42 +19,25 @@ export function ZoneCard({ zone }: { zone: FarmZone }) {
           <Link to={zonePath(zone.id)}>{zone.name}</Link>
         </h2>
         {offline ? (
-          <span className="chip chip-offline">Offline</span>
+          <StatusChip tone="off">Offline</StatusChip>
         ) : t ? (
-          <span className="chip chip-live">Live</span>
+          <StatusChip tone="ok">Live</StatusChip>
         ) : (
-          <span className="chip">Loading</span>
+          <StatusChip>Loading</StatusChip>
         )}
       </header>
-      <div className="tiles">
-        {ZONE_READINGS.map((spec) => {
-          if (!t) {
-            return (
-              <ReadingTile
-                key={spec.key}
-                label={spec.label}
-                value={EMPTY_VALUE}
-                unit={spec.unit}
-                note={offline ? "No data" : undefined}
-              />
-            );
-          }
-          const value = t.readings[spec.key];
-          const quality = t.quality[spec.key];
-          const reason =
-            quality && quality !== "OK" ? QUALITY_TEXT[quality] : value === null ? "No data" : undefined;
-          return (
-            <ReadingTile
-              key={spec.key}
-              label={spec.label}
-              value={formatReading(value, spec)}
-              unit={spec.unit}
-              note={reason}
-              warn={reason !== undefined}
-            />
-          );
-        })}
+      <div className="readings">
+        {ZONE_READINGS.map((spec) => (
+          <ReadingCard
+            key={spec.key}
+            spec={spec}
+            value={t?.readings[spec.key]}
+            quality={t?.quality[spec.key]}
+            stale={offline}
+          />
+        ))}
       </div>
+      <ZoneActions />
     </section>
   );
 }
