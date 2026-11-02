@@ -1,10 +1,12 @@
 # Smart Nutrient Advisor — Phase A Interface Contract
 
-**Version:** v0.8 (draft for review, Phase A edition) · **Lives at:** `docs/contract.md`
+**Version:** v1.0 (Phase A edition) · **Lives at:** `docs/contract.md`
 **Owners:** Track 1 (back end and cloud, editor) · Track 3 (simulator farm behaviour and controller rules) · Track 4 (simulator core and playground control) · Track 2 (app, sections 11–13)
-**Status:** v0.8 full contract — lock review draft. Items marked **[OPEN]** still need a team decision; see section 15.
+**Status:** v1.0 for approval (milestone M0): approved when this version is merged with the approvals in section 16. Items still marked **[OPEN]** wait on agronomy or the vendor and block no build work; see section 15.
 
 > **Locked: items A to F** — A: conventions (§1); B: names and IDs (§2.1–2.3); C: layout/configuration pack (§2.4–2.5); D: transport, topics and envelope (§3–5); E: device status and telemetry (§6.1–6.4); F: organization/site scoping and configuration-driven counts (OPEN-11 and OPEN-12 principles).
+>
+> **Settled in v1.0:** §6.6, §7–§10, §11.2, §11.4, §12 and §14; OPEN-9, OPEN-10, OPEN-15 and OPEN-16. Section 17 lists every section as changed or no change.
 >
 This document is the single agreement between every part of the Phase A system: the farm simulator, the back end and the app. If code and this document disagree, the code is wrong. If this document is wrong, fix it by pull request (section 16).
 
@@ -71,18 +73,19 @@ Anything else found along the way is added by pull request (section 16).
 | Missing or failed sensor | Send `null` for the value and set its quality (section 6.1). Never send a fake 0. |
 | Unknown fields | Receivers **ignore** fields they don't know, so additive changes don't break anyone. |
 | Version | Every message carries `"v": 1`. A breaking change bumps it (section 16). |
-| Numbers | Plain JSON numbers, no strings. Volumes are whole millilitres. |
+| Numbers | Plain JSON numbers, no strings. Dosed volumes are whole millilitres; tank volumes are litres, at the precision in the units table. |
 
 ### Units
 
 | Quantity | Unit | Precision | Example field |
-|---|---|---|
+|---|---|---|---|
 | Electrical conductivity | mS/cm | 0.01 | `ec` |
 | pH | pH | 0.01 | `ph` |
 | Temperature | °C | 0.1 | `solTempC`, `airTempC` |
 | Relative humidity | % | 1 | `airRh` |
 | Level | % of usable volume | 1 | `reservoirPct` |
-| Volume in a tank | L | 1 | `reservoirL` |
+| Reservoir volume | L | 1 | `reservoirL` |
+| Day-tank volume | L | 0.1 | `dayTankL` |
 | Dosed volume | mL | 1 | `ml` |
 | Flow | L/min | 0.1 | `flowLpm` |
 | Voltage | V | 1 | `l1V` |
@@ -124,7 +127,7 @@ The layout is **read from configuration**, never hard-coded. Everything must wor
 ### 2.3 Equipment IDs
 
 | Equipment ID | What | Owned by | Cloud may switch it? |
-|---|---|---|
+|---|---|---|---|
 | `{zone}-DOSE-A`, `{zone}-DOSE-B`, `{zone}-DOSE-ACID` | Dosing lines (pump + flow meter) | ZC | Only through a `DOSE` command |
 | `{zone}-DT-A`, `{zone}-DT-B`, `{zone}-DT-ACID` | Day-tanks (concentrate) | ZC | — (level only) |
 | `{zone}-CIRC` | Circulation pump | ZC | **Never.** No command may stop it. |
@@ -174,7 +177,7 @@ The back end, app and simulator all load the same file: `config/clients/<client>
 }
 ```
 
-Day-tanks are 50 L each, 6 in total (handoff). Each has a level sensor. `name` is what the app shows, so the zones can be labelled “Zone A” and “Zone B” while the IDs stay `Z1` and `Z2`.
+Day-tanks are 50 L each, 6 in total (handoff). Each has a level sensor. `name` is what the app shows, so the zones can be labelled “Zone A” and “Zone B” while the IDs stay `Z1` and `Z2`. `layout.json` also has a `devices` list (`id`, `kind` and, for a zone controller, `zone`) naming the devices from 2.2 that the site runs.
 
 ### 2.5 Client configuration pack
 
@@ -189,13 +192,13 @@ config/clients/client_A/          ← first demo pack (SIET Polyhouse 1 values)
 ├── climate.json       fan stages, chiller setpoint range (e.g. 18–28 °C), manual-mode durations
 ├── features.json      feature switches (below)
 ├── users.json         demo users and roles (no real passwords in git)
-├── simulator.json     drift rates, plant uptake, equipment effects, speed options
+├── simulator.json     drift rates, plant uptake, equipment effects, speed options, minimum real time between readings (11.4)
 ├── hardware.json      simulated component behaviour: sensor accuracy and response, pump rates, valve and fan delays (placeholders until parts are bought)
 ├── io_map.json        logical names (PUMP_A, FLOAT_HIGH …) to controller I/O channels (placeholders until the panel I/O list exists)
 └── scenarios.json     “Set up your farm” presets and allowed ranges: layout options, regions, seasons,
                        weather patterns, crops and growth stages, starting water state, power and
                        internet reliability; the failure-drill catalogue (11.4.3); the values a user may
-                       set and hold, with their ranges (11.4.2); and the “Things to try” list
+                       set and hold, with their ranges (11.4.2); the sandbox limits (11.4.1); and the “Things to try” list
 ```
 
 `features.json` for Phase A:
@@ -237,8 +240,8 @@ Root: `farm/{site}/…`. For Phase 2, `{site}` is `siet-ph1`.
 | `farm/{site}/climate/state` | CC1 → cloud | 1 | **Yes** | 6.9 Climate state (on every change) |
 | `farm/{site}/zone/{zone}/event` | ZC → cloud | 1 | No | 6.5 Event |
 | `farm/{site}/climate/event` | CC1 → cloud | 1 | No | 6.5 Event |
-| `farm/{site}/zone/{zone}/cmd` | cloud → ZC | 1 | **Never** | 7.2–7.3 Dose, refill |
-| `farm/{site}/climate/cmd` | cloud → CC1 | 1 | **Never** | 7.5–7.6 Climate mode, equipment |
+| `farm/{site}/zone/{zone}/cmd` | cloud → ZC | 1 | **Never** | 7.2–7.3 Dose, refill · 7.8 Resume, 7.9 Clear fault (zone target) |
+| `farm/{site}/climate/cmd` | cloud → CC1 | 1 | **Never** | 7.5–7.6 Climate mode, equipment · 7.8 Resume, 7.9 Clear fault (climate target) |
 | `farm/{site}/stop` | cloud → ZC*, CC1 | 1 | **Never** | 7.4 Stop |
 | `farm/{site}/zone/{zone}/cmd/state` | ZC → cloud | 1 | No | 6.6 Command state |
 | `farm/{site}/climate/cmd/state` | CC1 → cloud | 1 | No | 6.6 Command state |
@@ -295,7 +298,7 @@ Cloud → farm messages use the same envelope with `"device": "CLOUD"`.
 
 ### 6.1 Zone telemetry, `ZONE_TELEMETRY`
 
-Sent every 60 s, and **immediately** when any value crosses an alarm threshold.
+Sent every 60 s, and **immediately** when any value crosses an alarm threshold. On playground sites a fast clock widens the interval (11.4).
 
 ```json
 {
@@ -329,7 +332,7 @@ Sent every 60 s, and **immediately** when any value crosses an alarm threshold.
 
 ### 6.2 Climate telemetry, `CLIMATE_TELEMETRY`
 
-Every 60 s, immediately on alarm.
+Every 60 s, immediately on alarm. On playground sites a fast clock widens the interval (11.4).
 
 ```json
 {
@@ -345,6 +348,8 @@ Every 60 s, immediately on alarm.
 ```
 
 `mode` is `AUTOMATIC` or `MANUAL`. In `MANUAL`, `manualUntil` is the time it reverts to `AUTOMATIC` by itself. `airTempC` is the average of the three positions. VPD is calculated by the cloud from air temperature and RH, not sent by the farm. Solution temperature per zone comes from that zone's telemetry (6.1).
+
+**Alarm limits.** “On alarm” means `airTempC` crossing `setpoints.airTempMaxC`, or `airRh` crossing `setpoints.airRhMax`, in either direction. Both limits come from `setpoints` in `climate.json`, which this message also reports. One reading goes out for the crossing, not one for as long as the value stays beyond the limit. `setpoints.solTempMaxC` is not a CC1 alarm: solution temperature is a zone reading, and its limit is the zone’s `alarms.solTempMaxC` (`alerts.json`, sent in 7.7).
 
 ### 6.3 Power state, `POWER_STATE`
 
@@ -447,13 +452,29 @@ The controller reports each step of a command it received (section 8).
 | Field | Values |
 |---|---|
 | `state` | `ACCEPTED` · `EXECUTING` · `COMPLETED` · `PARTIAL` · `FAILED` · `STOPPED` · `REJECTED` |
-| `reason` | A reason code (section 8.4) when the state is `PARTIAL`, `FAILED`, `STOPPED` or `REJECTED`. |
+| `reason` | A reason code (section 8.4) when the state is `PARTIAL`, `FAILED`, `STOPPED` or `REJECTED`; otherwise `null`. |
+| `lines` | `DOSE` only: one entry per requested line. |
 | `lines[].state` | `PENDING` · `RUNNING` · `DONE` · `SHORT` (delivered below tolerance) · `SKIPPED` |
-| `after` | Measured after mixing. May arrive in a later `CMD_STATE` with the same final state. |
+| `before` | EC and pH when the first line starts. `null` until then, and on `REJECTED`. |
+| `after` | Measured after mixing, `null` until then (see “Mix wait”). |
+| `startedAt`, `endedAt` | When the first output switched on and when the operation ended; `null` until they happen. |
+| `detail` | Refill and climate commands only: what happened (for example `{ "fromPct": 41, "toPct": 90 }`). |
 
-`EXECUTING` messages are sent when each line starts and ends, and at least every 5 s while a line runs (progress).
+**Which state, which reason:**
 
-For refill and climate commands, `lines` is omitted, and `detail` carries what happened (for example `{ "fromPct": 41, "toPct": 90 }`).
+| `state` | `reason` | Meaning |
+|---|---|---|
+| `COMPLETED` | `null` | Everything delivered within tolerance. |
+| `REJECTED` | Any refusal code in 8.4 | Sent on its own, with no `ACCEPTED` before it. Nothing ran. |
+| `STOPPED` | `STOP_REQUESTED`, `ESTOP_DURING`, `MODE_CHANGED_DURING`, `FAULT_DURING` | Ended early on purpose or for safety; amounts so far are reported. |
+| `PARTIAL` | `FLOW_SHORT`, `NO_FLOW`, `TIMEOUT`, `REBOOT_MID_DOSE` | Some was delivered. |
+| `FAILED` | `NO_FLOW`, `TIMEOUT`, `REBOOT_MID_DOSE` | Nothing was delivered. |
+
+**Order of messages.** `ACCEPTED`, then `EXECUTING` when each line starts and ends and at least every 5 s while a line runs (progress), then the final state. Commands with no run phase (`STOP`, `RESUME`, `CLEAR_FAULT`, `CLIMATE_MODE`, `CLIMATE_EQUIPMENT`, and `REFILL` `PAUSE`, `RESUME` or `STOP`) go straight from `ACCEPTED` to `COMPLETED`, or are `REJECTED`. A command with no readable `cmdId` can’t be answered: the controller drops and logs it.
+
+**Mix wait.** The final state goes out when the last line ends, with `after: null`. After `mixWaitS` the controller sends one more `CMD_STATE` with the same state and `after` filled in; the example above is that last message. If a STOP, E-STOP or reboot cuts the wait short, `after` stays `null` and the final state does not change. A new dose or refill during the wait is refused with `BUSY` (8.3).
+
+**Several controllers.** Each controller reports for itself and `device` says which. A `STOP` is answered only by the controllers it applies to (8.3).
 
 ### 6.7 Gateway journal, `GATEWAY_JOURNAL`
 
@@ -494,7 +515,7 @@ Sent **on every change** (and with each telemetry message), so the app sees a pu
 | Field | Values |
 |---|---|
 | `stopped` | `true` after a STOP, E-STOP, power cut or reboot, until a person sends `RESUME` (7.8). Nothing restarts by itself. |
-| `operation` | The running dose or refill, or `null`. |
+| `operation` | The running dose or refill, or `null`. A dose stays here through its mix wait (6.6), showing its final state. |
 | `latches` | Faults the controller has locked out until a person clears them, for example `CABINET_POWER_CUT` (stuck relay), `LOW_LOW`, `LEAK`. |
 | `configVersion` | The limits version the controller is using (7.7), so the app can show “Approved · waiting for controller” until it matches. |
 
@@ -537,7 +558,7 @@ Same idea for CC1: `mode`, `manualUntil`, `stopped`, `equipment` (as in 6.2) and
 ```
 
 - Lines run one at a time, in `order`.
-- `limits` is a snapshot of the cloud's limits. The controller uses the **stricter** of these and its own config (7.7).
+- `limits` is a snapshot of the cloud's limits. The controller uses the **stricter** of these and its own config (7.7). `ecCeiling`, `phMin` and `phMax` limit the cloud's projected result, which a controller can't calculate, so `EC_CEILING` and `PH_BOUNDS` are cloud-only codes (8.4).
 - `mixWaitS` is how long to circulate before measuring `after`.
 - A line is `SHORT` if it delivers less than `(100 − tolerancePct)%` of the request. The app shows “Mismatch” when delivered differs from requested by more than 5 %.
 
@@ -564,6 +585,8 @@ Published to `farm/{site}/stop`; every controller acts on the parts it owns.
 | `ALL_EQUIPMENT` | Dosing, refill, fans, pad pump, chillers | **Circulation** (never stopped remotely) |
 
 A running dose ends in `STOPPED` with the amounts delivered so far. **Stopping is always allowed** (PRD rule 1): every role, Viewer included, may send any STOP, and no STOP waits for a check or a confirmation dialog. After `ALL_EQUIPMENT`, the app shows a warning that the house will heat up. What was stopped **stays stopped** (`stopped: true` in 6.8 and 6.9) until a person sends `RESUME` (7.8).
+
+**Expiry (OPEN-10).** `ALL_OPERATIONS` and `ZONE` expire 5 minutes after `issuedAt`: a late stop of dosing or refill is still wanted, and the worst it can do is end an operation a person can start again. `ALL_EQUIPMENT` keeps the normal 60 s: fans and chillers switching off long after the request could overheat the house. “Always allowed” is about sending a stop; a controller still refuses one that has expired, with `EXPIRED_ON_ARRIVAL`. Pressing Stop again sends a new command. A controller that is already stopped answers `COMPLETED`.
 
 ### 7.5 `CLIMATE_MODE`
 
@@ -611,7 +634,7 @@ The controller keeps the config, reports `configVersion` in its status, and **ke
 { "…envelope": "…", "kind": "RESUME", "target": { "zone": "Z1" } }
 ```
 
-Ends a stop for one zone (`target.zone`) or for climate (`target: { "scope": "CLIMATE" }`) after a person has reviewed what happened (PRD rule 5: nothing resumes by itself). Interrupted doses and refills are **not** restarted; the person starts a new one if needed. Refused with `ESTOP` while the E-STOP is still pressed, and with `FAULT_LATCHED` while a latch is active.
+Published to `farm/{site}/zone/{zone}/cmd`, or to `farm/{site}/climate/cmd` for climate. Ends a stop for one zone (`target.zone`) or for climate (`target: { "scope": "CLIMATE" }`) after a person has reviewed what happened (PRD rule 5: nothing resumes by itself). Interrupted doses and refills are **not** restarted; the person starts a new one if needed. Refused with `ESTOP` while the E-STOP is still pressed, and with `FAULT_LATCHED` while a latch is active.
 
 ### 7.9 `CLEAR_FAULT`
 
@@ -619,7 +642,7 @@ Ends a stop for one zone (`target.zone`) or for climate (`target: { "scope": "CL
 { "…envelope": "…", "kind": "CLEAR_FAULT", "target": { "zone": "Z1" }, "fault": "CABINET_POWER_CUT" }
 ```
 
-Clears a latch (6.8) after the part has been repaired, for example the cabinet power cut after a stuck relay. Owner only. The zone then still needs `RESUME`.
+Published to the same topics as `RESUME` (7.8), with the same targets: `target.zone`, or `target: { "scope": "CLIMATE" }` for a climate latch (6.9). Clears a latch (6.8) after the part has been repaired, for example the cabinet power cut after a stuck relay. Owner only. The zone or climate then still needs `RESUME`.
 
 ---
 
@@ -636,41 +659,57 @@ Clears a latch (6.8) after the part has been repaired, for example the cabinet p
 | `APPROVED` | cloud | Passed checks. | — |
 | `DISPATCHED` | cloud | Published to MQTT; expiry clock running. | “Sent — waiting for the farm” |
 | `ACCEPTED` | farm | Controller accepted it and journalled it. | “Accepted on site” |
-| `EXECUTING` | farm | Running. | Progress bars per line (done, running, queued), then step 4 “Mix and confirm” |
-| `COMPLETED` | farm | All lines delivered within tolerance. | “Completed”, requested vs delivered, final EC |
+| `EXECUTING` | farm | Running. | Progress bars per line (done, running, queued) |
+| `COMPLETED` | farm | All lines delivered within tolerance. | “Completed”, requested vs delivered; step 4 “Mix and confirm” until `after` arrives, then final EC |
 | `PARTIAL` | farm | Some delivered, some short or skipped. | “Partial”, with the reason and amounts |
 | `FAILED` | farm | Nothing delivered. | “Device error”, with the device and its last response |
-| `STOPPED` | farm | Stopped by a STOP command, E-STOP or mode change; partial amounts recorded. | “Stopped by user”, who stopped it, partial amounts |
+| `STOPPED` | farm | Stopped by a STOP command, E-STOP, mode change or latched fault; partial amounts recorded. | “Stopped”, with who or what stopped it (a person, the E-STOP, the key switch or a fault) and partial amounts |
 | `EXPIRED` | cloud | Not accepted before `expiresAt`. | “Not accepted in time — not sent again” |
 | `UNKNOWN` | cloud | Farm went silent while the command was in flight; resolved by reconciliation. | “Result unknown — farm not responding” |
 
-Final states: `REJECTED`, `COMPLETED`, `PARTIAL`, `FAILED`, `STOPPED`, `EXPIRED`. `UNKNOWN` is not final; it always resolves to one of the farm's final states, or stays `UNKNOWN` and is flagged for a person to check.
+Final states: `REJECTED`, `COMPLETED`, `PARTIAL`, `FAILED`, `STOPPED`, `EXPIRED`. `UNKNOWN` is not final; it resolves to one of the farm's final states or to `EXPIRED` (8.3), or stays `UNKNOWN` and is flagged for a person to check.
 
 ### 8.2 Allowed transitions
 
 ```
-SUBMITTED → VALIDATING
+SUBMITTED → VALIDATING | DISPATCHED (STOP only: no checks)
 VALIDATING → REJECTED | AWAITING_2ND_APPROVAL | APPROVED
 AWAITING_2ND_APPROVAL → APPROVED | REJECTED (declined or timed out)
-APPROVED → DISPATCHED
+APPROVED → DISPATCHED | REJECTED (cancelled)
 DISPATCHED → ACCEPTED | REJECTED (farm) | EXPIRED | UNKNOWN
-ACCEPTED → EXECUTING | STOPPED | FAILED | UNKNOWN
+ACCEPTED → EXECUTING | COMPLETED (no run phase, 6.6) | STOPPED | FAILED | UNKNOWN
 EXECUTING → COMPLETED | PARTIAL | FAILED | STOPPED | UNKNOWN
-UNKNOWN → COMPLETED | PARTIAL | FAILED | STOPPED | REJECTED
+UNKNOWN → COMPLETED | PARTIAL | FAILED | STOPPED | REJECTED | EXPIRED
 ```
 
-Any other transition is a bug. The back end refuses it and logs it.
+Any other transition is a bug. The back end refuses it and logs it. These are not transitions:
+
+- **A report with the same state** (progress, or `after` arriving late) updates the command and is stored.
+- **A non-final report while `UNKNOWN`** (the farm is back and the dose is still running) is stored, and the state stays `UNKNOWN` until a final report arrives, so the zone stays blocked (rule 7 below).
+- **A report for a command already final** (older messages replayed after `GATEWAY_JOURNAL`) is stored and changes nothing. If it shows that a command marked `EXPIRED` actually ran, the back end also flags it for a person to check.
 
 ### 8.3 Rules
 
-1. **One command ID, one action.** The controller remembers the last 50 `cmdId`s. A repeat of a known ID gets its current state again and is **never executed twice**.
-2. **Expiry.** The controller refuses a command whose `expiresAt` has passed, with `EXPIRED_ON_ARRIVAL` (reported as `REJECTED`). The cloud marks it `EXPIRED` if no `ACCEPTED` arrives in time.
+1. **One command ID, one action.** The controller remembers the last 50 `cmdId`s. A repeat of a known ID gets its current state again and is **never executed twice**. This memory survives a reboot.
+2. **Expiry.** The controller refuses a command that arrives at or after `expiresAt`, with `EXPIRED_ON_ARRIVAL` (reported as `REJECTED`). If no `ACCEPTED` has arrived by `expiresAt`, the cloud marks it `EXPIRED` when the controller has been heard from since dispatch, and `UNKNOWN` when it has not, because the command may have reached the farm.
 3. **No automatic resend.** The cloud never re-sends an expired or unknown command. A person starts a new request.
-4. **One operation per zone.** A dose or refill arriving while another runs in that zone is refused with `BUSY`.
+4. **One operation per zone.** A dose or refill `START` arriving while another runs in that zone, or during a dose's mix wait, is refused with `BUSY`. `REFILL` `PAUSE`, `RESUME` and `STOP` act on the running refill and are not `BUSY`.
 5. **Journal first.** The controller writes the command to its journal *before* energising any pump.
 6. **No replay after reboot.** After a restart, any journalled command still `ACCEPTED` or `EXECUTING` is reported as `PARTIAL` or `FAILED` with reason `REBOOT_MID_DOSE` and the measured amounts. It is never resumed.
 7. **Unknown means blocked** (PRD rule 3). If the cloud can’t tell what state a zone is in (controller offline, a command still `DISPATCHED` or `UNKNOWN`, stale readings), every new **start** command in that zone is refused with `STATE_UNKNOWN` until the state is known. Stops are never blocked.
 8. **Stopped stays stopped.** While a zone is `stopped` (6.8), start commands are refused with `ZONE_STOPPED` until a person sends `RESUME`.
+9. **What each command goes through:**
+
+   | Command | Cloud checks | Farm reports |
+   |---|---|---|
+   | `DOSE`, `REFILL` `START` | All (11.3) | `ACCEPTED`, `EXECUTING`, final state; or `REJECTED` |
+   | `REFILL` `PAUSE`, `RESUME`, `STOP` | Role and controller online | `ACCEPTED`, `COMPLETED`; or `REJECTED` |
+   | `CLIMATE_MODE`, `CLIMATE_EQUIPMENT` | Role and controller online | `ACCEPTED`, `COMPLETED`; or `REJECTED` |
+   | `RESUME`, `CLEAR_FAULT` | Role and controller online | `ACCEPTED`, `COMPLETED`; or `REJECTED` |
+   | `STOP` | None: `SUBMITTED` goes straight to `DISPATCHED` | `ACCEPTED`, `COMPLETED`; or `REJECTED` with `EXPIRED_ON_ARRIVAL` |
+
+10. **A STOP that reaches several controllers** has one `cmdId`. `ZONE` is answered by that zone's controller, `ALL_OPERATIONS` by every zone controller, and `ALL_EQUIPMENT` by every zone controller and `CC1`. The cloud's state is `ACCEPTED` at the first `ACCEPTED` and `COMPLETED` when all of them have reported `COMPLETED`. If any of them has not answered by `expiresAt`, it is `UNKNOWN`, and the app names the controllers that have not answered.
+11. **Resolving `UNKNOWN`.** A final state in `GATEWAY_JOURNAL` (6.7) or in a `CMD_STATE` resolves it. A command that went `UNKNOWN` from `DISPATCHED` resolves to `EXPIRED` when its controller is heard from again and neither the journal, a `CMD_STATE` nor the controller's `operation` (6.8) names it: it never arrived, and it is now too late to run.
 
 ### 8.4 Reason codes
 
@@ -689,6 +728,7 @@ Any other transition is a bug. The back end refuses it and logs it.
 | `PH_BOUNDS` | cloud | Projected pH outside bounds. |
 | `SENSOR_STALE` | cloud, farm | EC/pH reading too old or faulty to dose on. |
 | `NEEDS_APPROVAL_DECLINED` | cloud | Owner declined, or approval timed out. |
+| `CANCELLED` | cloud | The requester or the Owner cancelled before dispatch. |
 | `EXPIRED_ON_ARRIVAL` | farm | Arrived after `expiresAt`. |
 | `NO_FLOW` | farm | Pump ran but the flow meter saw nothing. |
 | `FLOW_SHORT` | farm | Delivered below tolerance. |
@@ -696,6 +736,7 @@ Any other transition is a bug. The back end refuses it and logs it.
 | `STOP_REQUESTED` | farm | A STOP command arrived. |
 | `ESTOP_DURING` | farm | E-STOP pressed while running. |
 | `MODE_CHANGED_DURING` | farm | Key switch left REMOTE while running. |
+| `FAULT_DURING` | farm | A fault that latches (for example `LEAK`, `LOW_LOW`, `CABINET_POWER_CUT`) ended the operation. |
 | `REBOOT_MID_DOSE` | farm | Controller restarted while running. |
 | `NOT_MANUAL` | farm | Climate equipment command while climate is AUTOMATIC. |
 | `NOT_INSTALLED` | farm | Equipment not installed (for example foggers). |
@@ -715,14 +756,14 @@ In Phase A the farm simulator plays every controller (`ZC1`, `ZC2`, `CC1`, `PM1`
 
 The simulated controllers are written the way the real controller firmware will be: a fixed-rate loop, explicit state machines, and access to sensors, outputs and non-volatile memory only through a small hardware abstraction layer (HAL). Their behaviour is also captured as language-neutral test vectors (JSON), so the same tests can later check the C++ firmware. Details: simulator guide, section 9.
 
-1. Run its **own safety checks** on every command (E-STOP, REMOTE, BUSY, limits, 24 h totals from its own counters, day-tank and reservoir levels, fresh sensors) and refuse with a reason code (8.4). Never trust that the cloud checked.
-2. Journal before acting; never replay after a reboot (8.3). The journal is kept in memory; a “reboot mid-dose” fault ends the dose as `PARTIAL` with `REBOOT_MID_DOSE`.
-3. Keep the last good config in memory and keep working through a simulated internet drop.
+1. Run its **own safety checks** on every command (E-STOP, REMOTE, BUSY, limits, 24 h totals from its own counters, day-tank and reservoir levels, fresh sensors) and refuse with a reason code (8.4). Never trust that the cloud checked. When several checks fail, report the first in this order: known `cmdId` (8.3 rule 1), `INVALID_COMMAND`, `EXPIRED_ON_ARRIVAL`, `ESTOP`, `FAULT_LATCHED`, `ZONE_STOPPED`, `NOT_REMOTE`, `BUSY`, `SENSOR_STALE`, `LIMIT_DOSE`, `LIMIT_24H`, `DAYTANK_LOW`, `RESERVOIR_LOW`.
+2. Journal before acting; never replay after a reboot (8.3). The journal and the last 50 `cmdId`s are kept in memory and survive a simulated reboot; a “reboot mid-dose” fault ends the dose as `PARTIAL` with `REBOOT_MID_DOSE`, or `FAILED` if nothing was delivered.
+3. Keep the last good config and keep working through a simulated internet drop and a simulated reboot. A malformed `DEVICE_CONFIG` is ignored, and the last good config stays in force.
 4. Never switch circulation from a remote command.
 5. Climate automation belongs on **CC1**; the cloud only sets the mode and manual overrides. In Phase A `climateAutomatic` is off, so CC1 acts only on manual commands and refuses `AUTOMATIC` with `FEATURE_OFF`.
 6. Report every command state change with `CMD_STATE` at QoS 1, and every change of outputs, mode, stop or latches with `ZONE_STATE` / `CLIMATE_STATE` (retained).
 7. `ts` is real time; on playground sites `simTs` carries the simulator’s clock, which may run fast (11.4).
-8. Keep 24-hour totals per line from its own counters.
+8. Keep 24-hour totals per line from its own counters: a rolling 24 hours of **delivered** mL, on the simulated clock on playground sites (11.4). A line requested at 0 mL is `SKIPPED` and its pump never runs.
 9. After a STOP, E-STOP, power cut or reboot, stay stopped until `RESUME`; keep latches until `CLEAR_FAULT` (7.8, 7.9). Nothing restarts by itself.
 10. Every `EVENT` carries `message`, `systemAction` and `nextStep` (6.5).
 
@@ -733,10 +774,13 @@ The simulated controllers are written the way the real controller firmware will 
 `GW1` is played by the simulator. It covers what matters to the cloud, so the back end’s offline handling is finished and tested in Phase A: a **link drop** fault stops the farm’s messages, and on recovery the simulator sends `GATEWAY_JOURNAL` and the held-back messages in order.
 
 1. **Relay without changing anything.** Same topics, same JSON.
-2. **Hold farm → cloud messages** while a simulated link drop is on, oldest first.
+2. **Hold farm → cloud messages** while a simulated link drop is on: every message, unchanged, with its original `msgId`, `ts`, `simTs`, `bootId` and `seq`.
 3. **Never store or delay commands.** Cloud → farm messages are delivered immediately or not at all; the controller's expiry check is the backstop.
-4. **On reconnect:** send `GATEWAY_JOURNAL` first, then replay the held messages in order.
+4. **On reconnect:** send `GATEWAY_JOURNAL` first, then replay the held messages in `(device, bootId, seq)` order (6.7).
 5. Publish its own `DEVICE_STATUS` with `bufferedMessages` and `cloudLink: "UP" | "DOWN"`.
+6. **What the cloud sees during a drop:** silence. No last will is sent, so the cloud works out that devices are offline from the timings in section 14, as it would on a real farm. A real controller crash or disconnect still sends its last will.
+7. **After a drop:** replayed messages keep their original `ts`, so they fill in the history without making a silent device look alive (`lastSeen` is the newest `ts`). The cloud resolves commands by 8.2 and 8.3.
+8. **Limits in Phase A:** held messages are kept in memory and nothing is dropped. A simulator restart loses them; a real gateway's storage limits are a later-phase matter.
 
 ---
 
@@ -762,8 +806,8 @@ Base: `https://{host}/api`. JSON in and out. The full schema is generated by Fas
 |---|---|---|
 | `POST /auth/login` · `POST /auth/totp` · `POST /auth/logout` · `POST /auth/logout-all` | Sign in (with two-factor), sign out | Everyone |
 | `GET /me` | Current user, role, CSRF token | Everyone signed in |
-| `GET /farm` | Layout + equipment (section 2.4) | All |
-| `GET /zones` · `GET /zones/{zoneId}` | Zone summaries and latest state | All |
+| `GET /farm` | Layout + features (below) | All |
+| `GET /zones` · `GET /zones/{zoneId}` | Latest readings and state of every zone, or of one (below) | All |
 | `GET /zones/{zoneId}/readings?metric=ec&range=24h` | Chart data (auto-bucketed) | All |
 | `GET /zones/{zoneId}/operations` | Recent doses and refills | All |
 | `POST /dose-estimates` `{ zone, lines }` | Estimated duration and projected EC while typing (called 300 ms after the last keystroke; no side effects) | Owner, Agronomist, Operator |
@@ -776,7 +820,7 @@ Base: `https://{host}/api`. JSON in and out. The full schema is generated by Fas
 | `PATCH /zones/{zoneId}/auto-refill` | Auto-refill settings | Owner, Agronomist |
 | `POST /stop` `{ "scope": "ALL_OPERATIONS" }` | Stop (7.4); never checked, never asks for confirmation | **All roles, Viewer included** (handoff, PRD rule 1) |
 | `POST /resume` `{ "zone": "Z1" }` or `{ "scope": "CLIMATE" }` | Resume after a stop, once reviewed (7.8) | Owner, Agronomist, Operator |
-| `POST /zones/{zoneId}/clear-fault` `{ "fault": "CABINET_POWER_CUT" }` | Clear a latched fault after repair (7.9) | Owner |
+| `POST /zones/{zoneId}/clear-fault` · `POST /climate/clear-fault` `{ "fault": "CABINET_POWER_CUT" }` | Clear a latched fault after repair (7.9) | Owner |
 | `GET /climate` | Climate state | All |
 | `POST /climate/mode` `{ "mode": "MANUAL", "minutes": 30 }` | Climate mode | Owner, Agronomist, Operator |
 | `POST /climate/equipment/{equipmentId}` `{ "action": "SET_STAGE", "value": 3 }` | Manual equipment control (7.6) | Owner, Agronomist, Operator |
@@ -790,6 +834,49 @@ Base: `https://{host}/api`. JSON in and out. The full schema is generated by Fas
 | `GET /power` | Power state | All |
 | `GET /users` · `POST /users` · `PATCH /users/{id}` · `POST /users/{id}/invite` | Users and roles | Owner |
 | `GET /health` | Uptime check | Public (no data) |
+
+**`GET /farm`** returns the site's `layout.json` (2.4) with one more field, `features`, the contents of its `features.json` (2.5). It is everything the app needs to draw zones, equipment and disabled features, so screens fix nothing in code. `_meta` blocks are never sent. On a playground sandbox it is the layout that user set up (11.4.1).
+
+**`GET /zones/{zoneId}`** always answers `200` for a zone in the layout, including when its controller is offline; `404` means no such zone. An offline zone returns its last values with `"online": false`, never an error, so the app can show them marked as old. `GET /zones` returns the same object for every zone, as `{ "items": […] }`.
+
+```json
+{
+  "zone": "Z2",
+  "online": false,
+  "lastSeen": "2026-11-09T05:02:11.000Z",
+  "ts": "2026-11-09T05:01:30.000Z",
+  "readings": {
+    "ec": 1.58, "ph": 6.10, "solTempC": 23.9,
+    "reservoirPct": 64, "reservoirL": 768,
+    "circFlowLpm": 30.5,
+    "doMgL": null,
+    "dayTankPct": { "A": 18, "B": 55, "ACID": 72 },
+    "dayTankL": { "A": 9.0, "B": 27.5, "ACID": 36.0 }
+  },
+  "quality": { "ec": "STALE", "ph": "STALE", "solTempC": "STALE", "reservoirPct": "STALE", "circFlowLpm": "STALE" },
+  "equipment": { "Z2-CIRC": "ON", "Z2-REFILL": "CLOSED", "Z2-DOSE-A": "OFF", "Z2-DOSE-B": "OFF", "Z2-DOSE-ACID": "OFF" },
+  "mode": "REMOTE",
+  "estop": false,
+  "leak": false,
+  "stopped": false,
+  "activeCmdId": null,
+  "operation": null,
+  "latches": [],
+  "configVersion": 7
+}
+```
+
+| Field | Rule |
+|---|---|
+| `online` | `false` once the zone's controller is **offline** (section 14: 3 minutes without any message, or its last will). Same meaning as `online` in the `device_state` WebSocket message (section 12). |
+| `lastSeen` | The newest `ts` of any message from the controller. `null` if it has never been heard from. |
+| `ts`, `simTs` | When the latest reading was taken. `simTs` on playground sites only. |
+| `readings` | The latest values from 6.1, as sent, in the units of section 1. |
+| `quality` | As sent, except that a value older than the fresh limit (section 14), or from a controller that is offline, is `STALE` instead of `OK`. `FAULT` and `OUT_OF_RANGE` stay as they are. |
+| `equipment`, `mode`, `estop`, `stopped`, `operation`, `latches`, `configVersion` | The latest `ZONE_STATE` (6.8), with its `outputs` under the name `equipment`. |
+| `leak`, `activeCmdId` | The latest `ZONE_TELEMETRY` (6.1). |
+
+A zone that has never reported also answers `200`: `online` is `false`; `lastSeen`, `ts`, every reading, `mode`, `estop`, `leak`, `stopped`, `activeCmdId`, `operation` and `configVersion` are `null`; `quality` and `equipment` are `{}`; `latches` is `[]`. The state is unknown, so start commands are refused (8.3 rule 7).
 
 ### 11.3 Dose request: example
 
@@ -844,7 +931,7 @@ Available only on sites whose config has `"features": { "playground": true }`. T
 | `POST /sim/reset` | Back to the start of the current scenario: all faults off, levels and readings reset | Owner |
 | `GET /sim/scenario-options` | The presets and allowed ranges from `scenarios.json` for the “Set up your farm” screen, and the **“Things to try”** list (label, one-line hint, and the fault or screen it relates to) shown in the Simulator screen | All |
 | `POST /sim/scenario` (body below) | Start a run from these starting conditions: resets the simulated farm, sets the clock and weather, plants the chosen crops | Owner, Agronomist, Operator |
-| `GET /sim/scenarios` · `POST /sim/scenarios` · `DELETE /sim/scenarios/{id}` | List, save and delete named farm setups (layout, environment and starting conditions) so a user can load them again | Read: all · save/delete their own: Owner, Agronomist, Operator (provisional, **[OPEN-15]**) |
+| `GET /sim/scenarios` · `POST /sim/scenarios` · `DELETE /sim/scenarios/{id}` | List, save and delete named farm setups (layout, environment and starting conditions) so a user can load them again | Read: all · save/delete their own: Owner, Agronomist, Operator |
 
 **Scenario (starting conditions).** Every value must be one of the options or inside the range given by `scenarios.json`; anything else is refused with `422`. Nothing here is fixed in code.
 
@@ -865,7 +952,7 @@ Available only on sites whose config has `"features": { "playground": true }`. T
   "rawWater": "HARD",
   "power": "OCCASIONAL_CUTS",
   "internet": "FLAKY",
-  "equipment": { "chillers": true, "shade": true, "fans": 4 }
+  "layout": { "zones": [ "…" ], "nursery": { "tables": 6 }, "climate": { "fans": ["FAN1", "FAN2", "FAN3", "FAN4"], "padPumps": ["PAD1"], "chillers": { "Z1": "CH1", "Z2": "CH2" }, "shade": ["SHADE1"], "haf": ["HAF1"], "foggers": [], "airSensors": ["PAD_END", "MIDDLE", "FAN_END"] }, "power": { "generator": true, "ups": true } }
 }
 ```
 
@@ -879,17 +966,32 @@ Available only on sites whose config has `"features": { "playground": true }`. T
 | `zones.*.ec`, `ph`, `solTemp`, `reservoir`; `dayTanks` | `LOW`, `NORMAL`, `HIGH` (temperature `COOL`/`NORMAL`/`WARM`); levels `LOW`, `HALF`, `FULL` | Whether the user must act straight away; how soon refills and low-stock alerts come |
 | `rawWater` | `SOFT`, `HARD`, `HIGH_BICARBONATE` | How fast pH climbs and how often acid is needed |
 | `power`, `internet` | `STABLE`, `OCCASIONAL_CUTS`, `FREQUENT_CUTS`; `STABLE`, `FLAKY`, `LONG_OUTAGE` | Power cuts, generator and UPS events; internet drops and “Result unknown” during the run |
-| `equipment` | Within what the layout config allows | Shows what each piece of equipment is worth |
+| `layout` | Within `layoutOptions` in `scenarios.json` (11.4.1) | The farm itself: zones, tanks, benches, equipment and sensors. Shows what each piece of equipment is worth |
 
 **Time on playground sites.** The simulator’s clock can run up to 288× faster. Every message’s `ts` stays **real time**, so staleness, command expiry, offline detection and alert timers work exactly as on a real farm. The simulated time travels in `simTs`: on playground sites, charts and history plot `simTs`, so they show the simulated day. The app shows the simulated date and time next to the “Simulated farm” banner.
+
+**Reading rate at high speed.** Periodic readings (`ZONE_TELEMETRY`, `CLIMATE_TELEMETRY`) are at most one per `minRealReadingIntervalS` real seconds (`simulator.json`, 5 s for client_A), so a fast clock can't flood the broker:
+
+```
+interval in simulated seconds = max(60, speed × minRealReadingIntervalS)
+```
+
+| Speed | Interval (simulated) | Interval (real) |
+|---|---|---|
+| ×1 | 60 s | 60 s |
+| ×60 | 300 s | 5 s |
+| ×288 | 1440 s | 5 s |
+| 0 (pause) | None | None |
+
+The farm itself still moves on every tick, and charts simply have fewer points per simulated hour at high speed. Not affected: readings sent at once when a limit is crossed, `ZONE_STATE` and `CLIMATE_STATE` on every change, heartbeats (30 real seconds) and `POWER_STATE` (60 real seconds). While paused, heartbeats keep the devices online, but after 120 s the readings are too old to dose on, so doses are blocked (8.3 rule 7) until the clock runs again.
+
+**24-hour totals follow simulated time.** They limit what the water and plants receive, so they belong to the simulated day: at ×288 a simulated day takes five minutes and dosing limits must reset with it, or the farm could never be dosed properly. Both the controller's counters and the cloud's `LIMIT_24H` check use a rolling 24 hours of `simTs` on playground sites (`ts` on real farms), counting delivered mL. The same goes for `mixWaitS`, `maxDurationS` and `runTimeTodayMin`, which also measure the farm. Everything that measures the system stays on real time, as above. `POST /sim/reset` and `POST /sim/scenario` clear the totals.
 
 Starting conditions are **illustrative, not an agronomic forecast**: the app says so on the setup screen. Plant growth may show visually on the Farm view, but no yield numbers are produced. Events during a run use `POST /sim/faults` and `POST /sim/holds`.
 
 A fault only changes what the simulated farm does or reports. Everything the user then sees (blocked doses, alerts, history, reports) comes through the normal contract messages and back-end rules, exactly as it would on a real farm.
 
-#### 11.4.1 Playground flow, and what is still being finalised
-
-> **Note:** this section fixes the **flow** of the playground and the **shape** of the calls. The set-value behaviour (11.4.2), the failure-drill catalogue (11.4.3) and the Farm view (11.4.4) are now agreed, based on the virtual-farm prototype. Still open: the exact layout fields, the final list of scenarios and presets, and who may save setups. **[OPEN-15]**, **[OPEN-16]**
+#### 11.4.1 Playground flow and setup
 
 **The flow (agreed):**
 
@@ -906,15 +1008,25 @@ A fault only changes what the simulated farm does or reports. Everything the use
    Every Simulator-screen action goes through the back end to the simulator (signed in, role-checked, audit-logged); the simulator’s own control API is never exposed. The results come back as normal contract messages, so every tab (Overview, Zone, Alerts, History) reacts as it would on a real farm.
 4. **Save (optional):** the user can save their farm setup (layout, environment and starting conditions) under a name and load it again later (`/sim/scenarios`). Saved setups are stored in the database for that user and organisation, not as files in the repo. Real client sites keep their config packs and are not affected.
 
-**Kept open until finalised:**
+**Setup contents (OPEN-15, decided):**
 
 - **Where the layout comes from (agreed).** On real sites, from the client’s config pack (set at commissioning). On playground sites, from the layout the user edits on the Simulator screen, sent with `POST /sim/scenario` and stored by the back end. The simulator never announces its own layout.
-- **What the layout setup contains.** Starting point, from the prototype: polyhouse size; number of exhaust fans; pads, foggers (installed or not), shade and HAF fans; per zone the reservoir size, day-tank sizes, sensors fitted, and benches and channels. `POST /sim/scenario` will gain a `layout` block for playground sites.
-- **The full list of scenarios and presets** in `scenarios.json`, and which roles may save setups.
+- **What the layout setup contains.** `POST /sim/scenario` carries a `layout` block with the same field names as `layout.json` (2.4): `zones` (`id`, `name`, `reservoir.usableL`, `doseLines`, `sensors`, `dayTanks`, `benches`), `nursery`, `climate` (`fans`, `padPumps`, `chillers`, `shade`, `haf`, `foggers`, `airSensors`) and `power` (`generator`, `ups`). The back end assigns the IDs that come from the zone number: controller, reservoir, dosing cabinet and `devices`. Each value must be inside `layoutOptions` in `scenarios.json`, otherwise `422`. Polyhouse size is left out: nothing reads it yet, and it can be added later as an optional field. `layout` replaces the earlier `equipment` field.
+- **The list of scenarios and presets** is config, not contract: `scenarios.json` holds it (`presets` holds named scenario bodies), and the current file is the starting list.
+- **Who may save setups:** Owner, Agronomist and Operator save and delete their own. Everyone can read. A Viewer can't start a farm, so can't save one.
 
-**Rule:** all of these lists live in the client’s `scenarios.json`. `GET /sim/scenario-options` returns them, the app builds the setup steps and the playground controls from that response, and the simulator validates against the same file. Adding or removing an item is then a **config change, not a contract or code change**. The field names in the scenario example above are **provisional** until OPEN-15 is closed.
+**Rule:** all of these lists live in the client’s `scenarios.json`. `GET /sim/scenario-options` returns them, the app builds the setup steps and the playground controls from that response, and the simulator validates against the same file. Adding or removing an item is then a **config change, not a contract or code change**.
 
-**Several users at once:** the proposal is that each user gets their **own sandbox playground farm**, created when they finish setup and removed after a period without use, so one person’s setup never changes another person’s farm. **[OPEN-16]**
+**Several users at once (OPEN-16, decided):** each user gets their **own sandbox playground farm**, so one person’s setup never changes another person’s farm.
+
+| Rule | Detail |
+|---|---|
+| Created | By `POST /sim/scenario`. Starting again replaces that user’s sandbox. |
+| What it is | One simulator run with its own site slug and its own device logins. Topics and permissions (section 4) apply per site, so nothing else in this contract changes. |
+| Which farm an API call means | The signed-in user’s sandbox, from the session. No URL or message from the app names it. A user with no sandbox, Viewers included, sees the site’s own shared playground farm, read-only. |
+| Removed | After `sandbox.idleRemoveMin` minutes without a call from that user (`scenarios.json`). Saved setups stay, so the user can start it again. |
+| Cap | At most `sandbox.maxRunning` at once (`scenarios.json`). Over the cap, `POST /sim/scenario` answers `409` with code `SANDBOX_LIMIT`, and the app says to try again later. |
+| Until sandboxes are built | One simulator running one farm is the same contract with a single site, used by one person at a time. |
 
 #### 11.4.2 Set a value and hold it
 
@@ -963,19 +1075,21 @@ It is drawn from `GET /farm` (layout) and moved only by the normal live data: re
 
 - URL: `wss://{host}/api/live`. Authenticated by the session cookie.
 - The server sends only what the user's role may see.
-- Server sends `{ "type": "PING" }` every 30 s; the client replies `{ "type": "PONG" }`. After a reconnect, the client refetches what it shows.
+- Server sends `{ "type": "PING" }` every 30 s; the client replies `{ "type": "PONG" }`. The server closes a connection after two unanswered PINGs. The client reconnects with a growing delay (1, 2, 4 … up to 30 s).
+- Nothing is replayed over the socket. After a reconnect, the client refetches what it shows.
+- The app derives what it needs from these messages: a zone is offline when `device_state` says its controller is, and the farm is offline (the Live chip, section 14) when every device is.
 
-Every message: `{ "type": "…", "ts": "…", "data": { … } }`.
+Every message: `{ "type": "…", "ts": "…", "data": { … } }`. `ts` is when it happened, in real time. On playground sites it also has `simTs`, which charts and history plot (11.4).
 
 | `type` | `data` |
 |---|---|
-| `reading` | `{ "zone": "Z1", "readings": {…}, "quality": {…} }` or climate readings with `"zone": null` |
-| `command_state` | `{ "cmdId", "kind", "zone", "state", "reason", "lines" }` |
+| `reading` | `{ "zone": "Z1", "readings": {…}, "quality": {…} }` or climate readings with `"zone": null`. Messages replayed after a link drop are stored but not sent as `reading`; the app refetches when the device comes back. |
+| `command_state` | `{ "cmdId", "kind", "zone", "state", "reason", "lines", "before", "after", "detail" }`. Sent again with the same state when `after` arrives (6.6). For a `STOP`, `zone` is the stopped zone or `null`. |
 | `alert` | `{ "id", "kind", "severity", "status", "zone", "message", "systemAction", "nextStep" }` (PRD rule 7) |
 | `zone_state` · `climate_state` | Same fields as 6.8 and 6.9, sent on every change |
-| `device_state` | `{ "deviceId", "online", "lastSeen", "fw" }` |
+| `device_state` | `{ "deviceId", "online", "lastSeen", "fw" }`, sent when `online` changes. `online` means the same as in 11.2. |
 | `power_state` | Same fields as 6.3 |
-| `mode_change` | `{ "zone": "Z1", "mode": "MAINT" }` or `{ "climate": "MANUAL", "manualUntil": "…" }` |
+| `mode_change` | `{ "zone": "Z1", "mode": "MAINT" }` or `{ "climate": "MANUAL", "manualUntil": "…" }`. A prompt for a banner; `zone_state` and `climate_state` stay authoritative (6.8, 6.9). |
 | `sim_state` | Playground sites only: `{ "speed", "simTime", "faults": [ … ], "holds": [ … ] }`, sent when any of them changes |
 
 ---
@@ -1004,19 +1118,22 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 
 | Constant | Value | Who uses it |
 |---|---|---|
-| Telemetry interval | 60 s (immediately on alarm) | ZC, CC1, PM1 |
+| Telemetry interval | 60 s (immediately on alarm). Zone and climate readings on playground sites: `max(60, speed × minRealReadingIntervalS)` simulated seconds (11.4) | ZC, CC1, PM1 |
 | Heartbeat (`DEVICE_STATUS`) | 30 s | All devices |
 | Device **stale** | 3 missed heartbeats (90 s) | Cloud |
 | Device **offline** | 3 minutes without any message, or last will received | Cloud |
 | Farm **offline** | 3 minutes with nothing from any device: the app's Live chip turns to Offline and every reading is treated as stale | Cloud and app |
 | Fresh EC/pH to dose | ≤ 120 s old | Cloud and ZC |
-| Command expiry | 60 s from `issuedAt` | Cloud sets, ZC enforces |
+| Command expiry | 60 s from `issuedAt`, `STOP` `ALL_EQUIPMENT` included | Cloud sets, ZC and CC1 enforce |
+| `STOP` expiry (`ALL_OPERATIONS`, `ZONE`) | 5 minutes from `issuedAt` (7.4) | Cloud sets, ZC enforces |
+| `DISPATCHED` → `UNKNOWN` | At `expiresAt`, if the controller hasn't been heard from since dispatch (8.3) | Cloud |
 | `ACCEPTED` → `UNKNOWN` | 2 minutes with no `CMD_STATE` while the farm is silent | Cloud |
 | Progress while dosing | at least every 5 s | ZC |
 | Dose `maxDurationS` | 600 s (default; configured in `limits.json`) | ZC |
 | Mix wait before `after` reading | 300 s (default; configured in `limits.json`) | ZC |
 | Climate equipment confirmation | 30 s, then “No response from device” | App |
 | Climate manual | 5–240 minutes | CC1 |
+| 24-hour dose totals | Rolling 24 hours of delivered mL, on `simTs` on playground sites (11.4) | Cloud and ZC |
 
 ---
 
@@ -1029,13 +1146,13 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | OPEN-4 | Is a pH-up line needed (`BASE`)? | Agronomy |
 | OPEN-5 | Real numbers: 24 h limits, EC ceiling, pH bounds, EC/pH targets, minimum reservoir (placeholders until then; the 300 mL per-dose limit and 50 L day-tanks come from the handoff). | Agronomy |
 | OPEN-8 | Resolved: every role, Viewer included, may use every Stop button, with no confirmation dialog (PRD rule 1). The app warns afterwards that the house will heat up. | — |
-| OPEN-9 | 14 states, including `REJECTED`, `STOPPED` and the reserved `AWAITING_2ND_APPROVAL`. Confirm the “App shows” wording in 8.1. | Track 1 + Track 2 |
-| OPEN-10 | Should STOP commands have a longer expiry than doses (a stop arriving late is usually still wanted, except `ALL_EQUIPMENT`)? | Track 1 + Track 3 |
+| OPEN-9 | Resolved: 14 states, including `REJECTED`, `STOPPED` and the reserved `AWAITING_2ND_APPROVAL`, with the “App shows” wording in 8.1. `STOPPED` no longer says “by user”, because the E-STOP, key switch or a fault can also stop a command. | — |
+| OPEN-10 | Resolved: `STOP` `ALL_OPERATIONS` and `ZONE` expire after 5 minutes, and `ALL_EQUIPMENT` keeps the normal 60 s (7.4, section 14). | — |
 | OPEN-11 | **Several clients later:** add an organisation layer (organisation → sites → zones). Proposed: every database table, API call and message carries `org_id` / `site_id` from day one, even with one value; users and data are kept separate per organisation. | Track 1 |
 | OPEN-12 | **No fixed equipment assumptions:** the highest fan stage equals the number of fans in the layout config, and dosing lines come from `doseLines` in the config. No code, screen or check may assume exactly 4 fans or exactly A, B and ACID. | Tracks 1, 2, 3 |
 | OPEN-14 | **Per-site feature switches:** a `features` block in each site’s config (for example `playground`, `demoFarm`, `climateAutomatic`, `autoRefill`, `secondApproval`, `foggers`; see 2.5), read by the API and the app, so each client can turn features on or off without code changes. | Tracks 1 + 2 |
-| OPEN-15 | **Playground setup contents:** set-value behaviour (11.4.2), failure drills (11.4.3) and the Farm view (11.4.4) are now agreed. Still open: the exact layout fields, the final list of scenarios and presets, and which roles may save setups. Finalise before the contract is approved; until then 11.4.1 applies. | Tracks 2 + 4 |
-| OPEN-16 | **Several users at once:** one private sandbox playground farm per user (created at setup, removed after inactivity, with a cap on how many run at once), or one shared playground used by one person at a time? Proposed: one sandbox per user. | Project team, Tracks 1 + 4 |
+| OPEN-15 | Resolved: the `layout` block uses the fields of `layout.json`, within `layoutOptions`; scenarios and presets are config in `scenarios.json`; Owner, Agronomist and Operator save and delete their own setups (11.4.1). | — |
+| OPEN-16 | Resolved: one private sandbox farm per user, created at setup, removed after inactivity, with a configured cap on how many run at once (11.4.1). | — |
 
 ---
 
@@ -1066,3 +1183,28 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v0.7.3 | Playground, based on the virtual-farm prototype: set a value and hold it (11.4.2, `/sim/holds`), failure-drill catalogue with Trigger and Fix and PRD codes (11.4.3), 2D Farm view and farm activity list (11.4.4), `sim_state` WebSocket message; OPEN-15 narrowed; dates removed. | Project team |
 | v0.8 | Aligned with the PRD rules and the virtual-farm design: two screens on playground sites (Control panel and Simulator screen, 11.4.1); `ZONE_STATE` and `CLIMATE_STATE` sent on every change (6.8, 6.9); `RESUME` and `CLEAR_FAULT` (7.8, 7.9) and “stopped stays stopped”; “unknown means blocked” (8.3, `STATE_UNKNOWN` check); no confirmation for any stop (OPEN-8 resolved); events and alerts carry `message`, `systemAction`, `nextStep`; `ts` is real time with `simTs` for simulated time; layout source agreed. | Project team |
 | v0.8 lock | Items A to F locked; fan IDs and top stage from config; `ZONE_STATE` authoritative where it overlaps telemetry. | Project team |
+| v0.8 part 1 | Configured defaults, `503` for the health check, optional power fields, quality rule (T1-9). | Track 1 |
+| v1.0 | Contract part 2 (T1-10): `CMD_STATE` fields, mix wait and state-to-reason table (6.6); `RESUME` and `CLEAR_FAULT` topics (4, 7.8, 7.9); lifecycle per command kind, `UNKNOWN` resolution, `FAULT_DURING` and `CANCELLED` (8); check order and persistence (9); link-drop behaviour (10); `GET /farm` and `GET /zones/{zoneId}` responses (11.2); reading rate and 24-hour totals on simulated time (11.4); WebSocket rules (12); `dayTankL` to 0.1 L (1); climate alarm limits (6.2); OPEN-9, 10, 15 and 16 resolved. All changes keep `"v": 1` (16). | Track 1 |
+
+### v1.0 section review
+
+| Section | v1.0 | What changed |
+|---|---|---|
+| 0 Scope | No change | |
+| 1 Conventions | Changed | `dayTankL` to 0.1 L, `reservoirL` whole litres |
+| 2 Identifiers and layout | Changed | 2.3 table separator fixed; `devices` noted in 2.4; two lines in the 2.5 file list |
+| 3 Transport | No change | |
+| 4 Topics | Changed | `RESUME` and `CLEAR_FAULT` use the `cmd` topics; ACL unchanged |
+| 5 Envelope | No change | |
+| 6 Farm → cloud | Changed | 6.1 and 6.2 reading rate pointer; 6.2 alarm limits; 6.6 `CMD_STATE`; 6.8 `operation` in the mix wait. 6.3, 6.4, 6.5, 6.7 and 6.9: no change |
+| 7 Cloud → farm | Changed | 7.2 cloud-only limits; 7.4 stop expiry; 7.8 and 7.9 topics and climate target. 7.1, 7.3, 7.5, 7.6 and 7.7: no change |
+| 8 Command lifecycle | Changed | Wording, transitions, rules 9–11, two reason codes |
+| 9 Controller rules | Changed | Rules 1, 2, 3 and 8 |
+| 10 Gateway rules | Changed | Rules 2 and 4; new rules 6–8 |
+| 11 REST API | Changed | 11.2 responses and climate clear-fault; 11.4 reading rate, 24-hour totals, `layout`, sandboxes. 11.1, 11.3, 11.4.2, 11.4.3 and 11.4.4: no change |
+| 12 WebSocket | Changed | Reconnect, `simTs`, replayed messages, `command_state` fields |
+| 13 Roles | No change | |
+| 14 Timing | Changed | Stop expiry, `DISPATCHED` → `UNKNOWN`, reading rate, 24-hour totals |
+| 15 Open questions | Changed | OPEN-9, 10, 15 and 16 resolved; OPEN-3, 4 and 5 stay open |
+| 16 Changing this contract | No change | |
+| 17 Changelog | Changed | This entry |

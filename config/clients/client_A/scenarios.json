@@ -3,8 +3,24 @@
   "_meta": {
     "client": "client_A",
     "placeholder": true,
-    "note": "Placeholder values until the scenario list and presets are finalised (OPEN-15). Field names are provisional until OPEN-15 is closed. Do not use for a real farm."
+    "note": "Placeholder values until the team fills in the scenario list and presets; field names are agreed (contract 11.4.1). Do not use for a real farm."
   },
+  "layoutOptions": {
+    "zones": { "min": 1, "max": 4 },
+    "benchesPerZone": { "min": 1, "max": 8 },
+    "channelsPerBench": { "min": 1, "max": 12 },
+    "benchLengthM": { "min": 1, "max": 30 },
+    "reservoirUsableL": { "min": 100, "max": 5000 },
+    "dayTankUsableL": { "min": 10, "max": 200 },
+    "nurseryTables": { "min": 0, "max": 12 },
+    "fans": { "min": 0, "max": 8 },
+    "padPumps": { "min": 0, "max": 2 },
+    "shade": { "min": 0, "max": 2 },
+    "haf": { "min": 0, "max": 2 },
+    "foggers": { "min": 0, "max": 2 }
+  },
+  "sandbox": { "idleRemoveMin": 120, "maxRunning": 5 },
+  "presets": [],
   "regions": ["COIMBATORE", "COASTAL_HUMID", "HOT_DRY_INLAND", "HILL_STATION"],
   "months": { "min": 1, "max": 12 },
   "weather": ["CLEAR", "CLOUDY", "HEATWAVE", "MONSOON_RAIN", "HUMID_SPELL"],
