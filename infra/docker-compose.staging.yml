@@ -1,0 +1,206 @@
+# Staging stack: Caddy (HTTPS, the app and /api), the API, the worker, PostgreSQL with
+# TimescaleDB, the Mosquitto broker and the farm simulator. Steps: README.md, "Deploy to staging".
+#
+# Only Caddy has published ports. The database and the broker are on a network with no route
+# in or out, and every MQTT client logs in with its own account (contract sections 3 and 4).
+#
+# Run from the repo root:
+#   docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml up -d --build
+
+name: sna-staging
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-backend-env: &backend-env
+  APP_ENV: staging
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_NAME: ${POSTGRES_DB:?set in infra/.env.staging}
+  DB_USER: ${POSTGRES_USER:?set in infra/.env.staging}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:?set in infra/.env.staging}
+  MQTT_HOST: mqtt
+  MQTT_PORT: "1883"
+  CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}
+
+x-device-passwords: &device-passwords
+  MQTT_PASSWORD_GW1: ${MQTT_PASSWORD_GW1:?set in infra/.env.staging}
+  MQTT_PASSWORD_ZC1: ${MQTT_PASSWORD_ZC1:?set in infra/.env.staging}
+  MQTT_PASSWORD_ZC2: ${MQTT_PASSWORD_ZC2:?set in infra/.env.staging}
+  MQTT_PASSWORD_CC1: ${MQTT_PASSWORD_CC1:?set in infra/.env.staging}
+  MQTT_PASSWORD_PM1: ${MQTT_PASSWORD_PM1:?set in infra/.env.staging}
+
+# The worker and the simulator have no port to ask, so their check is an open connection to
+# the broker: an established TCP socket to port 1883 (hex 075B).
+x-broker-connected: &broker-connected
+  test: ["CMD-SHELL", "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -Eq ' [0-9A-F]+:075B 01 '"]
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 15s
+
+services:
+  caddy:
+    build:
+      context: ..
+      dockerfile: infra/caddy/Dockerfile
+    image: sna-caddy:staging
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set in infra/.env.staging}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data  # certificates; losing them risks the certificate authority's rate limits
+      - caddy-config:/config
+    networks: [edge]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    <<: *logging
+
+  api:
+    build: ../backend
+    image: sna-backend:staging
+    environment:
+      <<: *backend-env
+      MQTT_USERNAME: CLOUD-api
+      MQTT_PASSWORD: ${MQTT_PASSWORD_CLOUD_API:?set in infra/.env.staging}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
+    volumes:
+      - ../config:/config:ro  # the client config packs (contract 2.5), read only
+    networks: [edge, internal]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=8)"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    <<: *logging
+
+  # Builds or updates the database, loads the client's layout.json, then exits. It runs on every
+  # `up`; both steps change nothing when the database is already current.
+  migrate:
+    build: ../backend
+    image: sna-backend:staging
+    command: ["sh", "-c", "alembic upgrade head && python -m app.db.seed"]
+    environment:
+      <<: *backend-env
+    volumes:
+      - ../config:/config:ro
+    networks: [internal]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    <<: *logging
+
+  worker:
+    build: ../backend
+    image: sna-backend:staging
+    command: ["python", "-m", "app.worker.main"]
+    stop_signal: SIGINT  # stops at once; as PID 1, Python would ignore Docker's default SIGTERM
+    environment:
+      <<: *backend-env
+      MQTT_USERNAME: CLOUD-worker
+      MQTT_PASSWORD: ${MQTT_PASSWORD_CLOUD_WORKER:?set in infra/.env.staging}
+    volumes:
+      - ../config:/config:ro
+    networks: [internal]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mqtt:
+        condition: service_healthy
+    healthcheck: *broker-connected
+    restart: unless-stopped
+    <<: *logging
+
+  simulator:
+    build: ../simulator
+    image: sna-simulator:staging
+    stop_signal: SIGINT  # a clean stop: each device publishes its own offline status
+    environment:
+      <<: *device-passwords
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SIM_SPEED: ${SIM_SPEED:-1}
+      SIM_CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}
+    volumes:
+      - ../config:/config:ro
+      - simulator-state:/app/.state  # bootIds must keep rising across restarts (contract 5)
+    networks: [internal]
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    healthcheck: *broker-connected
+    restart: unless-stopped
+    <<: *logging
+
+  db:
+    image: timescale/timescaledb:2.30.2-pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set in infra/.env.staging}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in infra/.env.staging}
+      POSTGRES_DB: ${POSTGRES_DB:?set in infra/.env.staging}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      # Over TCP: while the image initialises, its temporary server listens on the socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+    restart: unless-stopped
+    <<: *logging
+
+  mqtt:
+    image: eclipse-mosquitto:2.0.22
+    entrypoint: ["/bin/sh", "/mosquitto/staging/start.sh"]
+    environment:
+      <<: *device-passwords
+      MQTT_PASSWORD_CLOUD_API: ${MQTT_PASSWORD_CLOUD_API:?set in infra/.env.staging}
+      MQTT_PASSWORD_CLOUD_WORKER: ${MQTT_PASSWORD_CLOUD_WORKER:?set in infra/.env.staging}
+    volumes:
+      - ./mosquitto/staging:/mosquitto/staging:ro
+      - mqtt-data:/mosquitto/data  # queued messages and retained state survive a restart
+    networks: [internal]
+    healthcheck:
+      # Logging in proves the broker is up and its accounts loaded. The ACL drops the message itself.
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -u CLOUD-api -P \"$${MQTT_PASSWORD_CLOUD_API}\" -t healthcheck -m ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    <<: *logging
+
+networks:
+  edge:
+  internal:
+    internal: true  # no published ports and no route out
+
+volumes:
+  caddy-data:
+  caddy-config:
+  db-data:
+  mqtt-data:
+  simulator-state:

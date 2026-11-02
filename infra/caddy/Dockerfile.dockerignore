@@ -1,0 +1,6 @@
+*
+!app
+!config/clients
+!infra/caddy/Caddyfile
+app/node_modules
+app/dist

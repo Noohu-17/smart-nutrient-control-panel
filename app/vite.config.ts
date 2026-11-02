@@ -9,5 +9,6 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    testTimeout: 15_000, // longer than asyncUtilTimeout in setup.ts, so a slow find fails with its own message
   },
 })

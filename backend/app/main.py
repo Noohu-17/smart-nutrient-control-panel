@@ -6,16 +6,18 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
 from .config import load_settings
+from .errors import add_error_handlers
 from .health import UP, check_broker, check_database
 
 settings = load_settings()
 
 app = FastAPI(
     title="Smart Nutrient Advisor API",
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
+    docs_url="/api/docs" if settings.api_docs_enabled else None,
+    openapi_url="/api/openapi.json" if settings.api_docs_enabled else None,
     redoc_url=None,
 )
+add_error_handlers(app)
 
 
 @app.get("/api/health")

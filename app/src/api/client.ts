@@ -44,7 +44,7 @@ export async function getJson<T>(path: string): Promise<T> {
     throw new ApiError(
       body?.error?.message ?? `Request failed (${response.status})`,
       response.status,
-      body?.error.code,
+      body?.error?.code,
     );
   }
 

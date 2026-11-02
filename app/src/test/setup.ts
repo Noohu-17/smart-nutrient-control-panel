@@ -1,9 +1,12 @@
 // src/test/setup.ts · runs before every test file (vite.config.ts → test.setupFiles)
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { resetTelemetry } from "../mocks/data/telemetry";
 import { server } from "../mocks/node";
+
+// The fake API alone takes 300 ms, which left little of the default 1 s on a busy laptop.
+configure({ asyncUtilTimeout: 5_000 });
 
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });

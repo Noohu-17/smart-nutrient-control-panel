@@ -1,0 +1,21 @@
+# HTTPS for the staging stack: /api goes to the back end, everything else is the app.
+# SITE_ADDRESS comes from infra/.env.staging.
+
+{
+	skip_install_trust
+}
+
+{$SITE_ADDRESS} {
+	encode gzip
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# The app has its own routes (/overview, /zones/Z1 ...), so an unknown path gets index.html.
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}

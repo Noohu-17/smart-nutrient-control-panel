@@ -157,6 +157,8 @@ async def run(
                 async with client_factory(
                     hostname=settings.mqtt_host,
                     port=settings.mqtt_port,
+                    username=settings.mqtt_username,
+                    password=settings.mqtt_password,
                     identifier=client_id,
                     clean_session=False,
                     protocol=aiomqtt.ProtocolVersion.V311,
