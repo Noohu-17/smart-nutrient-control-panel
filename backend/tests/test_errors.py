@@ -87,7 +87,7 @@ def test_wrong_method_keeps_the_allow_header() -> None:
 def test_bad_input_says_which_field() -> None:
     status, _, body = call(app_with_routes(), "GET", "/number", "n=abc")
     assert status == 422
-    assert body["error"]["code"] == "VALIDATION"
+    assert body["error"]["code"] == "VALIDATION_ERROR"
     assert [field["field"] for field in body["error"]["details"]["fields"]] == ["query.n"]
 
 

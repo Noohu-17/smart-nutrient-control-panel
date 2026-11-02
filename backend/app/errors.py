@@ -32,7 +32,7 @@ async def _http_error(_: Request, exc: HTTPException) -> JSONResponse:
 async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
     # Field and reason only: echoing the input could send a password back in the answer.
     fields = [{"field": ".".join(str(part) for part in e["loc"]), "message": e["msg"]} for e in exc.errors()]
-    return _error(422, "VALIDATION", "The request is not valid", {"fields": fields})
+    return _error(422, "VALIDATION_ERROR", "The request is not valid", {"fields": fields})
 
 
 async def _crash(_: Request, __: Exception) -> JSONResponse:

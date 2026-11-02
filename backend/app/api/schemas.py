@@ -1,0 +1,161 @@
+"""What the read API answers (contract §2.4, §11.2), and so what /api/openapi.json describes.
+
+The models come from the contract models, so wire names stay lowerCamelCase. Maps keyed by zones,
+dose lines or equipment IDs are plain dicts, because those keys come from the client's config
+(OPEN-12), and fields the models don't name in the config pack are passed on unchanged.
+"""
+
+from datetime import UTC, datetime
+from typing import Annotated, Any
+
+from pydantic import UUID4, ConfigDict, PlainSerializer, StrictBool, WithJsonSchema
+
+from ..contract import ContractModel
+from ..contract.envelope import Count
+from ..contract.farm_messages import Quality, ZoneMode, ZoneOperation, ZoneOutput, ZoneReadings
+
+
+def contract_time(moment: datetime) -> str:
+    """Contract time (§1): ISO-8601 UTC with milliseconds and Z, e.g. 2026-11-09T04:54:00.000Z."""
+    moment = moment.astimezone(UTC)
+    return f"{moment:%Y-%m-%dT%H:%M:%S}.{moment.microsecond // 1000:03d}Z"
+
+
+ApiTime = Annotated[
+    datetime,
+    PlainSerializer(contract_time, return_type=str),
+    WithJsonSchema({"type": "string", "format": "date-time"}),
+]
+
+
+# --- Errors: what app.errors answers (§11.1), described here for OpenAPI --------------------
+
+
+class ErrorDetail(ContractModel):
+    code: str
+    message: str
+    details: dict[str, Any] | None = None
+
+
+class ErrorBody(ContractModel):
+    error: ErrorDetail
+
+
+# --- GET /api/farm: layout.json (§2.4) and features.json (§2.5) --------------------------
+
+
+class PackModel(ContractModel):
+    """A part of the config pack. Anything the model doesn't name goes through as it is."""
+
+    model_config = ConfigDict(extra="allow")
+
+
+class Reservoir(PackModel):
+    id: str
+    usable_l: float
+
+
+class DayTank(PackModel):
+    usable_l: float
+
+
+class Bench(PackModel):
+    id: str
+    channels: int
+    length_m: float
+
+
+class FarmZone(PackModel):
+    id: str
+    name: str
+    controller: str
+    reservoir: Reservoir
+    dosing_cabinet: str
+    dose_lines: list[str]
+    sensors: dict[str, bool] | None = None
+    day_tanks: dict[str, DayTank]
+    benches: list[Bench]
+
+
+class Nursery(PackModel):
+    tables: int
+
+
+class FarmClimate(PackModel):
+    controller: str
+    fans: list[str]
+    pad_pumps: list[str]
+    chillers: dict[str, str]
+    shade: list[str]
+    haf: list[str]
+    foggers: list[str]
+    air_sensors: list[str]
+
+
+class FarmPower(PackModel):
+    monitor: str
+    generator: bool
+    ups: bool
+
+
+class FarmDevice(PackModel):
+    id: str
+    kind: str
+    zone: str | None = None
+
+
+class Farm(PackModel):
+    v: int
+    site: str
+    name: str
+    timezone: str
+    zones: list[FarmZone]
+    nursery: Nursery
+    climate: FarmClimate
+    power: FarmPower
+    devices: list[FarmDevice]
+    features: dict[str, bool]
+
+
+# --- GET /api/zones and /api/zones/{zoneId} (§11.2) -------------------------------------
+
+
+class ZoneStatus(ContractModel):
+    """A zone's latest readings and state. Anything not known yet is null, {} or [] (§11.2)."""
+
+    zone: str
+    online: bool
+    last_seen: ApiTime | None
+    ts: ApiTime | None
+    sim_ts: ApiTime | None = None  # left out unless the latest reading has it (playground sites)
+    readings: ZoneReadings
+    quality: dict[str, Quality]
+    equipment: dict[str, ZoneOutput]
+    mode: ZoneMode | None
+    estop: StrictBool | None
+    leak: StrictBool | None
+    stopped: StrictBool | None
+    active_cmd_id: UUID4 | None
+    operation: ZoneOperation | None
+    latches: list[str]
+    config_version: Count | None
+
+
+class ZoneList(ContractModel):
+    items: list[ZoneStatus]
+
+
+# --- GET /api/devices (§11.2; the fields follow device_state, §12) ------------------------
+
+
+class DeviceInfo(ContractModel):
+    device_id: str
+    kind: str
+    zone: str | None
+    online: bool
+    last_seen: ApiTime | None
+
+
+class DeviceList(ContractModel):
+    items: list[DeviceInfo]
+    next_cursor: str | None
