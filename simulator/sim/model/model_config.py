@@ -1,7 +1,9 @@
 """Build the farm model's parameters from the client config pack.
 
 Reads the "model" block of config/clients/<client>/simulator.json and one zone
-entry of layout.json (contract 2.4). Loading the files and validating them
+entry of layout.json (contract 2.4), plus the values the farm has no physics for
+yet (air, power, day-tank levels): those are held constant until a weather model
+and the power drills exist. Loading the files and validating them
 against the JSON Schemas is done elsewhere (Track 4's sim/config.py and
 Track 1's scripts/validate_config.py); this module only turns already-loaded
 JSON into typed, checked parameters, and reports the exact key at fault.
@@ -30,6 +32,9 @@ from .params import (
     require_ph,
 )
 from .water import ReservoirState, reservoir_from_readings
+
+PERCENT_MAX = 100.0
+PHASES = ("l1V", "l2V", "l3V")  # the three phases contract 6.3 reports
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +118,102 @@ def parse_zone_model(model: Mapping[str, Any], zone: Mapping[str, Any]) -> ZoneM
     )
 
 
+@dataclass(frozen=True, slots=True)
+class DayTank:
+    """One dosing line's concentrate tank (layout dayTanks, model.initialState)."""
+
+    usable_l: float
+    start_l: float
+
+
+@dataclass(frozen=True, slots=True)
+class AirConditions:
+    """The air inside and around the polyhouse, in contract units (6.2)."""
+
+    temp_by_pos_c: Mapping[str, float]
+    rh: float
+    outside_temp_c: float
+    outside_rh: float
+    elec_room_temp_c: float
+
+    @property
+    def temp_c(self) -> float:
+        """Inside air: the average of the sensor positions (contract 6.2)."""
+        return sum(self.temp_by_pos_c.values()) / len(self.temp_by_pos_c)
+
+
+@dataclass(frozen=True, slots=True)
+class PowerSupply:
+    """What the power monitor measures while mains is healthy (contract 6.3)."""
+
+    phases_v: Mapping[str, float]
+    ups_battery_pct: float
+    ups_runtime_min: float
+
+
+def parse_day_tanks(model: Mapping[str, Any], zone: Mapping[str, Any]) -> dict[str, DayTank]:
+    """Day-tanks by dosing line, for the lines this zone has (no fixed A/B/ACID, OPEN-12)."""
+    zone_id = _text(zone, "id", "layout zone")
+    tanks_cfg = _section(zone, "dayTanks", f"layout zone {zone_id}")
+    levels = _section(_section(model, "initialState", "model"), "dayTankPct", "model.initialState")
+    tanks = {}
+    for line in zone.get("doseLines", ()):
+        usable_l = _number(
+            _section(tanks_cfg, line, f"layout zone {zone_id}.dayTanks"),
+            "usableL",
+            f"layout zone {zone_id}.dayTanks.{line}",
+        )
+        pct = _percent(levels, line, "model.initialState.dayTankPct")
+        tanks[line] = DayTank(usable_l=usable_l, start_l=usable_l * pct / PERCENT_MAX)
+    return tanks
+
+
+def parse_circulation_flow_lpm(model: Mapping[str, Any]) -> float:
+    """Channel flow while the circulation pump runs (contract 6.1 circFlowLpm)."""
+    flow_lpm = _number(_section(model, "circulation", "model"), "flowLpm", "model.circulation")
+    if flow_lpm < 0.0:
+        raise ValueError(f"model.circulation.flowLpm must be >= 0, got {flow_lpm}")
+    return flow_lpm
+
+
+def parse_air(model: Mapping[str, Any], air_sensors: Any) -> AirConditions:
+    """The air, with one temperature per layout.climate.airSensors position."""
+    path = "model.air"
+    if not isinstance(air_sensors, list) or not air_sensors:
+        raise ValueError(f"layout.climate.airSensors must list positions, got {air_sensors!r}")
+    cfg = _section(model, "air", "model")
+    temps = _section(cfg, "tempByPosC", path)
+    return AirConditions(
+        temp_by_pos_c={pos: _number(temps, pos, f"{path}.tempByPosC") for pos in air_sensors},
+        rh=_percent(cfg, "rh", path),
+        outside_temp_c=_number(cfg, "outsideTempC", path),
+        outside_rh=_percent(cfg, "outsideRh", path),
+        elec_room_temp_c=_number(cfg, "elecRoomTempC", path),
+    )
+
+
+def parse_power(model: Mapping[str, Any]) -> PowerSupply:
+    path = "model.power"
+    cfg = _section(model, "power", "model")
+    phases = _section(cfg, "phasesV", path)
+    return PowerSupply(
+        phases_v={phase: _number(phases, phase, f"{path}.phasesV") for phase in PHASES},
+        ups_battery_pct=_percent(cfg, "upsBatteryPct", path),
+        ups_runtime_min=_number(cfg, "upsRuntimeMin", path),
+    )
+
+
+def parse_chiller_setpoint(model: Mapping[str, Any], allowed: Mapping[str, Any]) -> float:
+    """The chillers' starting setpoint, inside climate.json chillerSetpointC (contract 2.3)."""
+    path = "model.initialState"
+    setpoint_c = _number(_section(model, "initialState", "model"), "chillerSetpointC", path)
+    low = _number(allowed, "min", "climate.json chillerSetpointC")
+    high = _number(allowed, "max", "climate.json chillerSetpointC")
+    if not low <= setpoint_c <= high:
+        raise ValueError(f"{path}.chillerSetpointC must be within {low}-{high}, got {setpoint_c}")
+    return setpoint_c
+
+
 def initial_reservoir(zone: ZoneModelParams) -> ReservoirState:
     """The zone's reservoir in its configured default starting state."""
     start = zone.initial
@@ -190,6 +291,13 @@ def _integer(cfg: Mapping[str, Any], key: str, path: str) -> int:
     value = cfg.get(key)
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{path}.{key} must be an integer, got {value!r}")
+    return value
+
+
+def _percent(cfg: Mapping[str, Any], key: str, path: str) -> float:
+    value = _number(cfg, key, path)
+    if not 0.0 <= value <= PERCENT_MAX:
+        raise ValueError(f"{path}.{key} must be within 0-100, got {value}")
     return value
 
 

@@ -1,13 +1,20 @@
-"""Contract messages: the envelope (section 5) and DEVICE_STATUS (6.4).
+"""Contract messages: the envelope (section 5), DEVICE_STATUS (6.4) and the readings (6.1-6.3).
 
-Messages are plain dicts built here, field for field as the contract says.
+Messages are plain dicts built here, field for field as the contract says. The tests check
+them against Track 1's models (backend/app/contract).
+
+The reading functions are also where a true value becomes what a sensor reports: rounded to
+the precision in contract section 1, or null with its quality when there is nothing to measure.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .farm import ClimateFarm, PowerFarm, ZoneFarm
 
 SIM_FIRMWARE = "sim-0.1.0"
 
@@ -20,6 +27,18 @@ def utc_ts(moment: datetime) -> str:
 
 def status_topic(site: str, device_id: str) -> str:
     return f"farm/{site}/device/{device_id}/status"
+
+
+def zone_telemetry_topic(site: str, zone_id: str) -> str:
+    return f"farm/{site}/zone/{zone_id}/telemetry"
+
+
+def climate_telemetry_topic(site: str) -> str:
+    return f"farm/{site}/climate/telemetry"
+
+
+def power_state_topic(site: str) -> str:
+    return f"farm/{site}/power/state"
 
 
 class Envelope:
@@ -78,3 +97,95 @@ def device_status(envelope: dict[str, Any], *, uptime_s: int, gateway: bool) -> 
 def offline_status(device_id: str) -> dict[str, Any]:
     """The last-will payload, exactly as contract 6.4 gives it."""
     return {"v": 1, "type": "DEVICE_STATUS", "device": device_id, "online": False}
+
+
+def zone_telemetry(zone: ZoneFarm) -> dict[str, Any]:
+    """ZONE_TELEMETRY (6.1) without its envelope.
+
+    doMgL stays null: the farm model has no dissolved oxygen, so a fitted sensor has nothing
+    to report and says so with its quality; an unfitted one has no quality at all.
+    """
+    water = zone.water()
+    readings = {
+        "ec": _rounded(water.ec_ms_cm, 2),
+        "ph": _rounded(water.ph, 2),
+        "solTempC": _rounded(water.temp_c, 1),
+        "reservoirPct": _rounded(water.level_pct, 0),
+        "reservoirL": _rounded(water.volume_l, 0),
+        "circFlowLpm": _rounded(zone.circ_flow_lpm, 1),
+        "doMgL": None,
+        "dayTankPct": {
+            line: _rounded(100.0 * litres / zone.day_tank_usable_l[line], 0)
+            for line, litres in zone.day_tank_l.items()
+        },
+        "dayTankL": {line: _rounded(litres, 1) for line, litres in zone.day_tank_l.items()},
+    }
+    sensors = ("ec", "ph", "solTempC", "reservoirPct", "circFlowLpm")
+    quality = {name: _quality(readings[name]) for name in sensors}
+    if zone.do_fitted:
+        quality["doMgL"] = _quality(readings["doMgL"])
+    return {
+        "zone": zone.zone_id,
+        "readings": readings,
+        "quality": quality,
+        "equipment": dict(zone.outputs),
+        "mode": zone.mode,
+        "estop": zone.estop,
+        "leak": zone.leak,
+        "activeCmdId": zone.active_cmd_id,
+    }
+
+
+def climate_telemetry(climate: ClimateFarm) -> dict[str, Any]:
+    """CLIMATE_TELEMETRY (6.2) without its envelope."""
+    air = climate.air
+    readings = {
+        "airTempC": _rounded(air.temp_c, 1),
+        "airTempByPosC": {pos: _rounded(t, 1) for pos, t in air.temp_by_pos_c.items()},
+        "airRh": _rounded(air.rh, 0),
+        "outsideTempC": _rounded(air.outside_temp_c, 1),
+        "outsideRh": _rounded(air.outside_rh, 0),
+        "elecRoomTempC": _rounded(air.elec_room_temp_c, 1),
+    }
+    sensors = ("airTempC", "airRh", "outsideTempC", "outsideRh", "elecRoomTempC")
+    until = climate.manual_until
+    return {
+        "readings": readings,
+        "quality": {name: _quality(readings[name]) for name in sensors},
+        "mode": climate.mode,
+        "manualUntil": utc_ts(until) if until else None,
+        "equipment": climate.equipment(),
+        "runTimeTodayMin": climate.run_time_today_min(),
+        "setpoints": dict(climate.setpoints),
+    }
+
+
+def power_state(power: PowerFarm) -> dict[str, Any]:
+    """POWER_STATE (6.3) without its envelope; no generator or UPS in the layout, no field."""
+    state: dict[str, Any] = {
+        "mains": power.mains,
+        "phases": {phase: _rounded(volts, 0) for phase, volts in power.phases_v.items()},
+        "source": power.source,
+    }
+    if power.generator is not None:
+        state["generator"] = power.generator
+    state["ats"] = power.ats
+    if power.ups_battery_pct is not None:
+        state["ups"] = {
+            "onBattery": power.ups_on_battery,
+            "batteryPct": _rounded(power.ups_battery_pct, 0),
+            "runtimeMin": _rounded(power.ups_runtime_min, 0),
+        }
+    return state
+
+
+def _rounded(value: float | None, digits: int) -> float | int | None:
+    """A reading at its contract precision (section 1); whole units go out as whole numbers."""
+    if value is None:
+        return None
+    return round(value, digits) if digits else round(value)
+
+
+def _quality(reading: float | None) -> str:
+    """No value means no measurement: null with FAULT, never a fake 0 (contract 1, 6.1)."""
+    return "FAULT" if reading is None else "OK"

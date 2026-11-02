@@ -1,0 +1,247 @@
+"""The simulated farm's live state, built from the config pack: what the devices report.
+
+Only physics moves it, through Farm.step(): the reservoirs follow the Track 3 model and the
+climate's run-time counters add up. Air and power are held constant until a weather model
+and the power drills exist. Nothing here switches equipment: every output stays as it
+started until a person's command reaches a controller (contract 0, "Phase A is manual").
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from datetime import date, datetime
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from .config import read_pack_file
+from .model.model_config import (
+    AirConditions,
+    PowerSupply,
+    initial_reservoir,
+    parse_air,
+    parse_chiller_setpoint,
+    parse_circulation_flow_lpm,
+    parse_day_tanks,
+    parse_power,
+    parse_zone_model,
+)
+from .model.params import ReservoirParams, require_finite
+from .model.water import (
+    ReservoirReadings,
+    ReservoirState,
+    StepInputs,
+    readings,
+    refill_flow_lps,
+    step_reservoir,
+)
+
+FANS_GROUP = "FANS"  # contract 6.2 runTimeTodayMin: all the fans count as one
+RESERVED_FOGGER = "FOG1"  # contract 2.3: reported as not installed, so the app can say so
+SHADE_START = "OPEN"  # where a new farm's screens are, as in contract 6.2; a scenario moves them
+SETPOINTS = ("airTempMaxC", "airRhMax", "solTempMaxC")  # contract 6.2
+
+
+@dataclass
+class ZoneFarm:
+    """One zone: its water and day-tanks, and what its panel and controller show."""
+
+    zone_id: str
+    params: ReservoirParams
+    reservoir: ReservoirState
+    day_tank_l: dict[str, float]
+    day_tank_usable_l: Mapping[str, float]
+    pump_flow_lpm: float
+    do_fitted: bool
+    outputs: dict[str, str]
+    mode: str = "REMOTE"  # the key switch on the panel (contract 6.1)
+    estop: bool = False
+    leak: bool = False
+    active_cmd_id: str | None = None
+
+    @property
+    def circ_flow_lpm(self) -> float:
+        """A pump that isn't running moves nothing: this 0 is a measurement, not a fake."""
+        return self.pump_flow_lpm if self.outputs[f"{self.zone_id}-CIRC"] == "ON" else 0.0
+
+    def water(self) -> ReservoirReadings:
+        return readings(self.reservoir, self.params)
+
+    def step(self, dt_s: float, air_temp_c: float) -> None:
+        valve_open = self.outputs[f"{self.zone_id}-REFILL"] == "OPEN"
+        inputs = StepInputs(
+            air_temp_c=air_temp_c, refill_lps=refill_flow_lps(self.params) if valve_open else 0.0
+        )  # no plants until a scenario plants them (contract 11.4)
+        self.reservoir = step_reservoir(self.reservoir, dt_s, inputs, self.params)
+
+
+@dataclass
+class ClimateFarm:
+    """The polyhouse air and the equipment CC1 owns, from layout.climate."""
+
+    air: AirConditions
+    fans: tuple[str, ...]
+    pad_pumps: tuple[str, ...]
+    outputs: dict[str, str]  # by equipment ID: pads, shade, HAF, foggers
+    chillers: dict[str, dict[str, Any]]
+    setpoints: Mapping[str, float]
+    timezone: ZoneInfo
+    mode: str
+    manual_until: datetime | None = None
+    fan_stage: int = 0
+    run_time_s: dict[str, float] = field(default_factory=dict)
+    run_day: date | None = None
+
+    def equipment(self) -> dict[str, Any]:
+        """As contract 6.2: the fan stage, then one entry per piece of equipment."""
+        fans = {
+            fan: "ON" if position < self.fan_stage else "OFF"
+            for position, fan in enumerate(self.fans)
+        }
+        chillers = {chiller: dict(state) for chiller, state in self.chillers.items()}
+        return {"fanStage": self.fan_stage, **fans, **self.outputs, **chillers}
+
+    def run_time_today_min(self) -> dict[str, int]:
+        return {name: int(seconds // 60) for name, seconds in self.run_time_s.items()}
+
+    def step(self, dt_s: float, now: datetime) -> None:
+        """Count run time; "today" is the farm's own day, in the layout's timezone."""
+        local = now.astimezone(self.timezone)
+        if local.date() != self.run_day:
+            self.run_day = local.date()
+            self.run_time_s = dict.fromkeys(self.run_time_s, 0.0)
+            midnight = local.replace(hour=0, minute=0, second=0, microsecond=0)
+            dt_s = min(dt_s, (local - midnight).total_seconds())  # only the new day's part counts
+        if self.fan_stage > 0:
+            self.run_time_s[FANS_GROUP] += dt_s
+        for pad in self.pad_pumps:
+            if self.outputs[pad] == "ON":
+                self.run_time_s[pad] += dt_s
+
+
+@dataclass
+class PowerFarm:
+    """What PM1 monitors. generator and ups are None when the layout says there is none."""
+
+    phases_v: dict[str, float]
+    generator: str | None
+    ups_battery_pct: float | None
+    ups_runtime_min: float | None
+    mains: str = "OK"
+    source: str = "MAINS"
+    ats: str = "MAINS"
+    ups_on_battery: bool = False
+
+
+@dataclass
+class Farm:
+    zones: dict[str, ZoneFarm]
+    climate: ClimateFarm
+    power: PowerFarm
+
+    def step(self, dt_s: float, now: datetime) -> None:
+        """Move the farm forward by dt_s simulated seconds, ending at simulated time `now`."""
+        air_temp_c = self.climate.air.temp_c
+        for zone in self.zones.values():
+            zone.step(dt_s, air_temp_c)
+        self.climate.step(dt_s, now)
+
+
+def load_farm(client_dir: Path) -> Farm:
+    """Build the farm in its configured starting state; a scenario may override it later."""
+    layout = read_pack_file(client_dir, "layout.json")
+    model = read_pack_file(client_dir, "simulator.json").get("model")
+    if not isinstance(model, Mapping):
+        raise ValueError(f"simulator.json: model must be an object, got {model!r}")
+    climate_cfg = read_pack_file(client_dir, "climate.json")
+    features = read_pack_file(client_dir, "features.json")
+    zones = [_build_zone(model, zone) for zone in layout.get("zones", ())]
+    return Farm(
+        zones={zone.zone_id: zone for zone in zones},
+        climate=_build_climate(model, layout, climate_cfg, features),
+        power=_build_power(model, layout.get("power") or {}),
+    )
+
+
+def _build_zone(model: Mapping[str, Any], zone: Mapping[str, Any]) -> ZoneFarm:
+    params = parse_zone_model(model, zone)
+    zone_id = params.zone_id
+    tanks = parse_day_tanks(model, zone)
+    outputs = {f"{zone_id}-CIRC": "ON", f"{zone_id}-REFILL": "CLOSED"}
+    outputs.update({f"{zone_id}-DOSE-{line}": "OFF" for line in tanks})
+    return ZoneFarm(
+        zone_id=zone_id,
+        params=params.reservoir,
+        reservoir=initial_reservoir(params),
+        day_tank_l={line: tank.start_l for line, tank in tanks.items()},
+        day_tank_usable_l={line: tank.usable_l for line, tank in tanks.items()},
+        pump_flow_lpm=parse_circulation_flow_lpm(model),
+        do_fitted=bool((zone.get("sensors") or {}).get("dissolvedOxygen", False)),
+        outputs=outputs,
+    )
+
+
+def _build_climate(
+    model: Mapping[str, Any],
+    layout: Mapping[str, Any],
+    climate_cfg: Mapping[str, Any],
+    features: Mapping[str, Any],
+) -> ClimateFarm:
+    cfg = layout.get("climate")
+    if not isinstance(cfg, Mapping):
+        raise ValueError(f"layout.json: climate must be an object, got {cfg!r}")
+    pad_pumps = tuple(cfg.get("padPumps", ()))
+    foggers = tuple(cfg.get("foggers", ()))
+    outputs = {pad: "OFF" for pad in pad_pumps}
+    outputs.update({shade: SHADE_START for shade in cfg.get("shade", ())})
+    outputs.update({haf: "OFF" for haf in cfg.get("haf", ())})
+    outputs.update({fogger: "OFF" for fogger in foggers} or {RESERVED_FOGGER: "NOT_INSTALLED"})
+    chiller_ids = tuple((cfg.get("chillers") or {}).values())
+    chillers = {}
+    if chiller_ids:
+        setpoint_c = parse_chiller_setpoint(model, climate_cfg.get("chillerSetpointC") or {})
+        chillers = {chiller: {"state": "OFF", "setpointC": setpoint_c} for chiller in chiller_ids}
+    return ClimateFarm(
+        air=parse_air(model, cfg.get("airSensors")),
+        fans=tuple(cfg.get("fans", ())),
+        pad_pumps=pad_pumps,
+        outputs=outputs,
+        chillers=chillers,
+        setpoints=_setpoints(climate_cfg),
+        timezone=_timezone(layout),
+        # Contract 7.5: while climateAutomatic is off, climate stays MANUAL with no time limit.
+        mode="AUTOMATIC" if features.get("climateAutomatic") else "MANUAL",
+        run_time_s=dict.fromkeys((FANS_GROUP, *pad_pumps), 0.0),
+    )
+
+
+def _build_power(model: Mapping[str, Any], cfg: Mapping[str, Any]) -> PowerFarm:
+    supply: PowerSupply = parse_power(model)
+    has_ups = bool(cfg.get("ups"))
+    return PowerFarm(
+        phases_v=dict(supply.phases_v),
+        generator="STOPPED" if cfg.get("generator") else None,
+        ups_battery_pct=supply.ups_battery_pct if has_ups else None,
+        ups_runtime_min=supply.ups_runtime_min if has_ups else None,
+    )
+
+
+def _setpoints(climate_cfg: Mapping[str, Any]) -> dict[str, float]:
+    cfg = climate_cfg.get("setpoints") or {}
+    for key in SETPOINTS:
+        try:
+            require_finite(key, cfg.get(key))
+        except ValueError:
+            raise ValueError(
+                f"climate.json: setpoints.{key} must be a number, got {cfg.get(key)!r}"
+            ) from None
+    return {key: cfg[key] for key in SETPOINTS}
+
+
+def _timezone(layout: Mapping[str, Any]) -> ZoneInfo:
+    name = layout.get("timezone")
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        raise ValueError(f"layout.json: timezone must be an IANA name, got {name!r}") from None

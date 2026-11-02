@@ -58,6 +58,39 @@ messages also carry `simTs`, the simulated time. Heartbeats run on real time at 
 when paused. `SimClock.tick()` gives the simulated seconds since the previous tick, the `dt` that
 the farm model's step will take.
 
+## Telemetry (contract 6.1-6.3)
+
+| Message | Device | Topic | QoS, retained |
+|---|---|---|---|
+| `ZONE_TELEMETRY` | each zone controller | `farm/{site}/zone/{zone}/telemetry` | 0, no |
+| `CLIMATE_TELEMETRY` | climate controller | `farm/{site}/climate/telemetry` | 0, no |
+| `POWER_STATE` | power monitor | `farm/{site}/power/state` | 1, yes |
+
+The clock task (`TickLoop` in `sim/clock.py`) moves the farm forward and takes one reading every 60
+**simulated** seconds, on a fixed grid: at x60 that is one a real second, at x288 about five, and
+while paused none (heartbeats carry on). A step is split at each due time, so a reading shows the
+farm exactly as it was then.
+
+A reading also goes out at once when a value crosses a limit, either way: `alerts.json` for zones
+(`solTempMaxC`, `circFlowMinLpm`, `RESERVOIR_LOW`, `DAYTANK_LOW`), and `climate.json` `setpoints`
+for the air. Staying beyond a limit sends nothing more, and a value flapping across one gets one
+extra reading per period. `POWER_STATE` also goes out on every change and again after a reconnect.
+
+Zones, equipment and dosing lines come from `layout.json`. `sim/farm.py` holds the live state: the
+water comes from the farm model, and the values it has no physics for yet (air, power, circulation
+flow, day-tank levels) start from `simulator.json` and stay there until a weather model, the drills
+and dosing exist. Each is marked as a placeholder with its source. Nothing planted means no uptake,
+until scenarios plant crops. A reading with nothing to measure is `null` with quality `FAULT`.
+
+Everything a device sends goes through one outbox, so `seq` follows publish order across message
+types. A message whose publish fails stays first in line and goes out again with the same `msgId`
+and `seq`. Check real messages against Track 1's models while the simulator runs:
+
+```
+cd backend
+python -m app.contract.watch --seconds 60
+```
+
 ## Settings (`.env` or environment)
 
 | Variable | Default | Meaning |

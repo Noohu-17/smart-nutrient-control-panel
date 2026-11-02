@@ -1,7 +1,7 @@
 # Tool settings for the simulator. Dependencies are pinned in requirements.txt.
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "../backend"]  # ../backend: the T1-7 contract models the tests check against
 testpaths = ["tests"]
 markers = ["broker: needs an MQTT broker on MQTT_HOST:MQTT_PORT; skipped when none is running"]
 
