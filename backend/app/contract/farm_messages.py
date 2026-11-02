@@ -1,5 +1,5 @@
 """Farm → cloud messages (contract §6): ZONE_TELEMETRY, CLIMATE_TELEMETRY, POWER_STATE,
-DEVICE_STATUS and ZONE_STATE.
+DEVICE_STATUS, ZONE_STATE and CLIMATE_STATE.
 
 Maps keyed by equipment IDs, dose lines or sensor positions are plain dicts, because
 those keys come from the client's layout config (contract §2.4, OPEN-12), never from code.
@@ -261,12 +261,25 @@ class ZoneState(Envelope):
     config_version: Count | None  # null before the first DEVICE_CONFIG, as in DEVICE_STATUS
 
 
+# --- 6.9 Climate state ----------------------------------------------------------------
+
+
+class ClimateState(Envelope):
+    type: Literal["CLIMATE_STATE"]
+    mode: ClimateMode
+    manual_until: UtcTime | None  # in MANUAL, when it reverts to AUTOMATIC by itself
+    stopped: StrictBool  # true until a person sends RESUME (§7.8)
+    equipment: ClimateEquipment  # as in §6.2
+    latches: list[str]  # faults locked out until CLEAR_FAULT
+
+
 FARM_MESSAGE_MODELS: dict[str, type[Envelope]] = {
     "ZONE_TELEMETRY": ZoneTelemetry,
     "CLIMATE_TELEMETRY": ClimateTelemetry,
     "POWER_STATE": PowerState,
     "DEVICE_STATUS": DeviceStatus,
     "ZONE_STATE": ZoneState,
+    "CLIMATE_STATE": ClimateState,
 }
 
 

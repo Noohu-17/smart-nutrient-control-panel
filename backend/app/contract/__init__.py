@@ -7,6 +7,7 @@ is checked against the same models.
 from .envelope import ContractModel, Envelope
 from .farm_messages import (
     FARM_MESSAGE_MODELS,
+    ClimateState,
     ClimateTelemetry,
     DeviceStatus,
     DeviceStatusLastWill,
@@ -18,6 +19,7 @@ from .farm_messages import (
 
 __all__ = [
     "FARM_MESSAGE_MODELS",
+    "ClimateState",
     "ClimateTelemetry",
     "ContractModel",
     "DeviceStatus",
