@@ -58,7 +58,15 @@ class ZoneFarm:
     mode: str = "REMOTE"  # the key switch on the panel (contract 6.1)
     estop: bool = False
     leak: bool = False
-    active_cmd_id: str | None = None
+    stopped: bool = False  # a new farm is not stopped; a simulated reboot will set it (6.8)
+    operation: dict[str, Any] | None = None  # the running dose or refill (6.8)
+    latches: set[str] = field(default_factory=set)
+    config_version: int | None = None  # null until the first DEVICE_CONFIG (7.7)
+
+    @property
+    def active_cmd_id(self) -> str | None:
+        """The command running now (6.1): the same one ZONE_STATE reports."""
+        return self.operation["cmdId"] if self.operation else None
 
     @property
     def circ_flow_lpm(self) -> float:
@@ -90,6 +98,8 @@ class ClimateFarm:
     mode: str
     manual_until: datetime | None = None
     fan_stage: int = 0
+    stopped: bool = False
+    latches: set[str] = field(default_factory=set)
     run_time_s: dict[str, float] = field(default_factory=dict)
     run_day: date | None = None
 

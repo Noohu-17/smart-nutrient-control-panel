@@ -91,6 +91,22 @@ cd backend
 python -m app.contract.watch --seconds 60
 ```
 
+## Zone and climate state (contract 6.8, 6.9)
+
+`ZONE_STATE` on `farm/{site}/zone/{zone}/state` and `CLIMATE_STATE` on `farm/{site}/climate/state`,
+both QoS 1 and retained, so a new subscriber gets the current state at once. They go out at the
+start, as soon as the state changes, and again after a reconnect. `ZONE_STATE` also goes out with
+each telemetry message, as contract 6.8 says; `CLIMATE_STATE` only on change, as 6.9 says.
+
+A change means the message body differs: mode, E-STOP, stopped, outputs, the running operation,
+latches, config version, and for climate the fan stage, every piece of equipment and any chiller
+setpoint. Readings and run-time counters are not state. The clock task checks every tick, even while
+paused. Controllers call `publish_state_if_changed()` after each transition, so a pump that starts
+and stops within one tick is still seen. State goes out before the telemetry of the same moment.
+
+A new farm starts with `stopped: false`. Nothing changes state yet: commands arrive with the
+controllers, and the tests change it directly.
+
 ## Settings (`.env` or environment)
 
 | Variable | Default | Meaning |

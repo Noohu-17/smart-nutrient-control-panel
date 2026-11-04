@@ -155,7 +155,7 @@ def test_seq_counts_every_message_of_the_boot_in_publish_order(farm):
         return client.published
 
     sent = [p["message"] for p in asyncio.run(scenario()) if "seq" in p["message"]]
-    assert {m["type"] for m in sent} == {"DEVICE_STATUS", "ZONE_TELEMETRY"}  # both in one count
+    assert {m["type"] for m in sent} == {"DEVICE_STATUS", "ZONE_STATE", "ZONE_TELEMETRY"}
     assert [m["seq"] for m in sent] == list(range(1, len(sent) + 1))
     assert len({m["msgId"] for m in sent}) == len(sent)
     assert {m["bootId"] for m in sent} == {7}
@@ -167,8 +167,10 @@ def test_two_devices_count_seq_on_their_own(farm):
     climate.take_reading(REAL)
     zone_sent = asyncio.run(run_session(zone, FakeClient()))
     climate_sent = asyncio.run(run_session(climate, FakeClient()))
-    assert readings_of(zone_sent, "ZONE_TELEMETRY")[0]["message"]["seq"] == 1
-    assert readings_of(climate_sent, "CLIMATE_TELEMETRY")[0]["message"]["seq"] == 1
+    assert readings_of(zone_sent, "ZONE_STATE")[0]["message"]["seq"] == 1
+    assert readings_of(climate_sent, "CLIMATE_STATE")[0]["message"]["seq"] == 1
+    assert readings_of(zone_sent, "ZONE_TELEMETRY")[0]["message"]["seq"] == 2
+    assert readings_of(climate_sent, "CLIMATE_TELEMETRY")[0]["message"]["seq"] == 2
 
 
 def test_a_new_boot_id_is_carried_by_every_message(farm):
@@ -214,9 +216,10 @@ def alarm_rig(farm, speed=60):
 
 
 def outbox_messages(device):
+    """The readings waiting in the outbox; the state messages are test_state_publishing's."""
     messages = [item.build() for item in device._outbox]
     device._outbox.clear()
-    return messages
+    return [m for m in messages if m["type"] not in ("ZONE_STATE", "CLIMATE_STATE")]
 
 
 def test_crossing_an_alarm_sends_a_reading_at_once_and_only_once(farm):
@@ -379,11 +382,12 @@ def test_a_failed_publish_is_sent_again_as_the_same_message(farm):
     with pytest.raises(aiomqtt.MqttError):
         asyncio.run(device.session(FakeClient(fail_on=1)))
     kept = json.loads(device._in_flight.payload)
-    assert kept["type"] == "ZONE_TELEMETRY"
+    assert kept["type"] == "ZONE_STATE"
 
     sent = [p["message"] for p in asyncio.run(run_session(device, FakeClient()))]
     assert sent[0] == kept  # same msgId and seq, so the back end can drop a duplicate
     assert [m["seq"] for m in sent if "seq" in m][:2] == [1, 2]  # and the count carries on
+    assert sent[1]["type"] == "ZONE_TELEMETRY"
 
 
 def test_a_failed_publish_does_not_stop_later_readings_or_leave_a_seq_gap(farm):
@@ -408,7 +412,8 @@ def test_readings_taken_before_the_first_connection_go_out_in_order(farm):
     for minute in range(3):
         device.take_reading(SIM_START + timedelta(minutes=minute))
     sent = readings_of(asyncio.run(run_session(device, FakeClient())), "ZONE_TELEMETRY")
-    assert [p["message"]["seq"] for p in sent] == [1, 2, 3]
+    seqs = [p["message"]["seq"] for p in sent]
+    assert len(seqs) == 3 and seqs == sorted(seqs)
 
 
 def test_a_long_outage_keeps_the_newest_readings_and_says_so(farm, caplog):
@@ -504,4 +509,4 @@ def test_every_zone_device_watches_its_own_zones_limits(farm):
     zone.reservoir = ReservoirState(zone.reservoir.volume_l, zone.reservoir.nutrient_g,
                                     zone.reservoir.ph, 41.0)
     device.take_urgent_reading(REAL)
-    assert len(device._outbox) == 1
+    assert len(outbox_messages(device)) == 1

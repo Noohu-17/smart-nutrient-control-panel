@@ -1,4 +1,5 @@
-"""Contract messages: the envelope (section 5), DEVICE_STATUS (6.4) and the readings (6.1-6.3).
+"""Contract messages: the envelope (section 5), DEVICE_STATUS (6.4), the readings (6.1-6.3)
+and the retained controller state (6.8, 6.9).
 
 Messages are plain dicts built here, field for field as the contract says. The tests check
 them against Track 1's models (backend/app/contract).
@@ -39,6 +40,14 @@ def climate_telemetry_topic(site: str) -> str:
 
 def power_state_topic(site: str) -> str:
     return f"farm/{site}/power/state"
+
+
+def zone_state_topic(site: str, zone_id: str) -> str:
+    return f"farm/{site}/zone/{zone_id}/state"
+
+
+def climate_state_topic(site: str) -> str:
+    return f"farm/{site}/climate/state"
 
 
 class Envelope:
@@ -177,6 +186,32 @@ def power_state(power: PowerFarm) -> dict[str, Any]:
             "runtimeMin": _rounded(power.ups_runtime_min, 0),
         }
     return state
+
+
+def zone_state(zone: ZoneFarm) -> dict[str, Any]:
+    """ZONE_STATE (6.8) without its envelope: equal bodies mean nothing meaningful changed."""
+    return {
+        "zone": zone.zone_id,
+        "mode": zone.mode,
+        "estop": zone.estop,
+        "stopped": zone.stopped,
+        "outputs": dict(zone.outputs),
+        "operation": dict(zone.operation) if zone.operation else None,
+        "latches": sorted(zone.latches),
+        "configVersion": zone.config_version,
+    }
+
+
+def climate_state(climate: ClimateFarm) -> dict[str, Any]:
+    """CLIMATE_STATE (6.9) without its envelope. No readings or run time: those are telemetry."""
+    until = climate.manual_until
+    return {
+        "mode": climate.mode,
+        "manualUntil": utc_ts(until) if until else None,
+        "stopped": climate.stopped,
+        "equipment": climate.equipment(),
+        "latches": sorted(climate.latches),
+    }
 
 
 def _rounded(value: float | None, digits: int) -> float | int | None:

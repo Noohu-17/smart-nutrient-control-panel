@@ -123,7 +123,8 @@ def test_each_device_counts_seq_across_telemetry_and_heartbeats(live):
         seqs = sorted(m["seq"] for m in messages)
         assert seqs == list(range(1, len(seqs) + 1)), device  # none lost, none repeated
         assert len({m["msgId"] for m in messages}) == len(messages), device
-    assert {m["type"] for m in by_device["ZC1"]} == {"DEVICE_STATUS", "ZONE_TELEMETRY"}
+    assert {m["type"] for m in by_device["ZC1"]} == {"DEVICE_STATUS", "ZONE_STATE",
+                                                     "ZONE_TELEMETRY"}
 
 
 def test_readings_are_60_simulated_seconds_apart_at_x288(live):
@@ -150,8 +151,13 @@ def test_a_new_subscriber_gets_retained_power_state_but_no_retained_telemetry(br
     kept = run(scenario())
     types = {r[3]["type"] for r in kept}
     assert all(r[2] for r in kept)  # delivered from the broker's store
-    assert "POWER_STATE" in types
+    assert {"POWER_STATE", "ZONE_STATE", "CLIMATE_STATE"} <= types
     assert not types & {"ZONE_TELEMETRY", "CLIMATE_TELEMETRY"}
     [power] = of_type(kept, "POWER_STATE")
     assert power[1] == 1 and power[3]["device"] == "PM1"
     parse_farm_message(power[3])
+    assert {r[3]["zone"] for r in of_type(kept, "ZONE_STATE")} == {"Z1", "Z2"}
+    assert {r[1] for r in of_type(kept, "ZONE_STATE")} == {1}
+    [climate] = of_type(kept, "CLIMATE_STATE")
+    assert climate[1] == 1
+    parse_farm_message(climate[3])

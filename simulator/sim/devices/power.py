@@ -43,4 +43,4 @@ class PowerDevice(ReadingDevice):
         self._last_sent = body
 
     def on_reconnect(self) -> None:
-        self._queue(self.body(), self.clock.now() if self.clock else None, periodic=False)
+        self._queue(self.body(), self.current_sim_ts(), periodic=False)
