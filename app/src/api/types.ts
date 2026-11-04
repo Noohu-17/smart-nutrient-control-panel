@@ -52,17 +52,13 @@ export type Farm = {
   features: Features;
 };
 
-/* ---------- GET /api/zones/{zoneId} (contract §6.1, ZONE_TELEMETRY) ---------- */
-export type ZoneTelemetry = {
-  v: number;
-  type: "ZONE_TELEMETRY";
-  msgId: string;
-  ts: string; // ISO time the controller sent it
-  site: string;
-  device: string;
-  bootId: number;
-  seq: number;
+/* ---------- GET /api/zones/{zoneId} (contract §11.2, zone response; readings from §6.1) ---------- */
+export type ZoneStatus = {
   zone: string;
+  online: boolean; // false once the controller has been silent 3 minutes; the last values still come
+  lastSeen: string | null; // newest ts of any message from the controller; null if never heard from
+  ts: string | null; // when the latest reading was taken
+  simTs?: string; // playground sites only
   readings: {
     ec: number | null; // mS/cm
     ph: number | null;
@@ -74,12 +70,18 @@ export type ZoneTelemetry = {
     dayTankPct: Record<DoseLine, number | null>;
     dayTankL: Record<DoseLine, number | null>;
   };
+  // {} until the zone first reports; OK becomes STALE past the fresh limit or when offline
   quality: Partial<Record<"ec" | "ph" | "solTempC" | "reservoirPct" | "circFlowLpm", Quality>>;
-  equipment: Record<string, string>;
-  mode: "REMOTE" | "LOCAL" | "MAINT";
-  estop: boolean;
-  leak: boolean;
+  equipment: Record<string, "ON" | "OFF" | "OPEN" | "CLOSED">;
+  // null = not known yet (never reported, or ZONE_STATE not stored yet)
+  mode: "REMOTE" | "LOCAL" | "MAINT" | null;
+  estop: boolean | null;
+  leak: boolean | null;
+  stopped: boolean | null;
   activeCmdId: string | null;
+  operation: { cmdId: string; kind: "DOSE" | "REFILL"; state: string; line?: string | null } | null;
+  latches: string[];
+  configVersion: number | null;
 };
 
 /* ---------- errors (contract §11.1) ---------- */

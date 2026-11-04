@@ -1,6 +1,6 @@
-import type { Quality, ZoneTelemetry } from "../api/types";
+import type { Quality, ZoneStatus } from "../api/types";
 
-type QualityKey = keyof ZoneTelemetry["quality"];
+type QualityKey = keyof ZoneStatus["quality"];
 
 export type ReadingSpec = { key: QualityKey; label: string; unit: string; decimals: number };
 

@@ -17,7 +17,11 @@ describe("ReadingCard", () => {
 
     rerender(<ReadingCard spec={EC} value={2.1} quality="OK" target={target} />);
     expect(card()).toHaveClass("reading-warn");
-    expect(card()).toHaveTextContent("Outside target");
+    expect(card()).toHaveTextContent("Too high");
+
+    rerender(<ReadingCard spec={EC} value={0.95} quality="OK" target={target} />);
+    expect(card()).toHaveClass("reading-warn");
+    expect(card()).toHaveTextContent("Too low");
 
     rerender(<ReadingCard spec={EC} value={1.62} quality="STALE" target={target} />);
     expect(card()).toHaveClass("reading-off");

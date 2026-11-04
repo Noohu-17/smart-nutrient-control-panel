@@ -6,11 +6,12 @@ import { StatusChip } from "../../components/StatusChip";
 import { ZONE_READINGS, zonePath } from "../../config/readings";
 import { ZoneActions } from "../zones/ZoneActions";
 
-/** Overview card for one zone: its latest readings, or an Offline look when there are none. */
+/** Overview card for one zone: its latest readings, or an Offline look when the controller is silent
+    (its last values stay, greyed) or the zone can't be fetched. */
 export function ZoneCard({ zone }: { zone: FarmZone }) {
   const telemetry = useZone(zone.id);
   const t = telemetry.data;
-  const offline = telemetry.isError;
+  const offline = telemetry.isError || t?.online === false;
 
   return (
     <section className={`zone-card${offline ? " offline" : ""}`} aria-labelledby={`zone-${zone.id}`}>

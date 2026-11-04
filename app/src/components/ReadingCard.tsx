@@ -19,13 +19,15 @@ function readingTone(
 
 function statusText(
   tone: ReadingTone,
+  value: number | null | undefined,
   quality: Quality | undefined,
   target: Range | undefined,
   stale: boolean,
 ) {
   if (quality && quality !== "OK") return QUALITY_TEXT[quality];
   if (tone === "off") return stale ? QUALITY_TEXT.STALE : "No data";
-  if (tone === "warn") return "Outside target";
+  // say which way it is off, so the grower knows whether to raise or lower it
+  if (tone === "warn") return target && value! < target.min ? "Too low" : "Too high";
   return target ? "In target" : undefined;
 }
 
@@ -45,7 +47,7 @@ export function ReadingCard({
   stale?: boolean;
 }) {
   const tone = readingTone(value, quality, target, stale);
-  const status = statusText(tone, quality, target, stale);
+  const status = statusText(tone, value, quality, target, stale);
   return (
     <div className={`reading reading-${tone}`} role="group" aria-label={spec.label}>
       <span className="reading-head">

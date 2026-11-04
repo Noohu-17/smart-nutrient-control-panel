@@ -1,6 +1,10 @@
 // src/api/client.ts · the ONLY place that calls fetch. Screens use the hooks in hooks.ts.
 import type { ApiErrorBody } from "./types";
 
+/** Development answers from the fake API (MSW) unless VITE_USE_MOCKS=false; then Vite's proxy
+    sends /api to the real back end (vite.config.ts). Production never uses the fake API. */
+export const USE_MOCKS = import.meta.env.DEV && import.meta.env.VITE_USE_MOCKS !== "false";
+
 export class ApiError extends Error {
   status: number;
   code: string | undefined;
@@ -28,7 +32,7 @@ export async function getJson<T>(path: string): Promise<T> {
 
   // Development: an HTML page instead of JSON means the fake API worker went to sleep and
   // Vite answered with index.html. Wake the worker and ask once more.
-  if (import.meta.env.DEV && !isJson(response)) {
+  if (USE_MOCKS && !isJson(response)) {
     const { reactivateMocking } = await import("../mocks/browser");
     reactivateMocking();
     await new Promise((resolve) => setTimeout(resolve, 200));

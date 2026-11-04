@@ -1,7 +1,7 @@
 // src/api/hooks.ts · TanStack Query hooks. Screens call these, never fetch.
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { getJson } from "./client";
-import type { Farm, ZoneTelemetry } from "./types";
+import type { Farm, ZoneStatus } from "./types";
 
 const ONE_MINUTE = 60_000;
 
@@ -28,7 +28,7 @@ export function useFarm() {
 function zoneQueryOptions(zoneId: string) {
   return {
     queryKey: ["zone", zoneId] as const,
-    queryFn: () => getJson<ZoneTelemetry>(`/zones/${zoneId}`),
+    queryFn: () => getJson<ZoneStatus>(`/zones/${zoneId}`),
     refetchInterval: ONE_MINUTE,
   };
 }
