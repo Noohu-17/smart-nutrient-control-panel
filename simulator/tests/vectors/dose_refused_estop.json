@@ -3,7 +3,7 @@
   "id": "ZC-DOSE-ESTOP-01",
   "title": "A DOSE that arrives while the zone E-STOP is pressed is refused with ESTOP, and no pump runs",
   "contract": {
-    "version": "v0.8 (draft; sections 7-9 not yet locked)",
+    "version": "v1.0",
     "refs": ["9 rule 1", "8.4 ESTOP", "7.1", "7.2", "6.5", "6.6", "6.8", "8.3 rule 5", "9 rule 4", "9 rule 6", "9 rule 10", "14"]
   },
   "device": "ZC1",
@@ -12,14 +12,15 @@
   "stepPeriodMs": 100,
   "runUntilMs": 15000,
   "assumptions": [
-    "Pressing the E-STOP also sets stopped (contract 6.8). A start command is then refused with ESTOP rather than ZONE_STOPPED, because the E-STOP check runs first (Track 3 guide section 4 and its dose.py skeleton). To be recorded in docs/controller-spec.md.",
-    "HAL names are provisional until io_map.json is agreed (contract 2.5): inputs ESTOP, MODE_REMOTE, LEAK; outputs PUMP_<line> for each entry in doseLines (OPEN-12), REFILL_VALVE, CIRC_PUMP; sensors as listed in start.sensors.",
+    "Pressing the E-STOP also sets stopped (contract 6.8). A start command is then refused with ESTOP rather than ZONE_STOPPED, because ESTOP comes first (contract 9 rule 1).",
+    "HAL names are provisional until io_map.json is agreed (contract 2.5): inputs ESTOP, MODE_REMOTE, MODE_MAINT, LEAK; outputs PUMP_<line> for each entry in doseLines (OPEN-12), REFILL_VALVE, CIRC_PUMP; sensors as listed in start.sensors.",
     "Circulation keeps running while the E-STOP is pressed (contract 6.5 example: 'circulation keeps running').",
     "The command is fresh and passes every other controller check (REMOTE, idle, within per-dose and 24 h limits, day-tanks and reservoir above minimum, fresh EC and pH, no latch, not stopped before the E-STOP), so ESTOP is the only reason to refuse it."
   ],
   "start": {
     "wallClockUtc": "2026-11-09T04:55:00.000Z",
     "doseLines": ["A", "B", "ACID"],
+    "dayTanks": { "A": { "usableL": 50 }, "B": { "usableL": 50 }, "ACID": { "usableL": 50 } },
     "config": {
       "configVersion": 7,
       "limits": {
@@ -33,7 +34,7 @@
       "autoRefill": { "enabled": false, "startBelowPct": 60, "stopAtPct": 90, "maxRunMin": 30 },
       "alarms": { "solTempMaxC": 26.0, "circFlowMinLpm": 15.0 }
     },
-    "inputs": { "ESTOP": false, "MODE_REMOTE": true, "LEAK": false },
+    "inputs": { "ESTOP": false, "MODE_REMOTE": true, "MODE_MAINT": false, "LEAK": false },
     "sensors": {
       "EC": { "value": 1.51, "status": "OK" },
       "PH": { "value": 6.21, "status": "OK" },

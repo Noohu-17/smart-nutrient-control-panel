@@ -1,10 +1,10 @@
 """Structure and contract checks for the controller test vectors (T3-3).
 
-These tests do NOT run the vectors against a controller: the controllers and
-the vector runner don't exist yet. They check that every vector is valid JSON,
-uses the contract's names, IDs, topics and enums, has a consistent timeline,
-and is listed in TODO.md. The enum lists are copied from contract v0.8; when
-the contract's JSON Schemas land in docs/contract/schemas/, use those instead.
+These tests don't run the vectors: test_vectors.py does. They check that every
+vector is valid JSON, uses the contract's names, IDs, topics and enums, has a
+consistent timeline, and is listed in TODO.md. The enum lists are copied from
+contract v1.0; when the contract's JSON Schemas land in docs/contract/schemas/,
+use those instead.
 """
 
 from __future__ import annotations
@@ -22,14 +22,15 @@ VECTOR_DIR = Path(__file__).resolve().parents[1] / "vectors"
 VECTOR_FILES = sorted(VECTOR_DIR.glob("*.json"))
 CATALOGUE = VECTOR_DIR / "TODO.md"
 
-# Contract v0.8 enums.
+# Contract v1.0 enums.
 CMD_STATES = {  # 6.6
     "ACCEPTED", "EXECUTING", "COMPLETED", "PARTIAL", "FAILED", "STOPPED", "REJECTED",
 }
 FARM_REASONS = {  # 8.4, codes a controller may raise
     "ESTOP", "NOT_REMOTE", "BUSY", "LIMIT_DOSE", "LIMIT_24H", "DAYTANK_LOW", "RESERVOIR_LOW",
     "SENSOR_STALE", "EXPIRED_ON_ARRIVAL", "NO_FLOW", "FLOW_SHORT", "TIMEOUT", "STOP_REQUESTED",
-    "ESTOP_DURING", "MODE_CHANGED_DURING", "REBOOT_MID_DOSE", "NOT_MANUAL", "NOT_INSTALLED",
+    "ESTOP_DURING", "MODE_CHANGED_DURING", "FAULT_DURING", "REBOOT_MID_DOSE", "NOT_MANUAL",
+    "NOT_INSTALLED",
     "NEEDS_FANS", "FEATURE_OFF", "CIRC_PROTECTED", "INVALID_COMMAND", "ZONE_STOPPED",
     "FAULT_LATCHED",
 }
@@ -41,12 +42,14 @@ EVENT_KINDS = {  # 6.5
 COMMAND_KINDS = {  # 7
     "DOSE", "REFILL", "STOP", "CLIMATE_MODE", "CLIMATE_EQUIPMENT", "RESUME", "CLEAR_FAULT",
 }
-COMMAND_TOPICS = {  # 4; RESUME and CLEAR_FAULT have no topic in v0.8 section 4 yet
+COMMAND_TOPICS = {  # 4; climate's RESUME and CLEAR_FAULT go to its cmd topic (7.8, 7.9)
     "DOSE": "farm/{site}/zone/{zone}/cmd",
     "REFILL": "farm/{site}/zone/{zone}/cmd",
     "STOP": "farm/{site}/stop",
     "CLIMATE_MODE": "farm/{site}/climate/cmd",
     "CLIMATE_EQUIPMENT": "farm/{site}/climate/cmd",
+    "RESUME": "farm/{site}/zone/{zone}/cmd",
+    "CLEAR_FAULT": "farm/{site}/zone/{zone}/cmd",
 }
 REPORT_TOPICS = {  # 4
     "ZC": {
@@ -62,12 +65,14 @@ REPORT_TOPICS = {  # 4
         "CMD_STATE": "farm/{site}/climate/cmd/state",
     },
 }
-ACTIONS = {"SET_INPUTS", "SET_SENSORS", "DELIVER_COMMAND"}
+ACTIONS = {"SET_INPUTS", "SET_SENSORS", "DELIVER_COMMAND", "REBOOT"}
 REQUIRED_KEYS = {
     "vectorFormat", "id", "title", "contract", "device", "site", "zone", "stepPeriodMs",
     "runUntilMs", "assumptions", "start", "timeline", "never", "final",
 }
 COMMAND_EXPIRY = timedelta(seconds=60)  # contract 14: expiry 60 s from issuedAt
+STOP_EXPIRY = timedelta(minutes=5)  # contract 7.4: ALL_OPERATIONS and ZONE
+HAL_CALL = r"nvs_write:\w+|set_output:\w+:(on|off)"
 
 
 def load(path: Path) -> dict[str, Any]:
@@ -127,7 +132,8 @@ def test_vector_is_well_formed_and_matches_the_contract(path: Path):
     assert isinstance(period, int) and period > 0
     assert vector["assumptions"], "list the assumptions a reviewer could disagree with"
 
-    known_cmd_ids: set[str] = set()
+    known_cmd_ids = {item["cmdId"] for item in start["controller"]["recentCmdIds"]}
+    known_cmd_ids |= {start["nvs"]["journal"]["cmdId"]} if "journal" in start["nvs"] else set()
     last_at = -1
     for entry in vector["timeline"]:
         at = entry["atMs"]
@@ -139,12 +145,16 @@ def test_vector_is_well_formed_and_matches_the_contract(path: Path):
             assert entry["inputs"].keys() <= start["inputs"].keys()
         elif action == "SET_SENSORS":
             assert entry["sensors"].keys() <= start["sensors"].keys()
+        elif action == "REBOOT":
+            assert entry["reason"], "a reboot says why"
         else:
             known_cmd_ids.add(
                 check_command(entry, site, zone, lines, clock + timedelta(milliseconds=at))
             )
         for expected in entry["expect"]["messages"]:
             check_expected_message(expected, site, zone, family)
+        for call in entry["expect"].get("calls", []):
+            assert re.fullmatch(HAL_CALL, call), f"not a HAL call: {call}"
 
     for expected in vector["never"]["messages"]:
         check_expected_message(expected, site, zone, family, needs_topic=False)
@@ -169,10 +179,10 @@ def check_command(entry: dict, site: str, zone: str, lines: list[str], arrival: 
     assert cmd["kind"] in COMMAND_KINDS
     issued = utc(cmd["issuedAt"])
     assert utc(cmd["ts"]) <= arrival and issued <= arrival
-    assert utc(cmd["expiresAt"]) - issued == COMMAND_EXPIRY
+    assert utc(cmd["expiresAt"]) - issued == expected_expiry(cmd)
     pattern = COMMAND_TOPICS.get(cmd["kind"], "farm/{site}/")
     assert entry["topic"].startswith(pattern.format(site=site, zone=zone))
-    if cmd["kind"] == "DOSE":
+    if cmd["kind"] == "DOSE" and not entry.get("malformed"):
         assert cmd["target"] == {"zone": zone}
         names = [item["line"] for item in cmd["lines"]]
         assert set(names) <= set(lines), "dose names a line this zone doesn't have"
@@ -180,6 +190,11 @@ def check_command(entry: dict, site: str, zone: str, lines: list[str], arrival: 
         for item in cmd["lines"]:
             assert isinstance(item["ml"], int) and item["ml"] >= 0, "volumes are whole mL"
     return cmd["cmdId"]
+
+
+def expected_expiry(cmd: dict) -> timedelta:
+    scope = cmd["target"].get("scope")
+    return STOP_EXPIRY if cmd["kind"] == "STOP" and scope != "ALL_EQUIPMENT" else COMMAND_EXPIRY
 
 
 def check_expected_message(

@@ -1,0 +1,622 @@
+{
+  "vectorFormat": 1,
+  "id": "ZC-REFILL-CHECKS-01",
+  "title": "REFILL START is refused for ESTOP, FAULT_LATCHED, ZONE_STOPPED and NOT_REMOTE in turn",
+  "contract": {
+    "version": "v1.0",
+    "refs": [
+      "9 rule 1",
+      "8.4"
+    ]
+  },
+  "device": "ZC1",
+  "site": "siet-ph1",
+  "zone": "Z1",
+  "stepPeriodMs": 100,
+  "runUntilMs": 10000,
+  "assumptions": [
+    "Apart from what this vector tests, the command is fresh and passes every other check in contract 9 rule 1."
+  ],
+  "start": {
+    "wallClockUtc": "2026-11-09T04:55:00.000Z",
+    "doseLines": [
+      "A",
+      "B",
+      "ACID"
+    ],
+    "dayTanks": {
+      "A": {
+        "usableL": 50
+      },
+      "B": {
+        "usableL": 50
+      },
+      "ACID": {
+        "usableL": 50
+      }
+    },
+    "config": {
+      "configVersion": 7,
+      "limits": {
+        "maxPerDoseMl": {
+          "A": 300,
+          "B": 300,
+          "ACID": 100
+        },
+        "max24hMl": {
+          "A": 1500,
+          "B": 1500,
+          "ACID": 400
+        },
+        "ecCeiling": 2.4,
+        "phMin": 5.5,
+        "phMax": 6.8,
+        "minReservoirPctToDose": 30
+      },
+      "autoRefill": {
+        "enabled": false,
+        "startBelowPct": 60,
+        "stopAtPct": 90,
+        "maxRunMin": 30
+      },
+      "alarms": {
+        "solTempMaxC": 26.0,
+        "circFlowMinLpm": 15.0
+      }
+    },
+    "inputs": {
+      "ESTOP": true,
+      "MODE_REMOTE": false,
+      "MODE_MAINT": false,
+      "LEAK": false
+    },
+    "sensors": {
+      "EC": {
+        "value": 1.51,
+        "status": "OK"
+      },
+      "PH": {
+        "value": 6.21,
+        "status": "OK"
+      },
+      "SOL_TEMP": {
+        "value": 23.4,
+        "status": "OK"
+      },
+      "RESERVOIR_PCT": {
+        "value": 78,
+        "status": "OK"
+      },
+      "CIRC_FLOW": {
+        "value": 31.0,
+        "status": "OK"
+      },
+      "DAYTANK_A_PCT": {
+        "value": 64,
+        "status": "OK"
+      },
+      "DAYTANK_B_PCT": {
+        "value": 66,
+        "status": "OK"
+      },
+      "DAYTANK_ACID_PCT": {
+        "value": 81,
+        "status": "OK"
+      }
+    },
+    "outputs": {
+      "CIRC_PUMP": true,
+      "REFILL_VALVE": false,
+      "PUMP_A": false,
+      "PUMP_B": false,
+      "PUMP_ACID": false
+    },
+    "controller": {
+      "mode": "LOCAL",
+      "stopped": true,
+      "latches": [
+        "LEAK"
+      ],
+      "operation": null,
+      "dosed24hMl": {
+        "A": 0,
+        "B": 0,
+        "ACID": 0
+      },
+      "recentCmdIds": []
+    },
+    "nvs": {}
+  },
+  "timeline": [
+    {
+      "atMs": 1000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "7c916577-73ad-4116-bff3-86c93aeb1149",
+        "ts": "2026-11-09T04:55:00.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "43d58322-1ffc-4968-afbb-ff2fe0221032",
+        "kind": "REFILL",
+        "issuedAt": "2026-11-09T04:55:00.800Z",
+        "expiresAt": "2026-11-09T04:56:00.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        },
+        "action": "START",
+        "targetPct": 90,
+        "maxDurationS": 1800
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "43d58322-1ffc-4968-afbb-ff2fe0221032",
+              "state": "REJECTED",
+              "reason": "ESTOP"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 2000,
+      "action": "SET_INPUTS",
+      "inputs": {
+        "ESTOP": false
+      },
+      "expect": {
+        "messages": []
+      }
+    },
+    {
+      "atMs": 3000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "7f942633-6739-43df-9c5c-110d1a7d0a97",
+        "ts": "2026-11-09T04:55:02.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "2b49d74f-fa80-423b-87fd-c16316223956",
+        "kind": "REFILL",
+        "issuedAt": "2026-11-09T04:55:02.800Z",
+        "expiresAt": "2026-11-09T04:56:02.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        },
+        "action": "START",
+        "targetPct": 90,
+        "maxDurationS": 1800
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "2b49d74f-fa80-423b-87fd-c16316223956",
+              "state": "REJECTED",
+              "reason": "FAULT_LATCHED"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 4000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "30f0f5d5-2b0e-483b-b680-ce369a339824",
+        "ts": "2026-11-09T04:55:03.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "3324ea36-663e-46bf-8a9b-c72a6f7518c9",
+        "kind": "CLEAR_FAULT",
+        "issuedAt": "2026-11-09T04:55:03.800Z",
+        "expiresAt": "2026-11-09T04:56:03.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        },
+        "fault": "LEAK"
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "3324ea36-663e-46bf-8a9b-c72a6f7518c9",
+              "state": "ACCEPTED"
+            }
+          },
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "3324ea36-663e-46bf-8a9b-c72a6f7518c9",
+              "state": "COMPLETED"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 5000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "4f9a1093-8d1f-41e4-ac51-3508c466c915",
+        "ts": "2026-11-09T04:55:04.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "af151bd5-d2a9-451d-9d99-8544143912ff",
+        "kind": "REFILL",
+        "issuedAt": "2026-11-09T04:55:04.800Z",
+        "expiresAt": "2026-11-09T04:56:04.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        },
+        "action": "START",
+        "targetPct": 90,
+        "maxDurationS": 1800
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "af151bd5-d2a9-451d-9d99-8544143912ff",
+              "state": "REJECTED",
+              "reason": "ZONE_STOPPED"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 6000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "8a3e1971-67b3-48cb-987c-583d54351432",
+        "ts": "2026-11-09T04:55:05.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "3ffdc46a-2f30-4914-be0c-9f5ebb4e649c",
+        "kind": "RESUME",
+        "issuedAt": "2026-11-09T04:55:05.800Z",
+        "expiresAt": "2026-11-09T04:56:05.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        }
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "3ffdc46a-2f30-4914-be0c-9f5ebb4e649c",
+              "state": "ACCEPTED"
+            }
+          },
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "3ffdc46a-2f30-4914-be0c-9f5ebb4e649c",
+              "state": "COMPLETED"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 7000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "6f3c49f0-6bbd-40d9-8344-49092fc27339",
+        "ts": "2026-11-09T04:55:06.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "58663ced-56ee-485c-b659-7ef5d8fa87dc",
+        "kind": "REFILL",
+        "issuedAt": "2026-11-09T04:55:06.800Z",
+        "expiresAt": "2026-11-09T04:56:06.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        },
+        "action": "START",
+        "targetPct": 90,
+        "maxDurationS": 1800
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "58663ced-56ee-485c-b659-7ef5d8fa87dc",
+              "state": "REJECTED",
+              "reason": "NOT_REMOTE"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 8000,
+      "action": "SET_INPUTS",
+      "inputs": {
+        "MODE_REMOTE": true
+      },
+      "expect": {
+        "messages": []
+      }
+    },
+    {
+      "atMs": 9000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "ff127649-4a68-4fa1-b775-9846463beb26",
+        "ts": "2026-11-09T04:55:08.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "6d18e465-90ac-42d9-aa02-c8ef5f0f6724",
+        "kind": "REFILL",
+        "issuedAt": "2026-11-09T04:55:08.800Z",
+        "expiresAt": "2026-11-09T04:56:08.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        },
+        "action": "START",
+        "targetPct": 90,
+        "maxDurationS": 1800
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "6d18e465-90ac-42d9-aa02-c8ef5f0f6724",
+              "state": "ACCEPTED"
+            }
+          },
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "6d18e465-90ac-42d9-aa02-c8ef5f0f6724",
+              "state": "EXECUTING"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "never": {
+    "outputsOn": [],
+    "outputsOff": [
+      "CIRC_PUMP"
+    ],
+    "messages": [
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "43d58322-1ffc-4968-afbb-ff2fe0221032",
+          "state": "ACCEPTED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "43d58322-1ffc-4968-afbb-ff2fe0221032",
+          "state": "EXECUTING"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "43d58322-1ffc-4968-afbb-ff2fe0221032",
+          "state": "COMPLETED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "43d58322-1ffc-4968-afbb-ff2fe0221032",
+          "state": "PARTIAL"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "43d58322-1ffc-4968-afbb-ff2fe0221032",
+          "state": "FAILED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "43d58322-1ffc-4968-afbb-ff2fe0221032",
+          "state": "STOPPED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "2b49d74f-fa80-423b-87fd-c16316223956",
+          "state": "ACCEPTED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "2b49d74f-fa80-423b-87fd-c16316223956",
+          "state": "EXECUTING"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "2b49d74f-fa80-423b-87fd-c16316223956",
+          "state": "COMPLETED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "2b49d74f-fa80-423b-87fd-c16316223956",
+          "state": "PARTIAL"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "2b49d74f-fa80-423b-87fd-c16316223956",
+          "state": "FAILED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "2b49d74f-fa80-423b-87fd-c16316223956",
+          "state": "STOPPED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "af151bd5-d2a9-451d-9d99-8544143912ff",
+          "state": "ACCEPTED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "af151bd5-d2a9-451d-9d99-8544143912ff",
+          "state": "EXECUTING"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "af151bd5-d2a9-451d-9d99-8544143912ff",
+          "state": "COMPLETED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "af151bd5-d2a9-451d-9d99-8544143912ff",
+          "state": "PARTIAL"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "af151bd5-d2a9-451d-9d99-8544143912ff",
+          "state": "FAILED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "af151bd5-d2a9-451d-9d99-8544143912ff",
+          "state": "STOPPED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "58663ced-56ee-485c-b659-7ef5d8fa87dc",
+          "state": "ACCEPTED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "58663ced-56ee-485c-b659-7ef5d8fa87dc",
+          "state": "EXECUTING"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "58663ced-56ee-485c-b659-7ef5d8fa87dc",
+          "state": "COMPLETED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "58663ced-56ee-485c-b659-7ef5d8fa87dc",
+          "state": "PARTIAL"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "58663ced-56ee-485c-b659-7ef5d8fa87dc",
+          "state": "FAILED"
+        }
+      },
+      {
+        "type": "CMD_STATE",
+        "match": {
+          "cmdId": "58663ced-56ee-485c-b659-7ef5d8fa87dc",
+          "state": "STOPPED"
+        }
+      }
+    ]
+  },
+  "final": {
+    "outputs": {
+      "CIRC_PUMP": true,
+      "REFILL_VALVE": true,
+      "PUMP_A": false,
+      "PUMP_B": false,
+      "PUMP_ACID": false
+    }
+  }
+}

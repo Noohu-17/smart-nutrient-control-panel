@@ -118,6 +118,20 @@ controllers, and the tests change it directly.
 | `SIM_CLIENT_DIR` | `../config/clients/client_A` | The client's config pack |
 | `SIM_STATE_DIR` | `.state` | Where bootIds are kept between runs |
 
+## Controller rules (contract 8.3, 9)
+
+`sim/controller/` holds a zone controller written the way the firmware will be: standard library and
+HAL only (`hal.py`), `handle()` for a command and `step()` at a fixed rate that never waits. Each
+safety check is a plain function in `checks.py` that returns a reason code from contract 8.4, and
+`refusal()` runs them in the contract's order. The limits are the stricter of the command's snapshot
+and the controller's own (`limits.json`). It journals before switching anything, never switches
+circulation, and keeps the journal, the last 50 `cmdId`s, latches and 24 h totals through a reboot.
+
+It isn't wired into `sim.main` yet, and a dose starts its first line and stays there: running one to
+its end needs flow metering and pump rates. The rules, HAL names and decisions are in
+`docs/controller-spec.md`. `tests/rules/` plays every file in `tests/vectors/` against it, and
+`tests/vectors/TODO.md` lists the rules still to write.
+
 ## Tests
 
 ```

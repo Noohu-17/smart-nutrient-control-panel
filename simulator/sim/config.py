@@ -44,6 +44,16 @@ def playground_enabled(client_dir: Path) -> bool:
     return value
 
 
+def load_zone_limits(client_dir: Path, zone_id: str) -> dict[str, Any]:
+    """A zone controller's own limits (limits.json), the shape DEVICE_CONFIG brings (7.7)."""
+    zones = read_pack_file(client_dir, "limits.json").get("zones")
+    zone = zones.get(zone_id) if isinstance(zones, dict) else None
+    limits = zone.get("limits") if isinstance(zone, dict) else None
+    if not isinstance(limits, dict):
+        raise ValueError(f"limits.json: zones.{zone_id}.limits must be an object, got {limits!r}")
+    return limits
+
+
 def load_site(client_dir: Path) -> str:
     """The site ID used in every topic, farm/{site}/... (layout.json "site")."""
     site = read_pack_file(client_dir, "layout.json").get("site")
