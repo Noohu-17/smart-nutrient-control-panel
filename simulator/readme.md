@@ -16,8 +16,8 @@ python -m sim.main
 ```
 
 Each device logs `connected` (for example `ZC1 connected to localhost:1883`). If the broker
-restarts, each device retries with a growing delay (1, 2, 4 ... up to 30 s) and logs `connected`
-again. Stop with Ctrl+C.
+restarts, each device retries with a growing delay (1, 2, 4 ... up to 30 s, less a random share so
+the devices don't all retry at once) and logs `connected` again. Stop with Ctrl+C.
 
 ## Heartbeats (contract 6.4)
 
@@ -67,14 +67,19 @@ the farm model's step will take.
 | `POWER_STATE` | power monitor | `farm/{site}/power/state` | 1, yes |
 
 The clock task (`TickLoop` in `sim/clock.py`) moves the farm forward and takes one reading every 60
-**simulated** seconds, on a fixed grid: at x60 that is one a real second, at x288 about five, and
-while paused none (heartbeats carry on). A step is split at each due time, so a reading shows the
-farm exactly as it was then.
+**simulated** seconds, on a fixed grid, but never more often than `simulator.json`
+`minRealReadingIntervalS` (5 real seconds): the interval is `max(60, speed x 5)` simulated seconds.
+So x1 reads once a real minute, x60 and x288 reach the cap of 12 a real minute, and while paused
+there are none (heartbeats carry on). The farm still moves every tick, and a step is split at each
+due time, so a reading shows the farm exactly as it was then.
 
 A reading also goes out at once when a value crosses a limit, either way: `alerts.json` for zones
 (`solTempMaxC`, `circFlowMinLpm`, `RESERVOIR_LOW`, `DAYTANK_LOW`), and `climate.json` `setpoints`
 for the air. Staying beyond a limit sends nothing more, and a value flapping across one gets one
-extra reading per period. `POWER_STATE` also goes out on every change and again after a reconnect.
+extra reading per period.
+
+`POWER_STATE` is not on that grid: it repeats every 60 **real** seconds at any speed, even while
+paused, and also goes out on every change and again after a reconnect.
 
 Zones, equipment and dosing lines come from `layout.json`. `sim/farm.py` holds the live state: the
 water comes from the farm model, and the values it has no physics for yet (air, power, circulation

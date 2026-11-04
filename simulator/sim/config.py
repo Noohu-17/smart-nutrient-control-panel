@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,21 @@ def load_speed_options(client_dir: Path) -> tuple[float, ...]:
     ):
         raise ValueError(f"simulator.json: speedOptions must list speeds >= 0, got {options!r}")
     return tuple(options)
+
+
+def load_min_real_reading_interval_s(client_dir: Path) -> float:
+    """Fewest real seconds between periodic readings (simulator.json, 0 means no cap)."""
+    value = read_pack_file(client_dir, "simulator.json").get("minRealReadingIntervalS")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise ValueError(
+            f"simulator.json: minRealReadingIntervalS must be a number >= 0, got {value!r}"
+        )
+    return float(value)
 
 
 def playground_enabled(client_dir: Path) -> bool:

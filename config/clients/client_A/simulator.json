@@ -3,7 +3,7 @@
   "_meta": {
     "client": "client_A",
     "placeholder": true,
-    "note": "Farm-model values filled in T3-2, and the starting values telemetry needs in T4-5; Track 3 owns this file. None is verified by agronomy yet: each is a placeholder, a virtual-farm prototype value or calibrated to a contract example (see sources). Do not use for a real farm. speedOptions is real (contract 11.4); model.numerics are solver settings, not farm values.",
+    "note": "Farm-model values filled in T3-2, and the starting values telemetry needs in T4-5; Track 3 owns this file. None is verified by agronomy yet: each is a placeholder, a virtual-farm prototype value or calibrated to a contract example (see sources). Do not use for a real farm. speedOptions is real (contract 11.4); minRealReadingIntervalS and model.numerics are simulator settings, not farm values.",
     "placeholderKeys": [
       "model.ecPerGramPerL", "model.rawWater", "model.doseLines", "model.refill",
       "model.phDrift", "model.solutionTemp", "model.plantUptake", "model.initialState",
@@ -33,10 +33,12 @@
       "model.circulation.flowLpm": "CONTRACT-EXAMPLE: contract 6.1 telemetry example (31.0 L/min), the flow while the circulation pump runs. Measure at the pump.",
       "model.air": "CONTRACT-EXAMPLE: contract 6.2 telemetry example. Held constant until a weather model exists (the scenario's region, month and weather). tempByPosC needs an entry for every layout.climate.airSensors position.",
       "model.power": "CONTRACT-EXAMPLE: contract 6.3 example (231/229/233 V, UPS 100 %, 42 min). Held constant until the power drills exist (contract 11.4.3).",
-      "model.numerics": "NUMERICAL: solver settings, not farm values."
+      "model.numerics": "NUMERICAL: solver settings, not farm values.",
+      "minRealReadingIntervalS": "NUMERICAL: fewest real seconds between periodic readings, so fast clocks don't flood the broker (T4-7). Not a farm value."
     }
   },
   "speedOptions": [0, 1, 60, 288],
+  "minRealReadingIntervalS": 5,
   "model": {
     "ecPerGramPerL": 1.0,
     "rawWater": { "ecMsCm": 0.3, "ph": 7.2, "tempC": 26.0 },

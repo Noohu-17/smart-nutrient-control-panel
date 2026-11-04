@@ -16,6 +16,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import random
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -33,6 +34,7 @@ log = logging.getLogger("sim.devices")
 
 RECONNECT_FIRST_S = 1.0
 RECONNECT_MAX_S = 30.0
+RECONNECT_JITTER = 0.5  # up to this share comes off each wait, so devices don't retry together
 HEARTBEAT_S = 30.0  # contract 6.4 and 14; real time, whatever the simulator's speed
 PUBLISH_TIMEOUT_S = 10.0
 OUTBOX_MAX = 256  # messages held while the broker is away; beyond this the oldest are dropped
@@ -52,8 +54,13 @@ class Outgoing:
 
 
 def reconnect_delay(attempt: int) -> float:
-    """Seconds to wait before reconnect attempt number `attempt` (0, 1, 2 ...)."""
+    """Longest wait before reconnect attempt number `attempt` (0, 1, 2 ...), in seconds."""
     return min(RECONNECT_MAX_S, RECONNECT_FIRST_S * 2**attempt)
+
+
+def jittered(delay_s: float, rng: random.Random) -> float:
+    """The wait with a random share taken off, so a restarted broker isn't hit all at once."""
+    return delay_s * (1.0 - RECONNECT_JITTER * rng.random())
 
 
 async def stay_connected(client: aiomqtt.Client) -> None:
@@ -70,12 +77,15 @@ async def connect_forever(
     will: aiomqtt.Will | None = None,
     client_factory: Callable[..., Any] = aiomqtt.Client,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+    rng: random.Random | None = None,
 ) -> None:
     """Connect as `client_id` and run `session`; reconnect whenever the link drops.
 
-    Returns only when `session` returns normally. Cancelling the task stops it.
+    Returns only when `session` returns normally. Cancelling the task stops it. The jitter is
+    seeded with the device ID: each device waits differently, and each run repeats exactly.
     """
     username, password = settings.login(client_id)
+    rng = rng or random.Random(client_id)
     attempt = 0
     while True:
         try:
@@ -94,9 +104,9 @@ async def connect_forever(
                 await session(client)
                 return
         except aiomqtt.MqttError as err:
-            delay = reconnect_delay(attempt)
+            delay = jittered(reconnect_delay(attempt), rng)
             attempt += 1
-            log.warning("%s not connected (%s); retrying in %.0f s", client_id, err, delay)
+            log.warning("%s not connected (%s); retrying in %.1f s", client_id, err, delay)
             await sleep(delay)
 
 

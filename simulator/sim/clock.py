@@ -11,7 +11,8 @@ running on real time whatever the speed.
 
 TickLoop is the clock task, the one scheduler of simulated work: it moves the farm forward
 and takes every reading (contract 6.1-6.3, 14). Readings sit on a fixed grid of simulated
-time, so they don't drift whatever the speed, the tick length or the real-time jitter.
+time, so they don't drift whatever the tick length or the real-time jitter. A fast clock
+widens the grid, so that readings never come more often than the config pack allows.
 """
 
 from __future__ import annotations
@@ -90,6 +91,11 @@ class SimClock:
         return speed
 
 
+def reading_interval_s(speed: float, min_real_s: float, reading_s: float = READING_S) -> float:
+    """Simulated seconds between readings: 60, or min_real_s real seconds if that is longer."""
+    return max(reading_s, speed * min_real_s)
+
+
 def tick_interval_s(speed: float) -> float:
     """Real seconds between ticks: every second, or often enough to limit one tick's step."""
     return min(REAL_TICK_S, MAX_SIM_PER_TICK_S / speed) if speed > 0 else REAL_TICK_S
@@ -100,7 +106,7 @@ class SteppedFarm(Protocol):
 
 
 class Reader(Protocol):
-    def take_reading(self, sim_ts: datetime) -> None: ...
+    def on_reading_due(self, sim_ts: datetime) -> None: ...
 
     def take_urgent_reading(self, sim_ts: datetime) -> None: ...
 
@@ -111,6 +117,7 @@ class TickLoop:
     A step is split at each reading's due time, so a reading shows the farm exactly as it
     was then, however long the step. Readings out of turn don't move the grid. While the
     clock is paused nothing moves, so no reading falls due and nothing crosses an alarm.
+    The farm moves on every tick, whatever the interval between readings.
     """
 
     def __init__(
@@ -120,21 +127,31 @@ class TickLoop:
         readers: Iterable[Reader],
         *,
         reading_s: float = READING_S,
+        min_real_reading_s: float = 0.0,
     ):
         self.clock, self.farm, self.readers = clock, farm, tuple(readers)
-        self._period = timedelta(seconds=reading_s)
+        self._reading_s, self._min_real_reading_s = reading_s, min_real_reading_s
         self._sim_now = clock.last_tick
+        self._last_reading: datetime | None = None
         self._next_reading = self._sim_now  # the first reading is at the start
 
     def tick(self) -> None:
         self.clock.tick()
         end = self.clock.last_tick
-        self._skip_stale_readings(end)
+        period = timedelta(
+            seconds=reading_interval_s(self.clock.speed, self._min_real_reading_s, self._reading_s)
+        )
+        if self._last_reading is not None and self.clock.speed > 0:
+            # A new speed's interval applies at once: x288's long gap must not hold up x1. An
+            # overdue reading is taken now, never in the past, so the farm only moves forward.
+            self._next_reading = max(self._last_reading + period, self._sim_now)
+        self._skip_stale_readings(end, period)
         while self._next_reading <= end:
             self._move_farm_to(self._next_reading)
             for reader in self.readers:
-                reader.take_reading(self._next_reading)
-            self._next_reading += self._period
+                reader.on_reading_due(self._next_reading)
+            self._last_reading = self._next_reading
+            self._next_reading += period
         self._move_farm_to(end)
         for reader in self.readers:
             reader.take_urgent_reading(end)
@@ -148,9 +165,9 @@ class TickLoop:
         self.farm.step((moment - self._sim_now).total_seconds(), moment)
         self._sim_now = moment
 
-    def _skip_stale_readings(self, end: datetime) -> None:
-        due = (end - self._next_reading) // self._period + 1
+    def _skip_stale_readings(self, end: datetime, period: timedelta) -> None:
+        due = (end - self._next_reading) // period + 1
         skipped = due - MAX_CATCH_UP_READINGS
         if skipped > 0:
             log.warning("clock jumped ahead: skipping %d old readings", skipped)
-            self._next_reading += skipped * self._period
+            self._next_reading += skipped * period

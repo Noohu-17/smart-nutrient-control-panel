@@ -55,6 +55,10 @@ class ReadingDevice(SimDevice):
     def take_reading(self, sim_ts: datetime | None) -> None:
         self._queue(self.body(), sim_ts, periodic=True)
 
+    def on_reading_due(self, sim_ts: datetime) -> None:
+        """The clock task's grid of simulated time says a reading is due."""
+        self.take_reading(sim_ts)
+
     def take_urgent_reading(self, sim_ts: datetime | None) -> None:
         body = self.body()
         if self.urgent(body):

@@ -15,6 +15,7 @@ from .alarms import climate_alarms, zone_alarms
 from .clock import SimClock, TickLoop
 from .config import (
     load_devices,
+    load_min_real_reading_interval_s,
     load_site,
     load_speed_options,
     playground_enabled,
@@ -76,7 +77,12 @@ async def run(settings: Settings) -> None:
         make_device(d, site, boot_ids[d["id"]], farm, alerts, clock if playground else None)
         for d in layout_devices
     ]
-    tick_loop = TickLoop(clock, farm, [d for d in devices if isinstance(d, ReadingDevice)])
+    tick_loop = TickLoop(
+        clock,
+        farm,
+        [d for d in devices if isinstance(d, ReadingDevice)],
+        min_real_reading_s=load_min_real_reading_interval_s(settings.client_dir),
+    )
     log.info("playing %s on site %s (bootId %s)", ", ".join(d.id for d in devices), site, boot_ids)
     log.info("clock speed x%g; simTs in messages: %s", clock.speed, "yes" if playground else "no")
     async with asyncio.TaskGroup() as tasks:

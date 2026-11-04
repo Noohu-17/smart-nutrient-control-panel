@@ -53,7 +53,7 @@ class Reader:
         self.urgent_checks = []
         self.farm_steps_seen = []
 
-    def take_reading(self, sim_ts):
+    def on_reading_due(self, sim_ts):
         self.readings.append(sim_ts)
         if self.farm:
             self.farm_steps_seen.append(len(self.farm.steps))
@@ -171,7 +171,7 @@ def test_a_real_farm_reads_the_same_however_long_the_ticks_are():
         taken = {}
 
         class Sampler:
-            def take_reading(self, sim_ts):
+            def on_reading_due(self, sim_ts):
                 taken[sim_ts] = zone_telemetry(farm.zones["Z1"])["readings"]
 
             def take_urgent_reading(self, sim_ts):
