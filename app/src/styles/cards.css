@@ -118,3 +118,41 @@
   fill: var(--text-muted);
   font-size: var(--text-caption-size);
 }
+
+/* ---------- Overview power strip: mains, generator, UPS */
+.power-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--gap-card);
+}
+.power-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-tile);
+  background: var(--color-surface);
+}
+.power-label {
+  font-weight: var(--weight-semibold);
+}
+.power-detail {
+  font-size: var(--text-label-size);
+  color: var(--text-secondary);
+}
+
+/* ---------- Climate page sections */
+.climate-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--gap-card);
+}
+.climate-section h2 {
+  margin: 0;
+  font-size: var(--text-section-size);
+  line-height: var(--text-section-line);
+  font-weight: var(--weight-bold);
+}

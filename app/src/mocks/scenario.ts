@@ -10,6 +10,8 @@ export const SCENARIOS = {
   "z1-estop": "E-STOP pressed on the Zone A dosing cabinet",
   "farm-error": "GET /api/farm fails (500)",
   "no-playground": "A real farm: features.playground is false, so no Simulator",
+  "mains-lost": "Mains lost: the generator runs the farm, UPS on battery",
+  "no-generator": "A site with no generator or UPS in its layout",
   "api-degraded": "Back end up, but database or broker down (503 DEGRADED)",
   slow: "Every answer takes 3 s, to see the loading states",
 } as const;

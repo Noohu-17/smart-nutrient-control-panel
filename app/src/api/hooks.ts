@@ -1,7 +1,7 @@
 // src/api/hooks.ts · TanStack Query hooks. Screens call these, never fetch.
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { getJson } from "./client";
-import type { Farm, ZoneStatus } from "./types";
+import type { ClimateTelemetry, Farm, PowerState, ZoneStatus } from "./types";
 
 const ONE_MINUTE = 60_000;
 
@@ -40,4 +40,22 @@ export function useZone(zoneId: string | undefined) {
 /** Telemetry for several zones at once (the Overview). Same cache keys as useZone. */
 export function useZones(zoneIds: string[]) {
   return useQueries({ queries: zoneIds.map(zoneQueryOptions) });
+}
+
+/** GET /api/climate · air inside and outside, electrical room, climate equipment. Every minute. */
+export function useClimate() {
+  return useQuery({
+    queryKey: ["climate"],
+    queryFn: () => getJson<ClimateTelemetry>("/climate"),
+    refetchInterval: ONE_MINUTE,
+  });
+}
+
+/** GET /api/power · mains, generator and UPS. Sent every minute and on every change. */
+export function usePower() {
+  return useQuery({
+    queryKey: ["power"],
+    queryFn: () => getJson<PowerState>("/power"),
+    refetchInterval: ONE_MINUTE,
+  });
 }

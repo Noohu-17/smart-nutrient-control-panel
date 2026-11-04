@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import configFeatures from "../../../config/clients/client_A/features.json";
 import configLayout from "../../../config/clients/client_A/layout.json";
-import type { Farm, ZoneStatus } from "../api/types";
+import type { ClimateTelemetry, Farm, PowerState, ZoneStatus } from "../api/types";
 import mockFeatures from "./data/features.json";
 import mockLayout from "./data/layout.json";
 
@@ -108,6 +108,53 @@ describe("fake API (MSW)", () => {
     const first = (await (await get("/zones/Z1")).json()) as ZoneStatus;
     const second = (await (await get("/zones/Z1")).json()) as ZoneStatus;
     expect(Math.abs(second.readings.ec! - first.readings.ec!)).toBeLessThan(0.05);
+  });
+
+  it("GET /api/climate returns telemetry shaped like contract §6.2, positions from the layout", async () => {
+    const res = await get("/climate");
+    expect(res.status).toBe(200);
+    const c = (await res.json()) as ClimateTelemetry;
+    expect(c).toMatchObject({
+      v: 1,
+      type: "CLIMATE_TELEMETRY",
+      site: "siet-ph1",
+      device: "CC1",
+      mode: "MANUAL",
+    });
+    // first answer is the contract example
+    expect(c.readings).toEqual({
+      airTempC: 31.2,
+      airTempByPosC: { PAD_END: 29.4, MIDDLE: 31.0, FAN_END: 33.1 },
+      airRh: 71,
+      outsideTempC: 33.8,
+      outsideRh: 58,
+      elecRoomTempC: 34.0,
+    });
+    expect(c.equipment).toMatchObject({
+      fanStage: 2,
+      FAN1: "ON",
+      FAN3: "OFF",
+      PAD1: "ON",
+      CH1: { state: "ON", setpointC: 22 },
+    });
+    expect(c.setpoints).toEqual({ airTempMaxC: 30, airRhMax: 85, solTempMaxC: 24 });
+  });
+
+  it("GET /api/power returns the state shaped like contract §6.3", async () => {
+    const res = await get("/power");
+    expect(res.status).toBe(200);
+    const p = (await res.json()) as PowerState;
+    expect(p).toMatchObject({
+      v: 1,
+      type: "POWER_STATE",
+      device: "PM1",
+      mains: "OK",
+      phases: { l1V: 231, l2V: 229, l3V: 233 },
+      source: "MAINS",
+      generator: "STOPPED",
+      ats: "MAINS",
+      ups: { onBattery: false, batteryPct: 100, runtimeMin: 42 },
+    });
   });
 
   it("GET /api/zones/Z9 is a 404 with the contract error body", async () => {

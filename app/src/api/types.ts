@@ -1,4 +1,4 @@
-// src/api/types.ts · shapes of the API answers (contract §2.4 layout and §6.1 zone telemetry)
+// src/api/types.ts · shapes of the API answers (contract §2.4 layout, §6.1 zone, §6.2 climate, §6.3 power)
 // Later these are generated from OpenAPI (npm run gen:api); until then we keep them by hand.
 
 export type DoseLine = "A" | "B" | "ACID";
@@ -82,6 +82,52 @@ export type ZoneStatus = {
   operation: { cmdId: string; kind: "DOSE" | "REFILL"; state: string; line?: string | null } | null;
   latches: string[];
   configVersion: number | null;
+};
+
+/* ---------- GET /api/climate (contract §6.2, CLIMATE_TELEMETRY) ---------- */
+export type ClimateTelemetry = {
+  v: number;
+  type: "CLIMATE_TELEMETRY";
+  msgId: string;
+  ts: string;
+  simTs?: string; // playground sites only: the simulated time
+  site: string;
+  device: string;
+  bootId: number;
+  seq: number;
+  readings: {
+    airTempC: number | null; // average of the positions
+    airTempByPosC: Record<string, number | null>; // keys from layout.climate.airSensors
+    airRh: number | null;
+    outsideTempC: number | null;
+    outsideRh: number | null;
+    elecRoomTempC: number | null;
+  };
+  quality: Partial<Record<"airTempC" | "airRh" | "outsideTempC" | "outsideRh" | "elecRoomTempC", Quality>>;
+  mode: "AUTOMATIC" | "MANUAL";
+  manualUntil: string | null;
+  equipment: Record<string, string | number | { state: string; setpointC: number }>;
+  runTimeTodayMin: Record<string, number>;
+  setpoints: { airTempMaxC: number; airRhMax: number; solTempMaxC: number };
+};
+
+/* ---------- GET /api/power (contract §6.3, POWER_STATE) ---------- */
+export type PowerState = {
+  v: number;
+  type: "POWER_STATE";
+  msgId: string;
+  ts: string;
+  simTs?: string;
+  site: string;
+  device: string;
+  bootId: number;
+  seq: number;
+  mains: "OK" | "LOST" | "PHASE_FAULT";
+  phases: { l1V: number | null; l2V: number | null; l3V: number | null };
+  source: "MAINS" | "GENERATOR" | "UPS_ONLY";
+  generator?: "STOPPED" | "STARTING" | "RUNNING" | "FAULT"; // left out when layout.power.generator is false
+  ats: "MAINS" | "GENERATOR";
+  ups?: { onBattery: boolean; batteryPct: number; runtimeMin: number }; // left out when layout.power.ups is false
 };
 
 /* ---------- errors (contract §11.1) ---------- */

@@ -1,5 +1,6 @@
 import { useFarm } from "../api/hooks";
 import { EmptyState } from "../components/EmptyState";
+import { PowerStrip } from "../features/overview/PowerStrip";
 import { ZoneCard } from "../features/overview/ZoneCard";
 
 /** Home after sign-in. Zone names come from GET /api/farm (the fake API for now, T2-4);
@@ -19,11 +20,14 @@ export function Overview() {
       ) : farm.data.zones.length === 0 ? (
         <EmptyState title="No zones yet">Zones appear here once the farm layout lists them.</EmptyState>
       ) : (
-        <div className="zone-grid">
-          {farm.data.zones.map((zone) => (
-            <ZoneCard key={zone.id} zone={zone} />
-          ))}
-        </div>
+        <>
+          <PowerStrip layout={farm.data.power} />
+          <div className="zone-grid">
+            {farm.data.zones.map((zone) => (
+              <ZoneCard key={zone.id} zone={zone} />
+            ))}
+          </div>
+        </>
       )}
     </>
   );
