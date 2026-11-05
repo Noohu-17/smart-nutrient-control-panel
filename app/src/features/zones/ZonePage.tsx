@@ -1,12 +1,12 @@
 import { Link, useParams } from "react-router-dom";
-import { useFarm } from "../api/hooks";
-import type { FarmZone } from "../api/types";
-import { EmptyState } from "../components/EmptyState";
-import { StatusChip } from "../components/StatusChip";
-import { DoseCard } from "../features/dosing/DoseCard";
-import { ZoneActions } from "../features/zones/ZoneActions";
-import { SafetyBanners, ZoneReadings, ZoneStatusChip } from "../features/zones/ZoneLive";
-import { useZoneStatus } from "../features/zones/useZoneStatus";
+import { useFarm } from "../../api/hooks";
+import type { FarmZone } from "../../api/types";
+import { EmptyState } from "../../components/EmptyState";
+import { StatusChip } from "../../components/StatusChip";
+import { DoseCard } from "../dosing/DoseCard";
+import { ZoneActions } from "./ZoneActions";
+import { SafetyBanners, ZoneReadings, ZoneStatusChip } from "./ZoneLive";
+import { useZoneStatus } from "./useZoneStatus";
 
 /** Safety banners and live readings for the zone. */
 function ZoneLive({ zone }: { zone: FarmZone }) {

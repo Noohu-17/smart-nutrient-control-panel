@@ -1,7 +1,7 @@
-import { useFarm } from "../api/hooks";
-import { EmptyState } from "../components/EmptyState";
-import { PowerStrip } from "../features/overview/PowerStrip";
-import { ZoneCard } from "../features/overview/ZoneCard";
+import { useFarm } from "../../api/hooks";
+import { EmptyState } from "../../components/EmptyState";
+import { PowerStrip } from "./PowerStrip";
+import { ZoneCard } from "./ZoneCard";
 
 /** Home after sign-in. Zone names come from GET /api/farm (the fake API for now, T2-4);
     each zone gets a card with its latest readings. */

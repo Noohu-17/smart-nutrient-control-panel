@@ -1,9 +1,9 @@
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { ROLE_TEXT, ROLES } from "../auth/roles";
-import { useSession } from "../auth/session";
-import { DemoBanner } from "../components/DemoBanner";
-import { Icon } from "../components/Icon";
-import { isDemoMode } from "../config/demo";
+import { ROLE_TEXT, ROLES } from "../../auth/roles";
+import { useSession } from "../../auth/session";
+import { DemoBanner } from "../../components/DemoBanner";
+import { Icon } from "../../components/Icon";
+import { isDemoMode } from "../../config/demo";
 
 /** Demo mode: pick one of the four roles. Otherwise no picker: real sign-in (POST /auth/login) comes later. */
 export function SignIn() {

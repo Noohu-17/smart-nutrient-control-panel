@@ -1,5 +1,5 @@
-import { EmptyState } from "../components/EmptyState";
-import { RoleButton } from "../components/RoleButton";
+import { EmptyState } from "../../components/EmptyState";
+import { RoleButton } from "../../components/RoleButton";
 
 /** History skeleton: every dose, refill and stop arrives with GET /api/operations. */
 export function History() {

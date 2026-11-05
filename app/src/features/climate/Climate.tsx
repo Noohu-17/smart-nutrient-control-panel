@@ -1,8 +1,8 @@
-import { useClimate, useFarm } from "../api/hooks";
-import { EmptyState } from "../components/EmptyState";
-import { ReadingCard } from "../components/ReadingCard";
-import { RoleButton } from "../components/RoleButton";
-import { AIR_READINGS, airPositionSpec, ELEC_ROOM_READING } from "../config/readings";
+import { useClimate, useFarm } from "../../api/hooks";
+import { EmptyState } from "../../components/EmptyState";
+import { ReadingCard } from "../../components/ReadingCard";
+import { RoleButton } from "../../components/RoleButton";
+import { AIR_READINGS, airPositionSpec, ELEC_ROOM_READING } from "../../config/readings";
 
 /** Climate page: air inside and outside, each air sensor position and the electrical room (contract §6.2). */
 export function Climate() {

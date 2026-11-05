@@ -1,12 +1,12 @@
 import type { RouteObject } from "react-router-dom";
-import { Alerts } from "../pages/Alerts";
-import { Climate } from "../pages/Climate";
-import { History } from "../pages/History";
-import { NotFound } from "../pages/NotFound";
-import { Overview } from "../pages/Overview";
-import { SignIn } from "../pages/SignIn";
-import { SimulatorPage } from "../pages/SimulatorPage";
-import { ZonePage } from "../pages/ZonePage";
+import { NotFound } from "../components/NotFound";
+import { Alerts } from "../features/alerts/Alerts";
+import { SignIn } from "../features/auth/SignIn";
+import { Climate } from "../features/climate/Climate";
+import { History } from "../features/history/History";
+import { Overview } from "../features/overview/Overview";
+import { SimulatorPage } from "../features/simulator/SimulatorPage";
+import { ZonePage } from "../features/zones/ZonePage";
 import { Layout } from "./Layout";
 
 export const routes: RouteObject[] = [

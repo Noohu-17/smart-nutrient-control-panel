@@ -1,7 +1,7 @@
 // T2-15 done-when: the Climate page shows fake data
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { renderAt } from "../test/render";
+import { renderAt } from "../../test/render";
 
 describe("Climate page on the fake API", () => {
   it("shows air inside and outside, each sensor position and the electrical room", async () => {

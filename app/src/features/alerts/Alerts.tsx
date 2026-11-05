@@ -1,5 +1,5 @@
-import { EmptyState } from "../components/EmptyState";
-import { RoleButton } from "../components/RoleButton";
+import { EmptyState } from "../../components/EmptyState";
+import { RoleButton } from "../../components/RoleButton";
 
 /** Alerts skeleton: open alerts arrive with GET /api/alerts. */
 export function Alerts() {
