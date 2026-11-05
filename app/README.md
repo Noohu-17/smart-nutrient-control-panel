@@ -23,3 +23,17 @@ VITE_USE_MOCKS=false npm run dev
 ```
 
 Or put `VITE_USE_MOCKS=false` in `app/.env.local` (not committed). Vite then sends `/api` to `http://localhost:8000`; set `VITE_API_TARGET` for another address. Leave `VITE_USE_MOCKS` unset (or `true`) for the fake API. Tests always use the fake API.
+
+## Demo mode (T2-17)
+
+`VITE_DEMO_MODE` decides whether the app says it is a demo:
+
+| | Sign-in page | Every screen |
+| :--- | :--- | :--- |
+| On | Role picker (Owner, Agronomist, Operator, Viewer) | "Demo · simulated farm" banner at the top |
+| Off | No picker: "Sign-in with your own account is coming soon" | No banner |
+
+- **A build** (`npm run build`) is off unless built with `VITE_DEMO_MODE=true`. Staging (T1-19) builds with it.
+- **`npm run dev`** is on, so the role picker works as before; `VITE_DEMO_MODE=false npm run dev` to see the off look.
+- **Tests** run with it on; `src/app/DemoMode.test.tsx` switches it with `vi.stubEnv` to test both.
+- Off, a role picked earlier in a demo build doesn't sign anyone in.

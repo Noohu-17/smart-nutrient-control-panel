@@ -1,5 +1,19 @@
 /* App shell: top bar, sidebar (desktop), bottom tabs (phone), page frame. */
 
+/* ---------- demo banner (T2-17): above everything, on every screen in demo mode */
+.demo-banner {
+  padding: var(--space-1) var(--space-4);
+  padding-top: max(var(--space-1), env(safe-area-inset-top, 0px));
+  border-bottom: 1px solid var(--status-warning-border);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+  font-size: var(--text-caption-size);
+  text-align: center;
+}
+.demo-banner b {
+  color: var(--status-warning-fg);
+}
+
 /* ---------- top bar */
 .topbar {
   position: sticky;

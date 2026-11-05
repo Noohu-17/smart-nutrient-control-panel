@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { isDemoMode } from "../config/demo";
 import { ROLES, type Role } from "./roles";
 import { SessionContext } from "./session";
 
@@ -6,6 +7,7 @@ import { SessionContext } from "./session";
 const ROLE_KEY = "snm.role";
 
 function savedRole(): Role | null {
+  if (!isDemoMode()) return null; // a role picked in a demo build doesn't sign anyone in outside it
   try {
     const role = localStorage.getItem(ROLE_KEY);
     return (ROLES as readonly string[]).includes(role ?? "") ? (role as Role) : null;
