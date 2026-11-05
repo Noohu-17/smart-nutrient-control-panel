@@ -12,7 +12,23 @@ from pydantic import UUID4, ConfigDict, PlainSerializer, StrictBool, WithJsonSch
 
 from ..contract import ContractModel
 from ..contract.envelope import Count
-from ..contract.farm_messages import Quality, ZoneMode, ZoneOperation, ZoneOutput, ZoneReadings
+from ..contract.farm_messages import (
+    AtsPosition,
+    ChillerState,
+    ClimateMode,
+    ClimateOutput,
+    ClimateReadings,
+    GeneratorState,
+    Mains,
+    Phases,
+    PowerSource,
+    Quality,
+    UpsState,
+    ZoneMode,
+    ZoneOperation,
+    ZoneOutput,
+    ZoneReadings,
+)
 
 
 def contract_time(moment: datetime) -> str:
@@ -143,6 +159,44 @@ class ZoneStatus(ContractModel):
 
 class ZoneList(ContractModel):
     items: list[ZoneStatus]
+
+
+# --- GET /api/climate and /api/power (§11.2) ---------------------------------------------
+
+
+class ClimateStatus(ContractModel):
+    """The climate controller's latest readings and CLIMATE_STATE, as the zone answer (§11.2)."""
+
+    online: bool
+    last_seen: ApiTime | None
+    ts: ApiTime | None
+    sim_ts: ApiTime | None = None  # left out unless the latest reading has it (playground sites)
+    readings: ClimateReadings
+    quality: dict[str, Quality]
+    mode: ClimateMode | None
+    manual_until: ApiTime | None
+    stopped: StrictBool | None
+    equipment: dict[str, Count | ClimateOutput | ChillerState]  # fanStage and the layout's IDs
+    latches: list[str]
+
+
+class PowerStatus(ContractModel):
+    """The power monitor's latest POWER_STATE (§11.2).
+
+    generator and ups are left out when the layout has none, so they are only set when it has.
+    """
+
+    online: bool
+    last_seen: ApiTime | None
+    ts: ApiTime | None
+    sim_ts: ApiTime | None = None  # left out unless the latest POWER_STATE has it
+    mains: Mains | None
+    phases: Phases
+    source: PowerSource | None
+    generator: GeneratorState | None = None
+    ats: AtsPosition | None
+    ups: UpsState | None = None
+    quality: dict[str, Quality]
 
 
 # --- GET /api/devices (§11.2; the fields follow device_state, §12) ------------------------

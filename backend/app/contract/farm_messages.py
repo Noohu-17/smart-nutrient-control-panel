@@ -34,6 +34,10 @@ ZoneMode = Literal["REMOTE", "LOCAL", "MAINT"]
 ClimateMode = Literal["AUTOMATIC", "MANUAL"]
 ZoneOutput = Literal["ON", "OFF", "OPEN", "CLOSED"]  # pumps ON/OFF, valves OPEN/CLOSED (§6.1)
 ClimateOutput = Literal["ON", "OFF", "OPEN", "CLOSED", "NOT_INSTALLED"]  # shade OPEN/CLOSED, FOG1 (§2.3, §6.2)
+Mains = Literal["OK", "LOST", "PHASE_FAULT"]  # §6.3
+PowerSource = Literal["MAINS", "GENERATOR", "UPS_ONLY"]
+GeneratorState = Literal["STOPPED", "STARTING", "RUNNING", "FAULT"]
+AtsPosition = Literal["MAINS", "GENERATOR"]
 CmdState = Literal["ACCEPTED", "EXECUTING", "COMPLETED", "PARTIAL", "FAILED", "STOPPED", "REJECTED"]  # §6.6
 
 
@@ -195,13 +199,13 @@ class UpsState(ContractModel):
 
 class PowerState(Envelope):
     type: Literal["POWER_STATE"]
-    mains: Literal["OK", "LOST", "PHASE_FAULT"]
+    mains: Mains
     phases: Phases
-    source: Literal["MAINS", "GENERATOR", "UPS_ONLY"]
+    source: PowerSource
     # generator and ups are left out when the site's layout.json has
     # "generator": false or "ups": false (§6.3)
-    generator: Literal["STOPPED", "STARTING", "RUNNING", "FAULT"] | None = None
-    ats: Literal["MAINS", "GENERATOR"]
+    generator: GeneratorState | None = None
+    ats: AtsPosition
     ups: UpsState | None = None
 
 

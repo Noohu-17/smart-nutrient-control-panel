@@ -17,6 +17,7 @@ from ..db.models import Device, LatestMessage, Reading, Site, Zone
 from .pack import SiteRef
 
 ZONE_TELEMETRY_METRIC = "ec"
+CLIMATE_TELEMETRY_METRIC = "airTempC"  # one of every CLIMATE_TELEMETRY's rows, null or not
 ZONE_CONTROLLER = "ZONE_CONTROLLER"
 
 
@@ -85,6 +86,43 @@ def latest_zone_telemetry(
     newest = (
         select(Reading.ts)
         .where(*theirs, Reading.metric == ZONE_TELEMETRY_METRIC)
+        .order_by(Reading.ts.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    return connection.execute(
+        select(Reading.metric, Reading.value, Reading.quality, Reading.ts, Reading.sim_ts).where(
+            *theirs, Reading.ts == newest
+        )
+    ).all()
+
+
+def device(connection: Connection, site: SiteRef, device_id: str) -> Any:
+    """A device with when it was last seen and its last will, or None if the layout hasn't got it."""
+    return connection.execute(
+        select(Device.device_id, Device.last_seen, Device.last_will_at).where(
+            *_in_site(Device, site), Device.device_id == device_id
+        )
+    ).first()
+
+
+def latest_message(connection: Connection, site: SiteRef, device_id: str, kind: str) -> Any:
+    """The device's latest message of this kind (ts, sim_ts and body), or None if none was kept."""
+    return connection.execute(
+        select(LatestMessage.ts, LatestMessage.sim_ts, LatestMessage.body).where(
+            *_in_site(LatestMessage, site),
+            LatestMessage.device_id == device_id,
+            LatestMessage.type == kind,
+        )
+    ).first()
+
+
+def latest_climate_telemetry(connection: Connection, site: SiteRef, controller: str) -> Sequence[Any]:
+    """Every value of the controller's newest CLIMATE_TELEMETRY, found as the zone's are."""
+    theirs = (*_in_site(Reading, site), Reading.device_id == controller)
+    newest = (
+        select(Reading.ts)
+        .where(*theirs, Reading.metric == CLIMATE_TELEMETRY_METRIC)
         .order_by(Reading.ts.desc())
         .limit(1)
         .scalar_subquery()

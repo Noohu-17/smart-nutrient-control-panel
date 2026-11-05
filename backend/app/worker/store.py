@@ -11,7 +11,7 @@ from ..contract import ClimateTelemetry, DeviceStatus, Envelope, PowerState, Zon
 from ..db.models import Device, LatestMessage, Reading
 
 # The kinds of message whose newest one per device is kept (models.LatestMessage).
-KEPT_TYPES = frozenset({"ZONE_STATE", "CLIMATE_STATE", "ZONE_TELEMETRY"})
+KEPT_TYPES = frozenset({"ZONE_STATE", "CLIMATE_STATE", "ZONE_TELEMETRY", "POWER_STATE"})
 
 
 def _power_values(state: PowerState) -> dict[str, float | None]:

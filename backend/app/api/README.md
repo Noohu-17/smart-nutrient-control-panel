@@ -7,6 +7,8 @@ The routes in `routes.py`, as listed in `docs/contract.md` §11.2. The full sche
 | `GET /api/farm` | `layout.json` plus `features`, without `_meta` blocks | The config pack in `CLIENT_DIR`; needs no database |
 | `GET /api/zones` | `{ "items": [ … ] }`, one zone object per zone, in layout order | The database |
 | `GET /api/zones/{zoneId}` | One zone object; `404` if there is no such zone | The database |
+| `GET /api/climate` | The climate controller's readings and state; `200` even when it is offline | The config pack and the database |
+| `GET /api/power` | The power monitor's latest `POWER_STATE`; `200` even when it is offline | The config pack and the database |
 | `GET /api/devices` | `{ "items": [ … ], "nextCursor": … }`, with `?limit=` (max 200) and `?cursor=` | The database |
 
 Every query is scoped by `org_id` and `site_id` (OPEN-11). They come from the config pack: `org_id` is the client's folder name, as in the seed.
@@ -25,6 +27,14 @@ Every query is scoped by `org_id` and `site_id` (OPEN-11). They come from the co
 - **`leak`, `activeCmdId`:** the zone's latest `ZONE_TELEMETRY`, in `latest_message`.
 
 A field is `null` (or `{}` / `[]`) only while nothing has been received for it, in the form §11.2 gives a zone that has never reported. A controller's messages for another zone, from before the layout moved it, don't count.
+
+## Where the climate and power objects come from
+
+The devices are the layout's `climate.controller` and `power.monitor`; `online` and `lastSeen` follow the same rules as a zone's.
+
+- **Climate `readings`, `quality`, `ts`, `simTs`:** the controller's newest `CLIMATE_TELEMETRY` rows in the `reading` table, with the zone's quality rule. `airTempByPosC` is keyed by the layout's `climate.airSensors`.
+- **Climate `mode`, `manualUntil`, `stopped`, `equipment`, `latches`:** its latest `CLIMATE_STATE`, in `latest_message`.
+- **Power:** its latest `POWER_STATE`, in `latest_message`, as sent. `generator` and `ups` are left out when the layout has `"generator": false` or `"ups": false`, and `null` when it has them but nothing has arrived. `quality` is `{}`, or every number `STALE` (`l1V`, `l2V`, `l3V`, and `upsBatteryPct`, `upsRuntimeMin` with a UPS) once the message is over 120 s old or the monitor is offline.
 
 ## Errors
 
@@ -50,9 +60,11 @@ With the dev stack running (`backend/README.md`):
 curl http://localhost:8000/api/farm
 curl http://localhost:8000/api/zones
 curl http://localhost:8000/api/zones/Z1
+curl http://localhost:8000/api/climate
+curl http://localhost:8000/api/power
 curl http://localhost:8000/api/devices
 ```
 
 ## Tests
 
-`tests/test_read_api.py`, on a throwaway database with rows written by the worker's own code. From `backend/`: `.venv/Scripts/python -m pytest tests/test_read_api.py`. Without PostgreSQL, the database tests are skipped.
+`tests/test_read_api.py` and `tests/test_climate_power_api.py`, on a throwaway database with rows written by the worker's own code. From `backend/`: `.venv/Scripts/python -m pytest tests/test_read_api.py`. Without PostgreSQL, the database tests are skipped.

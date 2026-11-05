@@ -1,4 +1,5 @@
-"""The routes of the read API: GET /api/farm, /api/zones, /api/zones/{zoneId}, /api/devices.
+"""The routes of the read API: GET /api/farm, /api/zones, /api/zones/{zoneId}, /api/climate,
+/api/power and /api/devices.
 
 Plain functions rather than async ones: they read files and use the synchronous database engine,
 so FastAPI runs them in its thread pool and the event loop stays free. Errors are ordinary
@@ -22,8 +23,17 @@ from ..config import Settings, load_settings
 from ..db.engine import database_url
 from . import queries
 from .pack import SiteRef, read_farm, site_of
-from .schemas import DeviceInfo, DeviceList, ErrorBody, Farm, ZoneList, ZoneStatus
-from .status import is_online, zone_status
+from .schemas import (
+    ClimateStatus,
+    DeviceInfo,
+    DeviceList,
+    ErrorBody,
+    Farm,
+    PowerStatus,
+    ZoneList,
+    ZoneStatus,
+)
+from .status import climate_status, is_online, power_status, zone_status
 
 log = logging.getLogger("api")
 
@@ -135,6 +145,50 @@ def _zone(connection: Connection, site: SiteRef, row: Any) -> ZoneStatus:
     )
 
 
+def _seen(connection: Connection, site: SiteRef, device_id: str) -> Any:
+    """The device's row, or None if the layout lists none by that ID: then it was never heard from.
+
+    A site the seed hasn't loaded yet is a 503, as for the zones.
+    """
+    row = queries.device(connection, site, device_id)
+    if row is None and not queries.site_is_loaded(connection, site):
+        raise _not_loaded()
+    return row
+
+
+def get_climate(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> ClimateStatus:
+    """The climate controller's latest readings and state. 200 even when offline (§11.2)."""
+    climate = read_farm(settings.client_dir).climate
+    with _database(engine) as connection:
+        row = _seen(connection, site, climate.controller)
+        rows = queries.latest_climate_telemetry(connection, site, climate.controller)
+        state = queries.latest_message(connection, site, climate.controller, "CLIMATE_STATE")
+    return climate_status(
+        climate.air_sensors,
+        row.last_seen if row is not None else None,
+        rows,
+        datetime.now(UTC),
+        last_will_at=row.last_will_at if row is not None else None,
+        state=state.body if state is not None else None,
+    )
+
+
+def get_power(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> PowerStatus:
+    """The power monitor's latest POWER_STATE. 200 even when offline (§11.2)."""
+    power = read_farm(settings.client_dir).power
+    with _database(engine) as connection:
+        row = _seen(connection, site, power.monitor)
+        latest = queries.latest_message(connection, site, power.monitor, "POWER_STATE")
+    return power_status(
+        power.generator,
+        power.ups,
+        row.last_seen if row is not None else None,
+        latest,
+        datetime.now(UTC),
+        last_will_at=row.last_will_at if row is not None else None,
+    )
+
+
 def list_devices(
     engine: EngineDep,
     site: SiteDep,
@@ -169,6 +223,8 @@ def add_read_api(app: FastAPI) -> None:
         ("/api/farm", get_farm, Farm, (500,)),
         ("/api/zones", list_zones, ZoneList, (503,)),
         ("/api/zones/{zoneId}", get_zone, ZoneStatus, (404, 422, 503)),
+        ("/api/climate", get_climate, ClimateStatus, (500, 503)),
+        ("/api/power", get_power, PowerStatus, (500, 503)),
     )
     for path, endpoint, model, errors in routes:
         app.add_api_route(

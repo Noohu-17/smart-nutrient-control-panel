@@ -144,8 +144,8 @@ class Reading(Base):
 class LatestMessage(Base):
     """The newest message of each kind that carries a device's state: one row per device and type.
 
-    ZONE_STATE (§6.8) and CLIMATE_STATE (§6.9), and ZONE_TELEMETRY (§6.1) because §11.2 takes
-    leak and activeCmdId from it. A message replaces the row only when its (bootId, seq) is
+    ZONE_STATE (§6.8) and CLIMATE_STATE (§6.9), ZONE_TELEMETRY (§6.1) because §11.2 takes
+    leak and activeCmdId from it, and POWER_STATE (§6.3), which GET /power answers with. A message replaces the row only when its (bootId, seq) is
     newer (§5), so a late, replayed or retained one never replaces a newer one.
 
     No foreign key to device, as for readings.
