@@ -150,3 +150,38 @@
   height: var(--check-box-size);
   margin-top: var(--space-half);
 }
+
+.btn.danger {
+  border-color: var(--status-critical-action);
+  background: var(--status-critical-action);
+  color: var(--text-on-primary);
+}
+.btn.danger:hover:not(:disabled) {
+  background: var(--status-critical-action-hover);
+}
+
+/* ---------- status after sending */
+.banner.warn {
+  border: var(--border-width) solid var(--status-warning-border);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
+}
+.cmd-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.cmd-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cmd-lines li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: var(--border-width) solid var(--color-line);
+}

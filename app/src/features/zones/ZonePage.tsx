@@ -5,6 +5,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { StatusChip } from "../../components/StatusChip";
 import { DoseCard } from "../dosing/DoseCard";
 import { ZoneActions } from "./ZoneActions";
+import { ResumeZone } from "./ResumeZone";
 import { SafetyBanners, ZoneReadings, ZoneStatusChip } from "./ZoneLive";
 import { useZoneStatus } from "./useZoneStatus";
 
@@ -14,6 +15,7 @@ function ZoneLive({ zone }: { zone: FarmZone }) {
   return (
     <>
       <SafetyBanners zoneName={zone.name} status={status} />
+      <ResumeZone zoneId={zone.id} zoneName={zone.name} status={status} />
       <section className="zone-card" aria-labelledby="readings-title">
         <header className="zone-card-head">
           <h2 id="readings-title">Readings</h2>

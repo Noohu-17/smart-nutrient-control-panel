@@ -9,6 +9,16 @@ import type {
   Farm,
   ZoneStatus,
 } from "../api/types";
+import {
+  activeCommandId,
+  addCommand,
+  commandAt,
+  findCommand,
+  isZoneStopped,
+  resumeZone,
+  stopZoneCommands,
+  type CommandEnding,
+} from "./commands";
 import { buildClimateTelemetry, buildPowerState } from "./data/climatePower";
 import { zoneDosing } from "./data/dosing";
 import { farmLayout } from "./data/layout";
@@ -22,6 +32,18 @@ const apiError = (status: number, code: string, message: string) =>
 
 /** A short wait so loading states are visible; long in the "slow" scenario. */
 const networkDelay = () => delay(currentScenario() === "slow" ? 3000 : 300);
+
+/** How a new dose ends in each ?mock= scenario. */
+function commandEnding(): CommandEnding {
+  const endings: Partial<Record<string, CommandEnding>> = {
+    "dose-blocked": "REJECTED",
+    "dose-failed": "FAILED",
+    "dose-partial": "PARTIAL",
+    "dose-unknown": "UNKNOWN",
+    "dose-expired": "EXPIRED",
+  };
+  return endings[currentScenario()] ?? "COMPLETED";
+}
 
 /** The layout this scenario's farm has: "no-generator" is a site without a generator or UPS. */
 function scenarioLayout(): Farm {
@@ -44,6 +66,8 @@ const ALL_STALE: ZoneStatus["quality"] = {
 function zoneStatus(zoneId: string): ZoneStatus {
   const scenario = currentScenario();
   const status = buildZoneStatus(zoneId)!;
+  status.activeCmdId = activeCommandId(zoneId);
+  status.stopped = isZoneStopped(zoneId);
   if (zoneId === "Z2" && scenario === "z2-offline") {
     // §11.2: an offline zone still answers 200, with its last values marked old
     status.online = false;
@@ -60,7 +84,10 @@ function zoneStatus(zoneId: string): ZoneStatus {
     status.ts = minutesAgo(5);
     status.quality = ALL_STALE;
   }
-  if (zoneId === "Z1" && scenario === "z1-estop") status.estop = true;
+  if (zoneId === "Z1" && scenario === "z1-estop") {
+    status.estop = true;
+    status.stopped = true; // an E-STOP stops the zone until a person resumes it (§6.8)
+  }
   if (zoneId === "Z1" && scenario === "z1-leak") status.leak = true;
   return status;
 }
@@ -154,6 +181,42 @@ export const handlers = [
 
     const sent: DoseConfirmed = { cmdId: crypto.randomUUID(), state: "DISPATCHED" };
     if (key) confirmed.set(key, sent);
+    const { readings } = buildZoneStatus(dr.zone)!;
+    addCommand({
+      cmdId: sent.cmdId,
+      dr,
+      device: findZone(dr.zone)!.controller,
+      before: { ec: readings.ec, ph: readings.ph },
+      ending: commandEnding(),
+      createdAt: Date.now(),
+    });
     return HttpResponse.json(sent, { status: 202 });
+  }),
+
+  // GET /api/commands/:cmdId · the command with its state and lines (contract §6.6, §8)
+  http.get("/api/commands/:cmdId", async ({ params }) => {
+    await networkDelay();
+    const record = findCommand(String(params.cmdId));
+    if (!record) return apiError(404, "NOT_FOUND", `There is no command ${String(params.cmdId)}`);
+    return HttpResponse.json(commandAt(record));
+  }),
+
+  // POST /api/stop · never checked and never refused (contract §7.4, PRD rule 1)
+  http.post("/api/stop", async ({ request }) => {
+    const body = (await request.json()) as { scope: string; zone?: string };
+    for (const zone of farmLayout.zones) {
+      if (body.scope !== "ZONE" || body.zone === zone.id) stopZoneCommands(zone.id);
+    }
+    return HttpResponse.json({ cmdId: crypto.randomUUID(), state: "DISPATCHED" }, { status: 202 });
+  }),
+
+  // POST /api/resume { zone } · a person has checked the zone; nothing restarts by itself (§7.8)
+  http.post("/api/resume", async ({ request }) => {
+    const body = (await request.json()) as { zone?: string };
+    if (!body.zone || !findZone(body.zone)) return apiError(404, "NOT_FOUND", `There is no zone ${body.zone}`);
+    if (zoneStatus(body.zone).estop)
+      return apiError(409, "ESTOP", "The E-STOP is still pressed. Release it first");
+    resumeZone(body.zone);
+    return HttpResponse.json({ cmdId: crypto.randomUUID(), state: "DISPATCHED" }, { status: 202 });
   }),
 ];

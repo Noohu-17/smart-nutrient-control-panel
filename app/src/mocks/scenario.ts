@@ -13,6 +13,11 @@ export const SCENARIOS = {
   "no-playground": "A real farm: features.playground is false, so no Simulator",
   "mains-lost": "Mains lost: the generator runs the farm, UPS on battery",
   "no-generator": "A site with no generator or UPS in its layout",
+  "dose-blocked": "The controller refuses every dose (24 h limit)",
+  "dose-failed": "The first dosing line runs with no flow",
+  "dose-partial": "The second dosing line stops short",
+  "dose-unknown": "The farm goes silent while a dose runs",
+  "dose-expired": "Nothing accepts the dose before it expires",
   "api-degraded": "Back end up, but database or broker down (503 DEGRADED)",
   slow: "Every answer takes 3 s, to see the loading states",
 } as const;

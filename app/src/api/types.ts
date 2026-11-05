@@ -152,5 +152,39 @@ export type DoseRequest = {
 /* ---------- POST /api/dose-requests/{id}/confirm (contract §11.3, states §8.1) ---------- */
 export type DoseConfirmed = { cmdId: string; state: "DISPATCHED" };
 
+/* ---------- GET /api/commands/{cmdId} (contract §6.6, §8) ---------- */
+export type CommandState =
+  | "DISPATCHED"
+  | "ACCEPTED"
+  | "EXECUTING"
+  | "COMPLETED"
+  | "PARTIAL"
+  | "FAILED"
+  | "STOPPED"
+  | "REJECTED"
+  | "EXPIRED"
+  | "UNKNOWN";
+
+export type LineState = "PENDING" | "RUNNING" | "DONE" | "SHORT" | "SKIPPED";
+
+export type CommandLine = { line: DoseLine; requestedMl: number; deliveredMl: number; state: LineState };
+
+export type EcPh = { ec: number | null; ph: number | null };
+
+/** GET /api/commands/{cmdId}: the command as its controller last reported it (CMD_STATE §6.6).
+    After the last line a COMPLETED or PARTIAL comes with `after: null`; the same state comes
+    again with `after` once the mix wait is over. */
+export type Command = {
+  cmdId: string;
+  device: string;
+  state: CommandState;
+  reason: string | null; // §8.4 code
+  lines: CommandLine[] | null; // DOSE only
+  before: EcPh | null;
+  after: EcPh | null;
+  startedAt: string | null;
+  endedAt: string | null;
+};
+
 /* ---------- errors (contract §11.1) ---------- */
 export type ApiErrorBody = { error: { code: string; message: string; details?: unknown } };

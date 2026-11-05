@@ -1,11 +1,12 @@
 import { useId, useState } from "react";
-import { useConfirmDose, useDoseReview } from "../../api/hooks";
+import { useConfirmDose, useDoseReview, useZone } from "../../api/hooks";
 import type { DoseLineAmount, DoseRequest, FarmZone } from "../../api/types";
 import { can, WHY } from "../../auth/roles";
 import { useSession } from "../../auth/session";
 import { LockedButton } from "../../components/LockedButton";
 import { StatusChip } from "../../components/StatusChip";
 import { checkTitle, lineName, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
+import { CommandStatus } from "./CommandStatus";
 
 type Amounts = Record<string, string>;
 
@@ -26,13 +27,18 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
   const [dr, setDr] = useState<DoseRequest | null>(null);
   // one key per review, so a repeated Start returns the first result, never a second dose (§11.1)
   const [confirmKey, setConfirmKey] = useState("");
+  // commands the person has closed; anything else running in the zone is shown after a reload (E3)
+  const [closed, setClosed] = useState<string[]>([]);
   const review = useDoseReview();
   const confirm = useConfirmDose();
+  const telemetry = useZone(zone.id);
   const idBase = useId();
 
   const allowed = role !== null && can(role, "operate");
   const lines = toLines(zone, amounts);
   const valid = zone.doseLines.every((l) => isWholeMl(amounts[l])) && lines.some((l) => l.ml > 0);
+  const sentId = confirm.data?.cmdId ?? telemetry.data?.activeCmdId ?? null;
+  const cmdId = sentId && !closed.includes(sentId) ? sentId : null;
 
   function runChecks() {
     setTicked(false);
@@ -48,6 +54,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
     );
   }
   function edit() {
+    if (cmdId) setClosed([...closed, cmdId]);
     setDr(null);
     review.reset();
     confirm.reset();
@@ -57,11 +64,11 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
   return (
     <section className="zone-card" id="dose-card" aria-labelledby="dose-title">
       <header className="zone-card-head">
-        <h2 id="dose-title">{dr ? "Review safety checks" : "Manual dose"}</h2>
+        <h2 id="dose-title">{cmdId ? "Dose status" : dr ? "Review safety checks" : "Manual dose"}</h2>
       </header>
 
-      {confirm.data ? (
-        <Sent cmdId={confirm.data.cmdId} onDone={edit} />
+      {cmdId ? (
+        <CommandStatus cmdId={cmdId} zoneId={zone.id} onClose={edit} />
       ) : dr ? (
         <Review
           dr={dr}
@@ -223,22 +230,6 @@ function Review({
           onClick={onStart}
         >
           {sending ? "Sending…" : "Start dose"}
-        </button>
-      </div>
-    </>
-  );
-}
-
-function Sent({ cmdId, onDone }: { cmdId: string; onDone: () => void }) {
-  return (
-    <>
-      <div className="banner info" role="status">
-        <b>Sent — waiting for the farm.</b> The controller runs its own checks before it starts. Command{" "}
-        {cmdId}.
-      </div>
-      <div className="dose-actions">
-        <button type="button" className="btn" onClick={onDone}>
-          New dose
         </button>
       </div>
     </>
