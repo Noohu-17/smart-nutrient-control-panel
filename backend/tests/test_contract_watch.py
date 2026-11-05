@@ -49,10 +49,8 @@ SIMULATOR_CMD_STATE = {
 }
 
 
-def test_cmd_state_has_no_model_yet_so_its_shape_is_checked():
-    result, detail = check(payload(SIMULATOR_CMD_STATE))
-    assert result == "OK"
-    assert "shape" in detail
+def test_cmd_state_is_checked_by_its_contract_model():
+    assert check(payload(SIMULATOR_CMD_STATE)) == ("OK", "CMD_STATE from ZC1")
 
 
 def test_a_rejected_cmd_state_with_its_reason_passes():

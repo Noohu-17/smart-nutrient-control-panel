@@ -25,8 +25,17 @@ def _error(
     return JSONResponse(status_code=status, content={"error": error}, headers=headers)
 
 
+class ApiError(HTTPException):
+    """An error with a code of its own, such as a reason code from §8.4 (INVALID_COMMAND)."""
+
+    def __init__(self, status: int, code: str, message: str):
+        super().__init__(status, message)
+        self.code = code
+
+
 async def _http_error(_: Request, exc: HTTPException) -> JSONResponse:
-    return _error(exc.status_code, HTTPStatus(exc.status_code).name, str(exc.detail), headers=exc.headers)
+    code = getattr(exc, "code", None) or HTTPStatus(exc.status_code).name
+    return _error(exc.status_code, code, str(exc.detail), headers=exc.headers)
 
 
 async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:

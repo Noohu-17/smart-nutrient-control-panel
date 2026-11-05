@@ -156,7 +156,7 @@ docker compose -f infra/docker-compose.dev.yml exec -T mqtt mosquitto_pub -q 1 -
 
 Times are contract time, for example `2026-11-04T09:00:00.000Z`. Watch the answers with
 `mosquitto_sub -v -t "farm/+/zone/+/cmd/state"`, or with the contract watch tool, which checks
-`CMD_STATE`'s shape until its model exists.
+`CMD_STATE` against its contract model.
 
 ## Tests
 

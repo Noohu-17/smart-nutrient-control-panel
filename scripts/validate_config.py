@@ -34,7 +34,7 @@ PACK_FILES = [
 REAL_VALUE_FILES = {"layout.json", "features.json"}
 
 # Files whose "zones" object must be keyed by exactly the layout's zone IDs.
-ZONE_KEYED_FILES = {"limits.json", "alerts.json"}
+ZONE_KEYED_FILES = {"limits.json", "alerts.json", "recipes.json"}
 
 # Limits keyed by dose line; their keys must match the zone's doseLines.
 LINE_KEYED_LIMITS = ["maxPerDoseMl", "max24hMl"]
@@ -175,6 +175,8 @@ def check_zone_keys(rel, name, data, dose_lines_by_zone, errors):
         return
     if set(zones) != set(dose_lines_by_zone):
         errors.append(f"{rel}: zones {sorted(zones)} do not match the layout's zone IDs {sorted(dose_lines_by_zone)}")
+    if name == "recipes.json":
+        check_zone_recipes(rel, data, zones, errors)
     if name != "limits.json":
         return
     for zone_id, zone in zones.items():
@@ -186,6 +188,20 @@ def check_zone_keys(rel, name, data, dose_lines_by_zone, errors):
             values = limits.get(key)
             if isinstance(values, dict) and set(values) != set(lines):
                 errors.append(f"{rel}: zone {zone_id}: limits.{key} keys {sorted(values)} do not match doseLines {lines}")
+
+
+def check_zone_recipes(rel, recipes, zones, errors):
+    """Each zone's crop and stage must be one of the recipes' own."""
+    stages = {
+        crop.get("id"): {stage.get("id") for stage in crop.get("stages", []) if isinstance(stage, dict)}
+        for crop in recipes.get("crops", [])
+        if isinstance(crop, dict)
+    }
+    for zone_id, zone in zones.items():
+        crop = zone.get("crop") if isinstance(zone, dict) else None
+        stage = zone.get("stage") if isinstance(zone, dict) else None
+        if crop not in stages or stage not in stages[crop]:
+            errors.append(f"{rel}: zone {zone_id}: no recipe for crop {crop!r} at stage {stage!r}")
 
 
 def validate_client(client_dir, errors):

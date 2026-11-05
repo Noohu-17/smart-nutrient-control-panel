@@ -1,5 +1,5 @@
 """Farm → cloud messages (contract §6): ZONE_TELEMETRY, CLIMATE_TELEMETRY, POWER_STATE,
-DEVICE_STATUS, ZONE_STATE and CLIMATE_STATE.
+DEVICE_STATUS, CMD_STATE, ZONE_STATE and CLIMATE_STATE.
 
 Maps keyed by equipment IDs, dose lines or sensor positions are plain dicts, because
 those keys come from the client's layout config (contract §2.4, OPEN-12), never from code.
@@ -243,6 +243,45 @@ class DeviceStatusLastWill(ContractModel):
     online: Annotated[Literal[False], exact_type(bool)]
 
 
+# --- 6.6 Command state ----------------------------------------------------------------
+
+
+class CommandLine(ContractModel):
+    line: str
+    requested_ml: Count
+    delivered_ml: Count
+    state: Literal["PENDING", "RUNNING", "DONE", "SHORT", "SKIPPED"]
+
+
+class EcPh(ContractModel):
+    ec: Number | None
+    ph: Number | None
+
+
+STATES_WITH_A_REASON = frozenset({"PARTIAL", "FAILED", "STOPPED", "REJECTED"})  # §6.6
+
+
+class CommandState(Envelope):
+    """A controller's report on one command it received (§6.6, §8)."""
+
+    type: Literal["CMD_STATE"]
+    cmd_id: UUID4
+    state: CmdState
+    reason: str | None  # a reason code (§8.4), exactly when the state is in STATES_WITH_A_REASON
+    lines: list[CommandLine] | None = None  # DOSE only
+    before: EcPh | None  # null until the first line starts, and on REJECTED
+    after: EcPh | None  # null until the mix wait is over
+    started_at: UtcTime | None
+    ended_at: UtcTime | None
+    detail: dict[str, Any] | None = None  # refill and climate commands only
+
+    @model_validator(mode="after")
+    def _reason_only_where_6_6_gives_one(self) -> "CommandState":
+        if (self.reason is not None) != (self.state in STATES_WITH_A_REASON):
+            raise ValueError(f"a {self.state} CMD_STATE {'needs' if self.reason is None else 'has no'} reason")
+        return self
+
+
 # --- 6.8 Zone state -------------------------------------------------------------------
 
 
@@ -282,6 +321,7 @@ FARM_MESSAGE_MODELS: dict[str, type[Envelope]] = {
     "CLIMATE_TELEMETRY": ClimateTelemetry,
     "POWER_STATE": PowerState,
     "DEVICE_STATUS": DeviceStatus,
+    "CMD_STATE": CommandState,
     "ZONE_STATE": ZoneState,
     "CLIMATE_STATE": ClimateState,
 }

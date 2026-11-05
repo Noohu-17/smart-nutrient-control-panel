@@ -1,14 +1,22 @@
-"""What the worker writes: readings, each device's latest state, and when each was last seen."""
+"""What the worker writes: readings, each device's latest state, each command's latest report, and
+when each device was last seen."""
 
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, Connection, Engine, func, select, tuple_, update
+from sqlalchemy import ColumnElement, Connection, Engine, and_, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 
-from ..contract import ClimateTelemetry, DeviceStatus, Envelope, PowerState, ZoneTelemetry
-from ..db.models import Device, LatestMessage, Reading
+from ..contract import (
+    ClimateTelemetry,
+    CommandState,
+    DeviceStatus,
+    Envelope,
+    PowerState,
+    ZoneTelemetry,
+)
+from ..db.models import CommandReport, Device, LatestMessage, Reading
 
 # The kinds of message whose newest one per device is kept (models.LatestMessage).
 KEPT_TYPES = frozenset({"ZONE_STATE", "CLIMATE_STATE", "ZONE_TELEMETRY", "POWER_STATE"})
@@ -106,6 +114,39 @@ def _keep_if_newer(connection: Connection, message: Envelope, org_id: str) -> bo
     return connection.execute(statement.returning(LatestMessage.seq)).first() is not None
 
 
+def _report_if_newer(connection: Connection, message: CommandState, org_id: str) -> bool:
+    """Make `message` its command's latest report, unless a newer one from that device is kept.
+
+    A report from another device never replaces it: cmdIds are unique, and a report naming
+    another device's command isn't to be trusted over the one that ran it. Returns whether it was kept.
+    """
+    row = {
+        "org_id": org_id,
+        "site_id": message.site,
+        "cmd_id": str(message.cmd_id),
+        "device_id": message.device,
+        "state": message.state,
+        "boot_id": message.boot_id,
+        "seq": message.seq,
+        "ts": message.ts,
+        "sim_ts": message.sim_ts,
+        "body": message.model_dump(mode="json"),
+    }
+    keys = [column.name for column in CommandReport.__table__.primary_key.columns]
+    statement = insert(CommandReport).values(row)
+    newer = and_(
+        statement.excluded.device_id == CommandReport.device_id,
+        tuple_(statement.excluded.boot_id, statement.excluded.seq)
+        > tuple_(CommandReport.boot_id, CommandReport.seq),
+    )
+    statement = statement.on_conflict_do_update(
+        index_elements=keys,
+        set_={name: statement.excluded[name] for name in row if name not in keys},
+        where=newer,
+    )
+    return connection.execute(statement.returning(CommandReport.seq)).first() is not None
+
+
 def _the_device(org_id: str, site_id: str, device_id: str) -> tuple[ColumnElement[bool], ...]:
     return Device.org_id == org_id, Device.site_id == site_id, Device.device_id == device_id
 
@@ -131,13 +172,19 @@ def store_message(
 ) -> Stored:
     """Everything one checked message changes, in one transaction.
 
-    Its readings, the latest message of its kind (KEPT_TYPES), and its device's last_seen, which
-    never moves back. A DEVICE_STATUS saying offline counts as a last will. Anything else new from
-    the device clears its last will; a replay doesn't.
+    Its readings, the latest message of its kind (KEPT_TYPES) or its command's latest report
+    (CMD_STATE), and its device's last_seen, which never moves back. A DEVICE_STATUS saying
+    offline counts as a last will. Anything else new from the device clears its last will; a
+    replay doesn't.
     """
     with engine.begin() as connection:
         new_rows = _insert_rows(connection, rows) if rows else 0
-        kept = _keep_if_newer(connection, message, org_id) if message.type in KEPT_TYPES else None
+        if isinstance(message, CommandState):
+            kept: bool | None = _report_if_newer(connection, message, org_id)
+        elif message.type in KEPT_TYPES:
+            kept = _keep_if_newer(connection, message, org_id)
+        else:
+            kept = None
         stored = Stored(len(rows), new_rows, kept)
         seen: dict[str, Any] = {"last_seen": func.greatest(Device.last_seen, message.ts)}
         if isinstance(message, DeviceStatus) and not message.online:

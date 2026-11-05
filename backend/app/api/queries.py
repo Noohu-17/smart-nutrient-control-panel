@@ -8,12 +8,13 @@ chunks, not the number of readings.
 """
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import ColumnElement, Connection, and_, exists, func, select
 from sqlalchemy.orm import aliased
 
-from ..db.models import Device, LatestMessage, Reading, Site, Zone
+from ..db.models import CommandReport, Device, LatestMessage, Reading, Site, Zone
 from .pack import SiteRef
 
 ZONE_TELEMETRY_METRIC = "ec"
@@ -132,6 +133,27 @@ def latest_climate_telemetry(connection: Connection, site: SiteRef, controller: 
             *theirs, Reading.ts == newest
         )
     ).all()
+
+
+def delivered_ml_since(
+    connection: Connection, site: SiteRef, controller: str, since: datetime, *, simulated: bool
+) -> dict[str, float]:
+    """Delivered mL per line in the controller's commands reported after `since` (§9 rule 8).
+
+    Each command counts once, by its newest report, at that report's simTs on playground sites
+    (its ts if it has none) and its ts elsewhere (§11.4).
+    """
+    at = func.coalesce(CommandReport.sim_ts, CommandReport.ts) if simulated else CommandReport.ts
+    reports = connection.scalars(
+        select(CommandReport.body).where(
+            *_in_site(CommandReport, site), CommandReport.device_id == controller, at > since
+        )
+    )
+    totals: dict[str, float] = {}
+    for body in reports:
+        for line in body.get("lines") or []:
+            totals[line["line"]] = totals.get(line["line"], 0) + line["deliveredMl"]
+    return totals
 
 
 def devices(

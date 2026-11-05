@@ -10,6 +10,7 @@ The routes in `routes.py`, as listed in `docs/contract.md` §11.2. The full sche
 | `GET /api/climate` | The climate controller's readings and state; `200` even when it is offline | The config pack and the database |
 | `GET /api/power` | The power monitor's latest `POWER_STATE`; `200` even when it is offline | The config pack and the database |
 | `GET /api/devices` | `{ "items": [ … ], "nextCursor": … }`, with `?limit=` (max 200) and `?cursor=` | The database |
+| `POST /api/dose-requests` | The §11.3 review of a dose: every check, `projected`, `estimate`, `canConfirm`; `201` whatever the checks say. Saved for the confirm step; nothing goes to the farm | The config pack and the database |
 
 Every query is scoped by `org_id` and `site_id` (OPEN-11). They come from the config pack: `org_id` is the client's folder name, as in the seed.
 
@@ -36,6 +37,24 @@ The devices are the layout's `climate.controller` and `power.monitor`; `online` 
 - **Climate `mode`, `manualUntil`, `stopped`, `equipment`, `latches`:** its latest `CLIMATE_STATE`, in `latest_message`.
 - **Power:** its latest `POWER_STATE`, in `latest_message`, as sent. `generator` and `ups` are left out when the layout has `"generator": false` or `"ups": false`, and `null` when it has them but nothing has arrived. `quality` is `{}`, or every number `STALE` (`l1V`, `l2V`, `l3V`, and `upsBatteryPct`, `upsRuntimeMin` with a UPS) once the message is over 120 s old or the monitor is offline.
 
+## The dose review (`dose_requests.py`, `dosing.py`)
+
+The checks run in the §11.3 order, with the check IDs and messages of the app's fake (`app/src/mocks/dosing.ts`), against the zone's `GET /api/zones/{zoneId}` answer. Unknown means blocked (§8.3 rule 7): a state that is still `null` never passes.
+
+| Check | Blocks when | From |
+| :--- | :--- | :--- |
+| `STATE_KNOWN` | no `ZONE_STATE` yet, a command in flight (`activeCmdId`), the zone stopped, or a latched fault | the zone's state |
+| `DEVICES_ONLINE` | the controller is offline (3 minutes' silence, or its last will) | `device` |
+| `ESTOP`, `ZONE_REMOTE` | E-STOP pressed or unknown; key switch not `REMOTE` or unknown | the zone's state |
+| `NO_CONFLICT` | an `operation`, `activeCmdId`, or a dose pump or refill valve on | the zone's state |
+| `LIMIT_DOSE`, `LIMIT_24H` | a line over `maxPerDoseMl`; delivered mL in the last 24 hours plus this dose over `max24hMl` | `limits.json`; `command_report`, on `simTs` on playground sites (§11.4) |
+| `DAYTANK` | a day-tank holds less than its line's dose (unknown counts as empty); **warns** below `alerts.json` `DAYTANK_LOW` | readings, `alerts.json` |
+| `RESERVOIR` | below `minReservoirPctToDose`, or unknown | readings, `limits.json` |
+| `PROJECTED_EC_PH` | EC or pH missing, or the projection outside `ecCeiling`/`phMin`/`phMax`; **warns** outside the recipe's target, or with no recipe | `simulator.json`'s stock model, `recipes.json` |
+| `FRESH_READINGS` | EC or pH older than 120 s, from an offline controller, missing, or with a quality other than `OK` (none at all counts as not `OK`) | readings |
+
+`estimate.durationMin` is the pump time at `hardware.json` `pumps.doseLines.*.flowMlPerS` (the rates the simulator's pumps run at) plus `mixWaitS`, rounded up. Amounts that can't be a dose (a line the zone hasn't got, not whole mL, nothing above 0, a line twice) are `422` `INVALID_COMMAND`, as in the fake.
+
 ## Errors
 
 Every error uses the §11.1 shape, including FastAPI's own, through the one handler in `backend/app/errors.py`. These routes only raise ordinary `HTTPException`s:
@@ -47,6 +66,7 @@ Every error uses the §11.1 shape, including FastAPI's own, through the one hand
 | Status | Code | When |
 | :--- | :--- | :--- |
 | 404 | `NOT_FOUND` | No such zone or path |
+| 422 | `INVALID_COMMAND` | Dose amounts that can't be a dose |
 | 405 | `METHOD_NOT_ALLOWED` | Wrong method on a path |
 | 422 | `VALIDATION_ERROR` | A bad query value; `details.fields` says which |
 | 500 | `INTERNAL` | The config pack can't be read, or an unexpected error |

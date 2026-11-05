@@ -1,4 +1,5 @@
-"""Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message and user.
+"""Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message, command
+report, dose request and user.
 
 Every table has org_id and site_id (OPEN-11), so more organisations and sites can share
 the database later. Rows are keyed by the contract's own IDs (§2.1, §2.2): siet-ph1, Z1,
@@ -163,6 +164,50 @@ class LatestMessage(Base):
     ts: Mapped[datetime] = mapped_column(Timestamp)
     sim_ts: Mapped[datetime | None] = mapped_column(Timestamp)
     body: Mapped[dict[str, Any]] = mapped_column(JSONB)  # the checked message, with its wire names
+
+
+class CommandReport(Base):
+    """The newest CMD_STATE (§6.6) of each command: one row per cmdId.
+
+    Replaced only by a newer (bootId, seq) from the same device (§5), as LatestMessage is. The
+    dose review adds up the delivered mL in it for the 24-hour totals (§11.4). No foreign key to
+    device, as for readings.
+    """
+
+    __tablename__ = "command_report"
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    cmd_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    device_id: Mapped[str] = mapped_column(ID, index=True)
+    state: Mapped[str] = mapped_column(String(32))  # ACCEPTED, EXECUTING, COMPLETED …
+    boot_id: Mapped[int] = mapped_column(BigInteger)
+    seq: Mapped[int] = mapped_column(BigInteger)
+    ts: Mapped[datetime] = mapped_column(Timestamp)
+    sim_ts: Mapped[datetime | None] = mapped_column(Timestamp)
+    body: Mapped[dict[str, Any]] = mapped_column(JSONB)  # the checked message, with its wire names
+
+
+class DoseRequest(Base):
+    """A reviewed dose request (§11.3), kept so it can be confirmed. Reviewing it changes nothing on the farm.
+
+    limits is the snapshot the review used, which a confirmed command carries (§7.2).
+    """
+
+    __tablename__ = "dose_request"
+    __table_args__ = (_zone_fk(),)
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    request_id: Mapped[str] = mapped_column(ID, primary_key=True)  # dr_…
+    zone_id: Mapped[str] = mapped_column(ID)
+    created_at: Mapped[datetime] = mapped_column(Timestamp)
+    lines: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    projected: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    checks: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    estimate: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    can_confirm: Mapped[bool]
+    limits: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
 
 class User(Base):

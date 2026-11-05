@@ -3,7 +3,11 @@
   "_meta": {
     "client": "client_A",
     "placeholder": true,
-    "note": "Placeholder values until the agronomy EC/pH targets arrive (OPEN-5). Do not use for a real farm."
+    "note": "Placeholder values until the agronomy EC/pH targets arrive (OPEN-5). Do not use for a real farm. zones is the recipe each zone is on until recipes can be applied (POST /zones/{zoneId}/recipe); its crops and stages are the contract's scenario example (11.4.1)."
+  },
+  "zones": {
+    "Z1": { "crop": "LETTUCE", "stage": "GROWING" },
+    "Z2": { "crop": "BASIL", "stage": "SEEDLING" }
   },
   "crops": [
     {

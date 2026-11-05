@@ -2,8 +2,8 @@
 
 Subscribes to everything the client's site sends (contract §4), checks each message against
 the contract models and stores it: its values in the reading table, the latest ZONE_STATE,
-CLIMATE_STATE, ZONE_TELEMETRY and POWER_STATE of each device, when each device was last seen, and any
-last will.
+CLIMATE_STATE, ZONE_TELEMETRY and POWER_STATE of each device, the latest CMD_STATE of each
+command, when each device was last seen, and any last will.
 
 A bad message is logged and skipped. If the broker goes away the worker reconnects with a
 growing delay. If the database is down or not migrated yet it keeps the message and tries

@@ -1,4 +1,5 @@
-"""Reading the client's config pack (contract §2.5): the farm, and which site this API serves."""
+"""Reading the client's config pack (contract §2.5): the farm, which site this API serves, and what
+the dose review needs to know about each zone."""
 
 import json
 import logging
@@ -56,4 +57,68 @@ def site_of(client_dir: Path) -> SiteRef:
     try:
         return SiteRef(client_dir.name, _read_json(client_dir / "layout.json")["site"])
     except (OSError, KeyError, TypeError, ValueError) as exc:
+        raise _cannot_load(exc) from exc
+
+
+@dataclass(frozen=True)
+class Target:
+    """The EC and pH a zone's recipe aims for (recipes.json)."""
+
+    ec_min: float
+    ec_max: float
+    ph_min: float
+    ph_max: float
+
+
+@dataclass(frozen=True)
+class ZoneDosing:
+    """Everything about dosing in one zone that comes from the config pack, never from code."""
+
+    limits: dict[str, Any]  # limits.json zones.{zone}.limits, as written there
+    mix_wait_s: float  # limits.json zones.{zone}.dose.mixWaitS
+    target: Target | None  # None: no recipe applied to the zone
+    pump_ml_per_min: dict[str, float]  # hardware.json pumps.doseLines.*.flowMlPerS, per minute
+    day_tank_warn_pct: float  # alerts.json events.DAYTANK_LOW.thresholdPct
+    ec_per_ml_per_l: dict[str, float]  # EC added per mL in each litre: simulator.json's stock model
+    ph_per_ml_per_l: dict[str, float]  # pH change per mL in each litre: the same
+    playground: bool  # features.json: 24 h totals follow simulated time (§11.4)
+
+
+def _target(recipes: dict[str, Any], zone_id: str) -> Target | None:
+    applied = recipes.get("zones", {}).get(zone_id)
+    if applied is None:
+        return None
+    crop = next(c for c in recipes["crops"] if c["id"] == applied["crop"])
+    stage = next(s for s in crop["stages"] if s["id"] == applied["stage"])
+    ec, ph = stage["ecTarget"], stage["phTarget"]
+    return Target(ec["min"], ec["max"], ph["min"], ph["max"])
+
+
+def read_dosing(client_dir: Path, zone_id: str) -> ZoneDosing | None:
+    """The zone's dosing settings, or None if limits.json has no such zone."""
+    try:
+        zone = _read_json(client_dir / "limits.json")["zones"].get(zone_id)
+        if zone is None:
+            return None
+        recipes = _read_json(client_dir / "recipes.json")
+        pumps = _read_json(client_dir / "hardware.json")["pumps"]["doseLines"]
+        model = _read_json(client_dir / "simulator.json")["model"]
+        alerts = _read_json(client_dir / "alerts.json")
+        features = _read_json(client_dir / "features.json")
+        stock = model["doseLines"]
+        return ZoneDosing(
+            limits=zone["limits"],
+            mix_wait_s=zone["dose"]["mixWaitS"],
+            target=_target(recipes, zone_id),
+            pump_ml_per_min={line: pump["flowMlPerS"] * 60 for line, pump in pumps.items()},
+            day_tank_warn_pct=alerts["events"]["DAYTANK_LOW"]["thresholdPct"],
+            ec_per_ml_per_l={
+                line: model["ecPerGramPerL"] * entry["nutrientGPerMl"] for line, entry in stock.items()
+            },
+            ph_per_ml_per_l={
+                line: entry["phChangePerMlPer1000L"] * 1000 for line, entry in stock.items()
+            },
+            playground=bool(features.get("playground")),
+        )
+    except (OSError, KeyError, TypeError, ValueError, StopIteration) as exc:
         raise _cannot_load(exc) from exc

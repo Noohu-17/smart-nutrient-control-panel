@@ -5,6 +5,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from .api.dose_requests import add_dose_api
 from .api.routes import add_read_api
 from .config import load_settings
 from .errors import add_error_handlers
@@ -20,6 +21,7 @@ app = FastAPI(
 )
 add_error_handlers(app)
 add_read_api(app)
+add_dose_api(app)
 
 
 @app.get("/api/health")

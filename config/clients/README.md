@@ -38,6 +38,8 @@ JSON has no comments, so placeholder status is written into the files:
 
   Every other file except `layout.json` and `features.json` is placeholder throughout.
 
+- **What the dose review reads (T1-16):** `recipes.json` `zones` is the crop and stage each zone is on, so its EC/pH target, until recipes can be applied from the app (`POST /zones/{zoneId}/recipe`). `hardware.json` `pumps.doseLines.*.flowMlPerS`, the simulator's pump rates (T4-8), gives the estimated dose time. The validator checks that every zone has a recipe that exists.
+
 Before loading a pack for a real farm, every `"placeholder": true` must be gone.
 
 Some other conventions:

@@ -10,7 +10,9 @@ from sqlalchemy.dialects.postgresql import insert
 from app.db.models import Base, Reading
 from conftest import run_alembic
 
-TABLES = {"site", "zone", "bench", "device", "reading", "latest_message", "app_user"}
+TABLES = {
+    "site", "zone", "bench", "device", "reading", "latest_message", "command_report", "dose_request", "app_user",
+}
 
 
 def test_upgrade_head_builds_every_table(migrated_db):

@@ -6,12 +6,12 @@ dose lines or equipment IDs are plain dicts, because those keys come from the cl
 """
 
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import UUID4, ConfigDict, PlainSerializer, StrictBool, WithJsonSchema
 
 from ..contract import ContractModel
-from ..contract.envelope import Count
+from ..contract.envelope import Count, Number
 from ..contract.farm_messages import (
     AtsPosition,
     ChillerState,
@@ -197,6 +197,54 @@ class PowerStatus(ContractModel):
     ats: AtsPosition | None
     ups: UpsState | None = None
     quality: dict[str, Quality]
+
+
+# --- POST /api/dose-requests (§11.3) ----------------------------------------------------
+
+
+class DoseLineAmount(ContractModel):
+    line: str
+    ml: Number  # whole mL (§1); the review answers 422 INVALID_COMMAND otherwise, as the app's fake
+
+
+class DoseLineMl(ContractModel):
+    """A line's amount in the answer, once checked to be whole mL."""
+
+    line: str
+    ml: int
+
+
+class DoseRequestBody(ContractModel):
+    zone: str
+    lines: list[DoseLineAmount]
+
+
+class DoseCheck(ContractModel):
+    id: str  # STATE_KNOWN, DEVICES_ONLINE … in the §11.3 order
+    result: Literal["PASS", "WARN", "BLOCK"]
+    message: str
+
+
+class Projected(ContractModel):
+    ec: float | None
+    ph: float | None
+
+
+class DoseEstimate(ContractModel):
+    duration_min: int
+    total_ml: int
+
+
+class DoseReview(ContractModel):
+    """The review of one dose request. canConfirm is false if any check is BLOCK."""
+
+    id: str
+    zone: str
+    lines: list[DoseLineMl]
+    projected: Projected
+    checks: list[DoseCheck]
+    estimate: DoseEstimate
+    can_confirm: bool
 
 
 # --- GET /api/devices (§11.2; the fields follow device_state, §12) ------------------------

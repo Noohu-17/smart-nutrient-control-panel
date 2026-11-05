@@ -25,6 +25,7 @@ Or inside the dev stack, once the api image is rebuilt: `docker compose -f infra
 | `POWER_STATE` | One `reading` row per number: `l1V`, `l2V`, `l3V`, `upsBatteryPct`, `upsRuntimeMin`. |
 | `DEVICE_STATUS` | One `reading` row, `uptimeS`, so every device has a new row at least every 30 s. |
 | `ZONE_STATE`, `CLIMATE_STATE`, `ZONE_TELEMETRY`, `POWER_STATE` | The device's newest message of that kind, one row each in `latest_message`. A message replaces it only when its (`bootId`, `seq`) is newer, so an older one never replaces a newer one. The API takes a zone's and the climate's state, and the power answer, from it. |
+| `CMD_STATE` | The command's newest report, one row per `cmdId` in `command_report`, replaced only by a newer (`bootId`, `seq`) from the same device. The dose review adds up its `deliveredMl` for the 24-hour totals. |
 | A last will (`DEVICE_STATUS` with `online: false`) | `device.last_will_at`, the time it arrived. The device is offline from then until it sends anything new, which clears it. A replay doesn't. |
 
 Each row has `ts` (real time, UTC) and `sim_ts` (simulated time, playground sites only). A repeated message is stored once: it has the same primary key, so the insert drops it.
