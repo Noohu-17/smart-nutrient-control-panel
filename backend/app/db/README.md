@@ -7,8 +7,9 @@ PostgreSQL with TimescaleDB (the dev stack's `db` service). SQLAlchemy models ar
 | `site` | the site: ID, name, time zone | the seed, from `layout.json` |
 | `zone` | zones: reservoir, dosing cabinet, dose lines, day-tanks, optional sensors | the seed |
 | `bench` | benches and their channels | the seed |
-| `device` | devices that connect to MQTT (GW1, ZC1 …) and a zone controller's zone | the seed |
-| `reading` | sensor readings, one row per value; a TimescaleDB hypertable on `ts` | the MQTT ingest (later task) |
+| `device` | devices that connect to MQTT (GW1, ZC1 …) and a zone controller's zone; `last_seen` and `last_will_at` | the seed; the worker sets `last_seen` and `last_will_at`, which the seed keeps |
+| `reading` | sensor readings, one row per value; a TimescaleDB hypertable on `ts` | the worker |
+| `latest_message` | each device's newest `ZONE_STATE`, `CLIMATE_STATE` and `ZONE_TELEMETRY`, one row each; replaced only by a newer (`bootId`, `seq`) | the worker |
 | `app_user` | people who sign in (`user` is reserved in PostgreSQL) | the sign-in code (later task) |
 
 Every table has `org_id` and `site_id` (OPEN-11). Rows are keyed by the contract's IDs (`siet-ph1`, `Z1`, `Z1-B1`, `ZC1`). Until the organisation layer exists, `org_id` is the client's config-pack folder name (`client_A`).

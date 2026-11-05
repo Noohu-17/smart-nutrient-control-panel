@@ -26,7 +26,6 @@ from test_worker import (
     zone_telemetry,
 )
 
-from app.api.queries import EVERY_KIND_OF_MESSAGE
 from app.api.routes import MAX_PAGE, _engine_for, get_engine, get_settings
 from app.api.schemas import ZoneStatus, contract_time
 from app.api.status import FRESH_FOR, OFFLINE_AFTER, is_online, zone_status
@@ -35,7 +34,7 @@ from app.contract import parse_farm_message
 from app.db.models import Reading
 from app.db.seed import seed
 from app.main import app
-from app.worker.store import last_seen_times, reading_rows, store_rows
+from app.worker.store import last_seen_times, reading_rows, store_message
 
 ORG = "client_A"
 CONTRACT = Path(__file__).resolve().parents[2] / "docs" / "contract.md"
@@ -117,10 +116,9 @@ def ago(seconds: float) -> datetime:
 
 
 def store(engine, message: dict, org: str = ORG) -> None:
-    """As the worker does: a message with no values (a ZONE_STATE) writes nothing."""
-    rows = reading_rows(parse_farm_message(message), org)
-    if rows:
-        store_rows(engine, rows)
+    """As the worker does: its readings, the latest state and last_seen, in one transaction."""
+    parsed = parse_farm_message(message)
+    store_message(engine, parsed, org, reading_rows(parsed, org), datetime.now(UTC))
 
 
 def fresh_zone(seconds: float = 5, **changes) -> dict:
@@ -259,13 +257,14 @@ def test_a_zone_that_has_never_reported_answers_as_the_contract_says(api):
     }
 
 
-def test_what_isnt_stored_yet_says_not_known_rather_than_a_guess(api, migrated_db):
+def test_the_state_comes_from_zone_state_and_leak_from_telemetry(api, migrated_db):
+    """ZONE_STATE is authoritative where it overlaps telemetry (§6.8); leak is telemetry's (§11.2)."""
     store(migrated_db, fresh_zone(mode="MAINT", estop=True, leak=True))
     store(migrated_db, zone_state(ts=contract_time(ago(1)), stopped=True, latches=["LEAK"]))
     body = api.get("/api/zones/Z1").json()
-    for field in ("mode", "estop", "leak", "stopped", "activeCmdId", "operation", "configVersion"):
-        assert body[field] is None, field
-    assert (body["equipment"], body["latches"]) == ({}, [])
+    assert (body["mode"], body["estop"], body["stopped"]) == ("REMOTE", False, True)
+    assert (body["equipment"], body["latches"]) == ({"Z1-CIRC": "ON"}, ["LEAK"])
+    assert body["leak"] is True
 
 
 def test_the_newest_message_wins_whatever_order_they_came_in(api, migrated_db):
@@ -473,15 +472,6 @@ def test_every_kind_of_stored_message_counts_as_seen(api, migrated_db):
     store(migrated_db, zone_telemetry(ts=moment))
     seen = {d["deviceId"]: d["lastSeen"] for d in api.get("/api/devices").json()["items"]}
     assert seen == {"CC1": moment, "PM1": moment, "GW1": moment, "ZC1": moment, "ZC2": None}
-
-
-@pytest.mark.parametrize(
-    "message", [zone_telemetry(), climate_telemetry(), power_state(), heartbeat()],
-    ids=["zone", "climate", "power", "heartbeat"],
-)
-def test_the_metrics_used_for_last_seen_cover_every_stored_message(message):
-    metrics = {row["metric"] for row in reading_rows(parse_farm_message(message), ORG)}
-    assert metrics & set(EVERY_KIND_OF_MESSAGE)
 
 
 def test_last_seen_agrees_with_the_worker_on_every_device(api, migrated_db):

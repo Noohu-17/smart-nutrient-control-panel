@@ -122,7 +122,17 @@ def _zone(connection: Connection, site: SiteRef, row: Any) -> ZoneStatus:
         if row.device_id is not None
         else []
     )
-    return zone_status(row.zone_id, row.dose_lines, row.last_seen, telemetry, datetime.now(UTC))
+    return zone_status(
+        row.zone_id,
+        row.dose_lines,
+        row.last_seen,
+        telemetry,
+        datetime.now(UTC),
+        last_will_at=row.last_will_at,
+        state=row.state,
+        leak=row.leak,
+        active_cmd_id=row.active_cmd_id,
+    )
 
 
 def list_devices(
@@ -144,7 +154,7 @@ def list_devices(
                 device_id=row.device_id,
                 kind=row.kind,
                 zone=row.zone_id,
-                online=is_online(row.last_seen, now),
+                online=is_online(row.last_seen, now, row.last_will_at),
                 last_seen=row.last_seen,
             )
             for row in page

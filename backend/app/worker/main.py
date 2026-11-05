@@ -1,7 +1,9 @@
 """Run the worker. From backend/: python -m app.worker.main
 
 Subscribes to everything the client's site sends (contract §4), checks each message against
-the contract models and stores its values in the reading table.
+the contract models and stores it: its values in the reading table, the latest ZONE_STATE,
+CLIMATE_STATE and ZONE_TELEMETRY of each device, when each device was last seen, and any
+last will.
 
 A bad message is logged and skipped. If the broker goes away the worker reconnects with a
 growing delay. If the database is down or not migrated yet it keeps the message and tries
@@ -14,6 +16,7 @@ import logging
 import math
 import sys
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import aiomqtt
@@ -24,7 +27,7 @@ from sqlalchemy.exc import InterfaceError, OperationalError, ProgrammingError
 from ..config import Settings, load_settings
 from ..contract import DeviceStatusLastWill, Envelope, parse_farm_message
 from ..db.engine import create_db_engine
-from .store import reading_rows, store_rows
+from .store import mark_offline, reading_rows, store_message
 
 log = logging.getLogger("worker")
 
@@ -95,10 +98,19 @@ class Worker:
         except BadMessage as exc:
             log.warning("skipping a bad message on %s: %s", topic, exc)
             return
+        received_at = datetime.now(UTC)
         if message is None:
             log.debug("skipping a message on %s: its type has no model yet", topic)
         elif isinstance(message, DeviceStatusLastWill):
-            log.info("%s says it is offline", message.device)  # it has no ts, so nothing to store
+            # It names no site, so it's this worker's site, the one in the topic it came on.
+            log.info("%s says it is offline", message.device)
+            await self._write(
+                topic,
+                f"the last will of {message.device}",
+                lambda: mark_offline(
+                    self.engine, self.org_id, self.site, message.device, received_at
+                ),
+            )
         elif message.site != self.site:
             log.warning("skipping a bad message on %s: it names site %s", topic, message.site)
         else:
@@ -107,33 +119,37 @@ class Worker:
             bad = [r["metric"] for r in rows if r["value"] is not None and not math.isfinite(r["value"])]
             if bad:
                 log.warning("skipping a bad message on %s: %s not a number", topic, ", ".join(bad))
-            elif rows:
-                await self._store(topic, message, rows)
+                return
+            stored = await self._write(
+                topic,
+                f"{message.type} from {message.device}",
+                lambda: store_message(self.engine, message, self.org_id, rows, received_at),
+            )
+            if stored is not None and stored.replay:
+                log.info(
+                    "dropped a replay: %s from %s, msgId %s",
+                    message.type, message.device, message.msg_id,
+                )
 
-    async def _store(self, topic: str, message: Envelope, rows: list[dict[str, Any]]) -> None:
+    async def _write[T](self, topic: str, what: str, write: Callable[[], T]) -> T | None:
+        """Run one database write; wait and retry while the database isn't ready."""
         attempt = 0
         while True:
             try:
-                new_rows = await asyncio.to_thread(store_rows, self.engine, rows)
-                break
+                return await asyncio.to_thread(write)
             except DATABASE_NOT_READY as exc:
                 delay = retry_delay(attempt)
                 attempt += 1
                 log.warning(
-                    "database not ready (%s); keeping %s from %s, retrying in %.0f s",
-                    _first_line(exc), message.type, message.device, delay,
+                    "database not ready (%s); keeping %s, retrying in %.0f s",
+                    _first_line(exc), what, delay,
                 )
                 await self._sleep(delay)
             except Exception as exc:  # noqa: BLE001 - one message must never stop the worker
                 log.warning(
                     "skipping a message on %s the database refused: %s", topic, _first_line(exc)
                 )
-                return
-        if not new_rows:
-            log.info(
-                "dropped a replay: %s from %s, msgId %s",
-                message.type, message.device, message.msg_id,
-            )
+                return None
 
 
 async def run(

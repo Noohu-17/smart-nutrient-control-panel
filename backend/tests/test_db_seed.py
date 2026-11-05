@@ -22,11 +22,16 @@ def read_layout(client_dir=CLIENT_DIR):
     return json.loads((client_dir / "layout.json").read_text(encoding="utf-8"))
 
 
+# Columns the worker sets, which the seed keeps but never writes (T1-15).
+WORKER_COLUMNS = {"last_seen", "last_will_at"}
+
+
 def db_rows(engine, model):
-    """Every row of `model`, as dicts sorted by primary key."""
+    """Every row of `model` as the seed writes it, as dicts sorted by primary key."""
     table = model.__table__
+    columns = [column for column in table.columns if column.name not in WORKER_COLUMNS]
     with engine.connect() as connection:
-        result = connection.execute(select(table).order_by(*table.primary_key.columns))
+        result = connection.execute(select(*columns).order_by(*table.primary_key.columns))
         return [dict(row) for row in result.mappings()]
 
 

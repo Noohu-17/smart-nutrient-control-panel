@@ -13,16 +13,18 @@ Every query is scoped by `org_id` and `site_id` (OPEN-11). They come from the co
 
 ## The rules
 
-- **Online:** a device is online while its newest message is under 3 minutes old (§14).
-- **Last seen:** the newest `ts` among a device's readings. It's the message's own `ts`, so a retained or replayed message can't make a silent device look alive.
+- **Online:** a device is online while its newest message is under 3 minutes old, and no last will has arrived since (§14). A clean stop sends the last will, so it shows offline at once.
+- **Last seen:** the newest `ts` of any message from the device (`device.last_seen`, kept by the worker). It's the message's own `ts`, so a retained or replayed message can't make a silent device look alive.
 - **Quality:** as sent, except that `OK` becomes `STALE` when the reading is over 120 s old or its controller is offline. Every other quality stays as it is (§11.2).
 - **Times:** ISO-8601 UTC with milliseconds and `Z`. `simTs` is left out unless the latest reading has it.
 
-## What isn't known yet
+## Where the zone object comes from
 
-The zone object's readings, quality, `online`, `lastSeen`, `ts` and `simTs` come from the `reading` table. The other fields come from `ZONE_STATE` and the rest of `ZONE_TELEMETRY`, which aren't stored yet, so they say "not known", in the form §11.2 gives a zone that has never reported: `mode`, `estop`, `leak`, `stopped`, `activeCmdId`, `operation` and `configVersion` are `null`, `equipment` is `{}` and `latches` is `[]`.
+- **`readings`, `quality`, `ts`, `simTs`:** the zone's newest `ZONE_TELEMETRY` rows in the `reading` table.
+- **`mode`, `estop`, `stopped`, `operation`, `latches`, `configVersion` and `equipment`:** the zone's latest `ZONE_STATE`, in `latest_message`. `equipment` is its `outputs` (§6.8 calls them outputs, §11.2 equipment), and `ZONE_STATE` is authoritative where it overlaps telemetry (§6.8).
+- **`leak`, `activeCmdId`:** the zone's latest `ZONE_TELEMETRY`, in `latest_message`.
 
-A last will isn't stored either, so a device that has gone offline shows as online until its 3 minutes are up.
+A field is `null` (or `{}` / `[]`) only while nothing has been received for it, in the form §11.2 gives a zone that has never reported. A controller's messages for another zone, from before the layout moved it, don't count.
 
 ## Errors
 

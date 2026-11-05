@@ -1,6 +1,6 @@
 """The rules behind a zone's and a device's status (contract §11.2, §14)."""
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, get_origin
 
@@ -11,8 +11,13 @@ OFFLINE_AFTER = timedelta(minutes=3)  # "3 minutes without any message" (§14)
 FRESH_FOR = timedelta(seconds=120)  # "Fresh EC/pH to dose: ≤ 120 s old" (§14)
 
 
-def is_online(last_seen: datetime | None, now: datetime) -> bool:
-    return last_seen is not None and now - last_seen < OFFLINE_AFTER
+def is_online(
+    last_seen: datetime | None, now: datetime, last_will_at: datetime | None = None
+) -> bool:
+    """Heard from within 3 minutes, and no last will since (§14)."""
+    if last_seen is None or now - last_seen >= OFFLINE_AFTER:
+        return False
+    return last_will_at is None or last_will_at < last_seen
 
 
 def _no_readings(dose_lines: Iterable[str]) -> dict[str, Any]:
@@ -30,17 +35,23 @@ def zone_status(
     last_seen: datetime | None,
     rows: Sequence[Any],
     now: datetime,
+    *,
+    last_will_at: datetime | None = None,
+    state: Mapping[str, Any] | None = None,
+    leak: bool | None = None,
+    active_cmd_id: str | None = None,
 ) -> ZoneStatus:
-    """A zone's answer, from the rows of its latest telemetry (none if it has never reported).
+    """A zone's answer (§11.2), from the rows of its latest telemetry and its latest ZONE_STATE.
 
     Readings stay as sent. A quality of OK turns into STALE when the reading is older than the
-    fresh limit or its controller is offline; every other quality stays as it is (§11.2).
+    fresh limit or its controller is offline; every other quality stays as it is.
 
-    The fields that come from ZONE_STATE and the rest of ZONE_TELEMETRY aren't in the reading
-    table, so they say "not known", in the form §11.2 gives a zone that has never reported.
-    Unknown means blocked (§8.3), so a start command can't go ahead on the strength of them.
+    mode, estop, stopped, operation, latches, configVersion and equipment (ZONE_STATE's outputs)
+    come from the latest ZONE_STATE; leak and activeCmdId from the latest ZONE_TELEMETRY. They
+    are null, {} or [] only while none has been received. Unknown means blocked (§8.3).
     """
-    online = is_online(last_seen, now)
+    online = is_online(last_seen, now, last_will_at)
+    known = state or {}
     latest = rows[0] if rows else None
     stale = not online or (latest is not None and now - latest.ts > FRESH_FOR)
     readings = _no_readings(dose_lines)
@@ -62,13 +73,13 @@ def zone_status(
         **sim_ts,
         readings=ZoneReadings.model_validate(readings),
         quality=quality,
-        equipment={},
-        mode=None,
-        estop=None,
-        leak=None,
-        stopped=None,
-        active_cmd_id=None,
-        operation=None,
-        latches=[],
-        config_version=None,
+        equipment=known.get("outputs", {}),  # §6.8 calls them outputs, §11.2 equipment
+        mode=known.get("mode"),
+        estop=known.get("estop"),
+        leak=leak,
+        stopped=known.get("stopped"),
+        active_cmd_id=active_cmd_id,
+        operation=known.get("operation"),
+        latches=known.get("latches", []),
+        config_version=known.get("configVersion"),
     )

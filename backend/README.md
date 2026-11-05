@@ -24,10 +24,12 @@ Or inside the dev stack, once the api image is rebuilt: `docker compose -f infra
 | `ZONE_TELEMETRY`, `CLIMATE_TELEMETRY` | One `reading` row per value, including per-line and per-position values (`dayTankPct.A`, `airTempByPosC.PAD_END`). A null stays null, and quality is stored as sent. |
 | `POWER_STATE` | One `reading` row per number: `l1V`, `l2V`, `l3V`, `upsBatteryPct`, `upsRuntimeMin`. |
 | `DEVICE_STATUS` | One `reading` row, `uptimeS`, so every device has a new row at least every 30 s. |
+| `ZONE_STATE`, `CLIMATE_STATE`, `ZONE_TELEMETRY` | The device's newest message of that kind, one row each in `latest_message`. A message replaces it only when its (`bootId`, `seq`) is newer, so an older one never replaces a newer one. The API takes a zone's state from it. |
+| A last will (`DEVICE_STATUS` with `online: false`) | `device.last_will_at`, the time it arrived. The device is offline from then until it sends anything newer. |
 
 Each row has `ts` (real time, UTC) and `sim_ts` (simulated time, playground sites only). A repeated message is stored once: it has the same primary key, so the insert drops it.
 
-A device's last-seen time is the newest `ts` among its readings (`last_seen_times()` in `app/worker/store.py`). A retained or replayed message can't make a silent device look alive, because its `ts` is old.
+Every message also sets its device's `device.last_seen`, the newest `ts` it has sent. A retained or replayed message can't make a silent device look alive, because its `ts` is old.
 
 A bad message is logged and skipped, and the worker carries on. If the broker goes away it reconnects, waiting 1, 2, 4 … up to 30 s. If the database is down or not migrated yet it holds the message and retries with the same delays.
 
@@ -51,7 +53,8 @@ See what it stored:
 
 ```
 docker compose -f infra/docker-compose.dev.yml exec db psql -U sna -d sna -c "SELECT ts, device_id, metric, value, quality FROM reading ORDER BY ts DESC LIMIT 20"
-docker compose -f infra/docker-compose.dev.yml exec db psql -U sna -d sna -c "SELECT device_id, max(ts) AS last_seen FROM reading GROUP BY device_id"
+docker compose -f infra/docker-compose.dev.yml exec db psql -U sna -d sna -c "SELECT device_id, last_seen, last_will_at FROM device"
+docker compose -f infra/docker-compose.dev.yml exec db psql -U sna -d sna -c "SELECT device_id, type, boot_id, seq, ts FROM latest_message"
 ```
 
 To check the messages themselves, use the watch tool above: it shows `FAIL` with the fields that break the contract.

@@ -1,13 +1,17 @@
-"""What the worker writes to the reading table, and when each device was last seen."""
+"""What the worker writes: readings, each device's latest state, and when each was last seen."""
 
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Engine, func, select
+from sqlalchemy import ColumnElement, Connection, Engine, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 
 from ..contract import ClimateTelemetry, DeviceStatus, Envelope, PowerState, ZoneTelemetry
-from ..db.models import Reading
+from ..db.models import Device, LatestMessage, Reading
+
+# The kinds of message whose newest one per device is kept (models.LatestMessage).
+KEPT_TYPES = frozenset({"ZONE_STATE", "CLIMATE_STATE", "ZONE_TELEMETRY"})
 
 
 def _power_values(state: PowerState) -> dict[str, float | None]:
@@ -54,23 +58,116 @@ def reading_rows(message: Envelope, org_id: str) -> list[dict[str, Any]]:
     return rows
 
 
-def store_rows(engine: Engine, rows: list[dict[str, Any]]) -> int:
-    """Store one message's rows in one transaction. Returns how many weren't already stored.
+def _insert_rows(connection: Connection, rows: list[dict[str, Any]]) -> int:
+    """Insert one message's rows. Returns how many weren't already stored.
 
     A repeated message gives the same primary keys, so ON CONFLICT DO NOTHING drops it
     (models.Reading).
     """
     statement = insert(Reading).values(rows).on_conflict_do_nothing()
+    inserted = connection.execute(statement.returning(Reading.metric))  # new rows only
+    return len(inserted.all())
+
+
+def store_rows(engine: Engine, rows: list[dict[str, Any]]) -> int:
+    """Store one message's rows in one transaction. Returns how many weren't already stored."""
     with engine.begin() as connection:
-        inserted = connection.execute(statement.returning(Reading.metric))  # new rows only
-        return len(inserted.all())
+        return _insert_rows(connection, rows)
+
+
+def _keep_if_newer(connection: Connection, message: Envelope, org_id: str) -> bool:
+    """Make `message` its device's latest of its kind, unless a newer one is already kept.
+
+    (bootId, seq) orders a device's messages (§5): bootId rises at every restart, and seq at every
+    message within a boot. Returns whether the message was kept.
+    """
+    row = {
+        "org_id": org_id,
+        "site_id": message.site,
+        "device_id": message.device,
+        "type": message.type,
+        "zone_id": getattr(message, "zone", None),
+        "boot_id": message.boot_id,
+        "seq": message.seq,
+        "ts": message.ts,
+        "sim_ts": message.sim_ts,
+        "body": message.model_dump(mode="json"),
+    }
+    keys = [column.name for column in LatestMessage.__table__.primary_key.columns]
+    statement = insert(LatestMessage).values(row)
+    newer = tuple_(statement.excluded.boot_id, statement.excluded.seq) > tuple_(
+        LatestMessage.boot_id, LatestMessage.seq
+    )
+    statement = statement.on_conflict_do_update(
+        index_elements=keys,
+        set_={name: statement.excluded[name] for name in row if name not in keys},
+        where=newer,
+    )
+    return connection.execute(statement.returning(LatestMessage.seq)).first() is not None
+
+
+def _the_device(org_id: str, site_id: str, device_id: str) -> tuple[ColumnElement[bool], ...]:
+    return Device.org_id == org_id, Device.site_id == site_id, Device.device_id == device_id
+
+
+@dataclass(frozen=True)
+class Stored:
+    rows: int  # how many readings the message had
+    new_rows: int  # how many of them weren't already stored
+    kept: bool | None  # whether it became the latest of its kind; None if its kind isn't kept
+
+    @property
+    def replay(self) -> bool:
+        """Nothing new: its readings were all stored already, or a newer message of its kind was."""
+        return self.new_rows == 0 if self.rows else self.kept is False
+
+
+def store_message(
+    engine: Engine,
+    message: Envelope,
+    org_id: str,
+    rows: list[dict[str, Any]],
+    received_at: datetime,
+) -> Stored:
+    """Everything one checked message changes, in one transaction.
+
+    Its readings, the latest message of its kind (KEPT_TYPES), and its device's last_seen, which
+    never moves back. A DEVICE_STATUS saying offline counts as a last will.
+    """
+    with engine.begin() as connection:
+        new_rows = _insert_rows(connection, rows) if rows else 0
+        kept = _keep_if_newer(connection, message, org_id) if message.type in KEPT_TYPES else None
+        seen: dict[str, Any] = {"last_seen": func.greatest(Device.last_seen, message.ts)}
+        if isinstance(message, DeviceStatus) and not message.online:
+            seen["last_will_at"] = received_at
+        connection.execute(
+            update(Device).where(*_the_device(org_id, message.site, message.device)).values(seen)
+        )
+    return Stored(len(rows), new_rows, kept)
+
+
+def mark_offline(
+    engine: Engine, org_id: str, site_id: str, device_id: str, received_at: datetime
+) -> bool:
+    """A last will (§6.4): the device is offline from now until it sends anything newer (§14).
+
+    A last will has no ts, so the time it arrived stands in. Returns whether the device is known.
+    """
+    with engine.begin() as connection:
+        changed = connection.execute(
+            update(Device)
+            .where(*_the_device(org_id, site_id, device_id))
+            .values(last_will_at=received_at)
+        )
+        return changed.rowcount > 0
 
 
 def last_seen_times(engine: Engine, org_id: str, site_id: str) -> dict[str, datetime]:
-    """When each device was last heard from: the newest ts among its readings.
+    """When each device was last heard from, by its readings: the newest ts among them.
 
     It's the message's ts, not the time of arrival, so a retained or replayed message can't
-    make a silent device look alive, and an old one can't move this back.
+    make a silent device look alive, and an old one can't move this back. device.last_seen is
+    the same, from every message, readings or not.
     """
     statement = (
         select(Reading.device_id, func.max(Reading.ts))
