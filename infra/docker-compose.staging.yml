@@ -48,9 +48,13 @@ services:
     build:
       context: ..
       dockerfile: infra/caddy/Dockerfile
+      args:
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
     image: sna-caddy:staging
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS:?set in infra/.env.staging}
+      SITE_USER: ${SITE_USER:?set in infra/.env.staging}
+      SITE_PASSWORD_HASH: ${SITE_PASSWORD_HASH:?set in infra/.env.staging}
     ports:
       - "80:80"
       - "443:443"

@@ -1,11 +1,16 @@
 # HTTPS for the staging stack: /api goes to the back end, everything else is the app.
-# SITE_ADDRESS comes from infra/.env.staging.
+# SITE_ADDRESS, SITE_USER and SITE_PASSWORD_HASH come from infra/.env.staging.
 
 {
 	skip_install_trust
 }
 
 {$SITE_ADDRESS} {
+	# One login for the whole site, /api/health included: nothing is sent without it.
+	basic_auth {
+		{$SITE_USER} {$SITE_PASSWORD_HASH}
+	}
+
 	encode gzip
 
 	handle /api/* {

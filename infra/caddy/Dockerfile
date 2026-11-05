@@ -7,6 +7,10 @@ RUN npm ci
 COPY app/ ./
 # tsc also checks the tests, which compare the mocks to these files.
 COPY config/clients/ /app/config/clients/
+# VITE_DEMO_MODE from infra/.env.staging. Vite hands VITE_* variables to the app, which reads
+# this one from T2-17 on; until then it changes nothing.
+ARG VITE_DEMO_MODE=false
+ENV VITE_DEMO_MODE=$VITE_DEMO_MODE
 RUN npm run build
 
 FROM caddy:2.10.2-alpine
