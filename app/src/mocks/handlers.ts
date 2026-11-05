@@ -61,6 +61,7 @@ function zoneStatus(zoneId: string): ZoneStatus {
     status.quality = ALL_STALE;
   }
   if (zoneId === "Z1" && scenario === "z1-estop") status.estop = true;
+  if (zoneId === "Z1" && scenario === "z1-leak") status.leak = true;
   return status;
 }
 

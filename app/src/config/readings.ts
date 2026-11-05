@@ -62,4 +62,9 @@ export function formatReading(value: number | null | undefined, spec: ReadingSpe
   return value === null || value === undefined ? EMPTY_VALUE : value.toFixed(spec.decimals);
 }
 
+/** "30 s ago", "5 min ago". */
+export function formatAge(seconds: number) {
+  return seconds < 60 ? `${seconds} s ago` : `${Math.floor(seconds / 60)} min ago`;
+}
+
 export const zonePath = (zoneId: string) => `/zone/${zoneId}`;

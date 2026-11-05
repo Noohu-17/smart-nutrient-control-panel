@@ -22,7 +22,7 @@ describe("Overview", () => {
   it("shows EC, pH, solution temp and reservoir level from the fake telemetry", async () => {
     renderAt("/");
     const zoneA = await card("Zone A");
-    expect(await zoneA.findByText("Live", undefined, WAIT)).toBeInTheDocument();
+    expect(await zoneA.findByText(/^Updated/, undefined, WAIT)).toBeInTheDocument();
     // the fake readings drift a little on every request, so check near the Z1 seed and the decimals shown
     for (const [label, seed, decimals] of [
       ["EC", 1.62, 2],
@@ -50,7 +50,7 @@ describe("Overview", () => {
     );
     renderAt("/");
     const zoneB = await card("Zone B");
-    await zoneB.findByText("Live", undefined, WAIT);
+    await zoneB.findByText(/^Updated/, undefined, WAIT);
     const ec = zoneB.getByRole("group", { name: "EC" });
     expect(ec).toHaveTextContent("--");
     expect(ec).toHaveTextContent("Sensor fault");
@@ -120,7 +120,7 @@ describe("Overview", () => {
     );
     renderAt("/");
     const zoneA = await card("Zone A");
-    expect(await zoneA.findByText("Live", undefined, WAIT)).toBeInTheDocument();
+    expect(await zoneA.findByText(/^Updated/, undefined, WAIT)).toBeInTheDocument();
     expect(zoneA.getByRole("group", { name: "EC" })).toHaveTextContent("1.62");
     expect(zoneA.getByRole("group", { name: "pH" })).toHaveTextContent("6.04");
     expect(zoneA.getByRole("group", { name: "Solution temp" })).toHaveTextContent("23.4");

@@ -23,7 +23,9 @@ function statusText(
   quality: Quality | undefined,
   target: Range | undefined,
   stale: boolean,
+  loading: boolean,
 ) {
+  if (loading) return "Loading";
   if (quality && quality !== "OK") return QUALITY_TEXT[quality];
   if (tone === "off") return stale ? QUALITY_TEXT.STALE : "No data";
   // say which way it is off, so the grower knows whether to raise or lower it
@@ -38,6 +40,7 @@ export function ReadingCard({
   quality,
   target,
   stale = false,
+  loading = false,
 }: {
   spec: ReadingSpec;
   value: number | null | undefined;
@@ -45,9 +48,11 @@ export function ReadingCard({
   target?: Range;
   /** controller offline or readings old: grey, whatever the value says */
   stale?: boolean;
+  /** still waiting for the first answer */
+  loading?: boolean;
 }) {
   const tone = readingTone(value, quality, target, stale);
-  const status = statusText(tone, value, quality, target, stale);
+  const status = statusText(tone, value, quality, target, stale, loading);
   return (
     <div className={`reading reading-${tone}`} role="group" aria-label={spec.label}>
       <span className="reading-head">

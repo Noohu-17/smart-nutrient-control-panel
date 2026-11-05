@@ -31,7 +31,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
             <br />
             Advisor
           </b>
-          <span>Control portal · Phase 2A</span>
+          <span>Control portal</span>
         </div>
       </div>
       <div className="site-pick">

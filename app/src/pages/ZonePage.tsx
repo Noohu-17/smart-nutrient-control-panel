@@ -1,13 +1,32 @@
 import { Link, useParams } from "react-router-dom";
 import { useFarm } from "../api/hooks";
+import type { FarmZone } from "../api/types";
 import { EmptyState } from "../components/EmptyState";
-import { ReadingCard } from "../components/ReadingCard";
 import { StatusChip } from "../components/StatusChip";
-import { ZONE_READINGS } from "../config/readings";
 import { DoseCard } from "../features/dosing/DoseCard";
 import { ZoneActions } from "../features/zones/ZoneActions";
+import { SafetyBanners, ZoneReadings, ZoneStatusChip } from "../features/zones/ZoneLive";
+import { useZoneStatus } from "../features/zones/useZoneStatus";
 
-/** Zone page skeleton: name and benches from GET /api/farm, reading cards still empty. */
+/** Safety banners and live readings for the zone. */
+function ZoneLive({ zone }: { zone: FarmZone }) {
+  const status = useZoneStatus(zone.id);
+  return (
+    <>
+      <SafetyBanners zoneName={zone.name} status={status} />
+      <section className="zone-card" aria-labelledby="readings-title">
+        <header className="zone-card-head">
+          <h2 id="readings-title">Readings</h2>
+          <ZoneStatusChip status={status} />
+        </header>
+        <ZoneReadings status={status} />
+        <ZoneActions full />
+      </section>
+    </>
+  );
+}
+
+/** Zone page: name and benches from GET /api/farm, live readings, dosing. */
 export function ZonePage() {
   const { zoneId } = useParams();
   const farm = useFarm();
@@ -32,17 +51,7 @@ export function ZonePage() {
         <EmptyState title="Zone not found">There is no zone called "{zoneId}".</EmptyState>
       ) : (
         <>
-          <section className="zone-card" aria-labelledby="readings-title">
-            <header className="zone-card-head">
-              <h2 id="readings-title">Readings</h2>
-            </header>
-            <div className="readings">
-              {ZONE_READINGS.map((spec) => (
-                <ReadingCard key={spec.key} spec={spec} value={null} />
-              ))}
-            </div>
-            <ZoneActions full />
-          </section>
+          <ZoneLive key={`live-${zone.id}`} zone={zone} />
 
           <DoseCard key={zone.id} zone={zone} />
 

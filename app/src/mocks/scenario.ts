@@ -8,6 +8,7 @@ export const SCENARIOS = {
   "z2-sensor-fault": "Zone B EC probe faulty: ec is null, quality FAULT",
   "z2-stale": "Zone B last reading is 5 minutes old",
   "z1-estop": "E-STOP pressed on the Zone A dosing cabinet",
+  "z1-leak": "Leak sensor wet in Zone A",
   "farm-error": "GET /api/farm fails (500)",
   "no-playground": "A real farm: features.playground is false, so no Simulator",
   "mains-lost": "Mains lost: the generator runs the farm, UPS on battery",
