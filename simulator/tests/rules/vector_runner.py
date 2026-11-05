@@ -57,6 +57,10 @@ class ScriptedHal:
         self.outputs[output_id] = on
         self.calls.append((self.now, f"set_output:{output_id}:{'on' if on else 'off'}"))
 
+    def take_flow_ml(self, meter_id: str) -> float:
+        """No vector scripts flow yet (a FLOW action comes with them): a running pump reads 0."""
+        return 0.0
+
     def now_ms(self) -> int:
         return self.now
 

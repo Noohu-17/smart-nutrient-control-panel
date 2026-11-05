@@ -7,20 +7,62 @@ Run from backend/ while the simulator is running:
 Prints one line per message: OK, FAIL with the fields that break the contract, or
 SKIP for a message type that has no model yet. Exits 1 if any message failed. The
 broker address comes from MQTT_HOST and MQTT_PORT, as for the API.
+
+CMD_STATE has no model yet, so its shape is checked instead (CmdStateShape): its envelope,
+fields, enums and the reason rule of contract 6.6. Delete the stand-in when the model exists.
 """
 
 import argparse
 import json
 import time
 import uuid
+from typing import Any, Literal
 
 import paho.mqtt.client as mqtt
-from pydantic import ValidationError
+from pydantic import UUID4, ValidationError, model_validator
 
 from ..config import load_settings
-from .farm_messages import parse_farm_message
+from .envelope import ContractModel, Count, Envelope, Number, UtcTime
+from .farm_messages import CmdState, parse_farm_message
 
 TOPIC = "farm/#"
+STATES_WITH_A_REASON = {"PARTIAL", "FAILED", "STOPPED", "REJECTED"}  # contract 6.6
+
+
+class _LineShape(ContractModel):
+    line: str
+    requested_ml: Count
+    delivered_ml: Count
+    state: Literal["PENDING", "RUNNING", "DONE", "SHORT", "SKIPPED"]
+
+
+class _EcPhShape(ContractModel):
+    ec: Number | None
+    ph: Number | None
+
+
+class CmdStateShape(Envelope):
+    """CMD_STATE (contract 6.6), checked for shape until Track 1 writes its model."""
+
+    type: Literal["CMD_STATE"]
+    cmd_id: UUID4
+    state: CmdState
+    reason: str | None
+    lines: list[_LineShape] | None = None  # DOSE only
+    before: _EcPhShape | None
+    after: _EcPhShape | None
+    started_at: UtcTime | None
+    ended_at: UtcTime | None
+    detail: dict[str, Any] | None = None  # refill and climate commands
+
+    @model_validator(mode="after")
+    def _reason_only_where_6_6_gives_one(self) -> "CmdStateShape":
+        if (self.reason is not None) != (self.state in STATES_WITH_A_REASON):
+            raise ValueError(f"a {self.state} CMD_STATE {'needs' if self.reason is None else 'has no'} reason")
+        return self
+
+
+SHAPE_CHECKS = {"CMD_STATE": CmdStateShape}
 
 
 def check(payload: bytes) -> tuple[str, str]:
@@ -38,7 +80,14 @@ def check(payload: bytes) -> tuple[str, str]:
         problems = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
         return "FAIL", f"{kind} from {message.get('device')}: {problems}"
     except ValueError:
-        return "SKIP", f"{kind}: no contract model yet"
+        if kind not in SHAPE_CHECKS:
+            return "SKIP", f"{kind}: no contract model yet"
+        try:
+            SHAPE_CHECKS[kind].model_validate(message)
+        except ValidationError as exc:
+            problems = "; ".join(f"{'.'.join(map(str, e['loc']))}: {e['msg']}" for e in exc.errors())
+            return "FAIL", f"{kind} from {message.get('device')} (shape): {problems}"
+        return "OK", f"{kind} from {message.get('device')} (shape; no contract model yet)"
     return "OK", f"{kind} from {message.get('device')}"
 
 

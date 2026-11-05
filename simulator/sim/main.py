@@ -7,6 +7,7 @@ import logging
 import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -18,15 +19,19 @@ from .config import (
     load_min_real_reading_interval_s,
     load_site,
     load_speed_options,
+    load_zone_dose,
+    load_zone_limits,
     playground_enabled,
     read_pack_file,
 )
+from .controller.zone import ZoneController
 from .devices.base import SimDevice
 from .devices.climate import ClimateDevice
 from .devices.power import PowerDevice
 from .devices.readings import ReadingDevice
 from .devices.zone import ZoneDevice
 from .farm import Farm, load_farm
+from .farm_hal import FarmHal
 from .settings import SIM_ROOT, Settings, load_settings
 from .state import next_boot_ids
 
@@ -40,8 +45,14 @@ def make_device(
     farm: Farm,
     alerts: Mapping[str, Any],
     clock: SimClock | None,
+    *,
+    client_dir: Path | None = None,
+    state_dir: Path | None = None,
 ) -> SimDevice:
-    """The device a layout.json entry describes; `clock` only on playground sites (simTs)."""
+    """The device a layout.json entry describes; `clock` only on playground sites (simTs).
+
+    With client_dir and state_dir, a zone controller also gets its controller and obeys commands.
+    """
     device_id, kind = entry["id"], entry["kind"]
     if kind == "ZONE_CONTROLLER":
         zone = farm.zones.get(entry.get("zone"))
@@ -51,7 +62,10 @@ def make_device(
                 f"not one of {sorted(farm.zones)}"
             )
         alarms = zone_alarms(alerts, zone.zone_id, zone.day_tank_l)
-        return ZoneDevice(device_id, kind, site, boot_id, zone=zone, alarms=alarms, clock=clock)
+        device = ZoneDevice(device_id, kind, site, boot_id, zone=zone, alarms=alarms, clock=clock)
+        if client_dir is not None and state_dir is not None:
+            attach_controller(device, farm, client_dir, state_dir)
+        return device
     if kind == "CLIMATE_CONTROLLER":
         alarms = climate_alarms(farm.climate.setpoints)
         return ClimateDevice(
@@ -62,6 +76,30 @@ def make_device(
     return SimDevice(device_id, kind, site, boot_id, clock=clock)
 
 
+def attach_controller(device: ZoneDevice, farm: Farm, client_dir: Path, state_dir: Path) -> None:
+    """Give a zone device its controller (T3-4), on a HAL over its zone of the farm.
+
+    Its limits are limits.json's until DEVICE_CONFIG (7.7) is handled, so configVersion is null.
+    """
+    zone = device.zone
+    hal = FarmHal(farm, zone, state_dir / f"nvs_{device.id}.json")
+    config = {
+        "configVersion": None,
+        "limits": load_zone_limits(client_dir, zone.zone_id),
+        "dose": load_zone_dose(client_dir, zone.zone_id),
+    }
+    device.controller = ZoneController(
+        hal, zone.zone_id, zone.day_tank_l, config, zone.day_tank_usable_l, device.report,
+        device_id=device.id, zone_name=zone.name,
+    )
+    device.sim_now = hal.sim_now
+    device.controller.start()
+
+
+def controllers_of(devices: list[SimDevice]) -> list[ZoneController]:
+    return [d.controller for d in devices if isinstance(d, ZoneDevice) and d.controller]
+
+
 async def run(settings: Settings) -> None:
     site = load_site(settings.client_dir)
     layout_devices = load_devices(settings.client_dir)  # one SimDevice per entry (contract 2.2)
@@ -69,12 +107,16 @@ async def run(settings: Settings) -> None:
     clock = SimClock(datetime.now(UTC), settings.sim_speed, load_speed_options(settings.client_dir))
     playground = playground_enabled(settings.client_dir)
     farm = load_farm(settings.client_dir)  # before bootIds: a refused start is not a restart
+    farm.now = clock.last_tick
     alerts = read_pack_file(settings.client_dir, "alerts.json")
     boot_ids = next_boot_ids(
         settings.state_dir / "boot_ids.json", [d["id"] for d in layout_devices]
     )
     devices = [
-        make_device(d, site, boot_ids[d["id"]], farm, alerts, clock if playground else None)
+        make_device(
+            d, site, boot_ids[d["id"]], farm, alerts, clock if playground else None,
+            client_dir=settings.client_dir, state_dir=settings.state_dir,
+        )
         for d in layout_devices
     ]
     tick_loop = TickLoop(
@@ -82,6 +124,7 @@ async def run(settings: Settings) -> None:
         farm,
         [d for d in devices if isinstance(d, ReadingDevice)],
         min_real_reading_s=load_min_real_reading_interval_s(settings.client_dir),
+        controllers=controllers_of(devices),
     )
     log.info("playing %s on site %s (bootId %s)", ", ".join(d.id for d in devices), site, boot_ids)
     log.info("clock speed x%g; simTs in messages: %s", clock.speed, "yes" if playground else "no")

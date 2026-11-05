@@ -3,8 +3,9 @@
 Every controller rule from contract v1.0 §7–§9, one vector per line.
 
 **Status values:** `WRITTEN`: the file exists, and `tests/rules/test_vectors.py` plays it against
-`sim/controller/`. `TODO`: not written. Most of what is left needs dose or refill execution
-(flow metering, pump rates), `DEVICE_CONFIG` handling, fault detection or the climate controller.
+`sim/controller/`. `TODO`: not written. Dose and refill execution exist (T4-8) and are tested on the
+real farm model in `tests/rules/test_dose_execution.py`; their vectors wait for a `FLOW` action in
+the runner. The rest needs `DEVICE_CONFIG` handling, fault detection or the climate controller.
 
 **Who checks:** `ZC` zone controller · `CC1` climate controller · both are played by the simulator
 and later by firmware. Cloud-only checks are listed separately at the end. They are not controller

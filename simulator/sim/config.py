@@ -70,6 +70,16 @@ def load_zone_limits(client_dir: Path, zone_id: str) -> dict[str, Any]:
     return limits
 
 
+def load_zone_dose(client_dir: Path, zone_id: str) -> dict[str, Any]:
+    """A zone's dose settings (limits.json "dose": maxDurationS, mixWaitS, tolerancePct)."""
+    zones = read_pack_file(client_dir, "limits.json").get("zones")
+    zone = zones.get(zone_id) if isinstance(zones, dict) else None
+    dose = zone.get("dose") if isinstance(zone, dict) else None
+    if not isinstance(dose, dict):
+        raise ValueError(f"limits.json: zones.{zone_id}.dose must be an object, got {dose!r}")
+    return dose
+
+
 def load_site(client_dir: Path) -> str:
     """The site ID used in every topic, farm/{site}/... (layout.json "site")."""
     site = read_pack_file(client_dir, "layout.json").get("site")

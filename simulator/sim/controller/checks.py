@@ -236,7 +236,21 @@ def _dose_fields_ok(cmd: Mapping[str, Any], zone_id: str, dose_lines: Collection
         return False
     if not any(item["ml"] > 0 for item in lines):
         return False  # a dose of nothing is a value error
-    return _limits_ok(cmd.get("limits"))
+    return _limits_ok(cmd.get("limits")) and _run_settings_ok(cmd)
+
+
+def _run_settings_ok(cmd: Mapping[str, Any]) -> bool:
+    """maxDurationS, mixWaitS and tolerancePct are optional (limits.json has them), but sane."""
+    bounds = {"maxDurationS": (0, None), "mixWaitS": (0, None), "tolerancePct": (0, 100)}
+    for key, (low, high) in bounds.items():
+        if key not in cmd:
+            continue
+        value = cmd[key]
+        if not _is_number(value) or value < low or (high is not None and value > high):
+            return False
+        if key == "maxDurationS" and value == 0:
+            return False
+    return True
 
 
 def _line_ok(item: Any, dose_lines: Collection[str]) -> bool:

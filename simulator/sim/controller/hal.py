@@ -1,8 +1,8 @@
 """The hardware abstraction layer: all a controller may touch (contract 9).
 
 A real ESP32 will provide the same calls. Names are provisional until io_map.json is agreed
-(contract 2.5): docs/controller-spec.md lists them. Pulse counting and chiller setpoints join
-when dose execution and the climate controller need them.
+(contract 2.5): docs/controller-spec.md lists them. Chiller setpoints join when the climate
+controller needs them.
 """
 
 from __future__ import annotations
@@ -18,6 +18,13 @@ class HAL(Protocol):
     def read_input(self, input_id: str) -> bool: ...
 
     def set_output(self, output_id: str, on: bool) -> None: ...
+
+    def take_flow_ml(self, meter_id: str) -> float:
+        """mL a line's flow meter (FLOW_<line>) counted since the last call.
+
+        Real firmware counts pulses and converts them with the meter's calibration.
+        """
+        ...
 
     def now_ms(self) -> int:
         """The controller's own clock; simulated time on playground sites (contract 11.4)."""

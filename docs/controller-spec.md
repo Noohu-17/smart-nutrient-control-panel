@@ -41,14 +41,26 @@ One operation per zone. A dose moves through these, reporting `CMD_STATE` and `Z
 |---|---|---|---|
 | Idle | `DOSE` passes every check | Journal, report `ACCEPTED` | `ACCEPTED` |
 | `ACCEPTED` | Straight away | Read `before`, journal, first line's pump on, report `EXECUTING` | `EXECUTING` |
+| `EXECUTING` | The line's flow meter reaches its request | Pump off, record the measured mL, next line's pump on, report `EXECUTING` | `EXECUTING` |
+| `EXECUTING` | Every 5 s of real time on a line | Journal the measured mL, report `EXECUTING` | `EXECUTING` |
+| `EXECUTING` | The last line reaches its request | Pump off, clear journal, report `COMPLETED` (`PARTIAL` `FLOW_SHORT` if a line was short) with `after` null | Mix wait |
+| `EXECUTING` | `maxDurationS` passes | Pump off, clear journal, report `PARTIAL` `TIMEOUT`, or `FAILED` `TIMEOUT` if nothing was delivered | Mix wait, or Idle |
+| Mix wait | `mixWaitS` passes | Read `after`, report the same final state again with it | Idle |
+| Mix wait | STOP, E-STOP or key switch | Nothing more: the final state stands and `after` stays null (§6.6) | Idle |
 | `EXECUTING` | E-STOP pressed | Outputs off, clear journal, `stopped`, report `STOPPED` `ESTOP_DURING` | Idle |
 | `EXECUTING` | Key switch leaves REMOTE | Outputs off, clear journal, report `STOPPED` `MODE_CHANGED_DURING` | Idle |
 | `EXECUTING` | `STOP` applies | Outputs off, clear journal, `stopped`, report `STOPPED` `STOP_REQUESTED` | Idle |
 | Any | Reboot | See below | Idle |
 
-A `REFILL` `START` does the same with the refill valve. Lines at 0 mL are `SKIPPED` and their pumps never run.
+Lines run one at a time, in `order`. Lines at 0 mL are `SKIPPED` and their pumps never run. A line is `DONE` when its meter has counted at least `(100 − tolerancePct)%` of the request, otherwise `SHORT`. `maxDurationS`, `mixWaitS` and `tolerancePct` come from the command, or else from `limits.json` `dose`, or else from §14's defaults.
 
-**Not built yet:** running a dose or refill to its end, which needs flow metering and pump rates (`hardware.json` is still empty), and `REFILL` `PAUSE`, `RESUME` and `STOP`, which are refused with `INVALID_COMMAND` until then. Until execution exists, delivered amounts stay 0.
+A `REFILL` `START` opens the valve and closes it when the reservoir reaches `targetPct`, reporting `COMPLETED` with `detail: { fromPct, toPct }`. At `maxDurationS` it closes with `PARTIAL` `TIMEOUT` if the level rose, otherwise `FAILED` `TIMEOUT`. It has no mix wait.
+
+**Clocks.** Pumps, `maxDurationS` and the mix wait run on the controller's clock, which is simulated time in the simulator. Progress runs on real time, because it is for people watching: at ×288 a whole line can take less than a real second.
+
+**Only measured mL count.** The 24 h totals and every `deliveredMl` come from the flow meters, never from the request.
+
+**Not built yet:** `REFILL` `PAUSE`, `RESUME` and `STOP`, which are refused with `INVALID_COMMAND`; `NO_FLOW`, which needs a "pump on, no flow" time in `hardware.json`. Until then a pump that delivers nothing ends at `maxDurationS`.
 
 `STOP`, `RESUME` and `CLEAR_FAULT` have no run phase: `ACCEPTED`, act, `COMPLETED`. A `ZONE` stop for another zone gets no answer at all.
 
@@ -62,11 +74,11 @@ A `REFILL` `START` does the same with the refill valve. Lines at 0 mL are `SKIPP
 4. A command still in the journal is reported `PARTIAL` if anything was delivered, otherwise `FAILED`, with `REBOOT_MID_DOSE`. It is never resumed.
 5. A `REBOOTED` event gives the reason.
 
-A new farm is not a reboot: it starts with `stopped` false.
+A new run of the simulator is not a reboot (agreed on #31). `start()` brings back what `nvs` kept and closes a journalled command the same way, without a `REBOOTED` event, and the zone is not stopped.
 
 | `nvs` key | Holds | Written |
 |---|---|---|
-| `journal` | The running command | Before any output switches on, at each step; emptied when it ends |
+| `journal` | The running command, with the mL measured so far | Before any output switches on, at each line and progress report; emptied when it ends |
 | `recentCmds` | The last 50 `cmdId`s with their last `CMD_STATE` | At every state |
 | `latches` | Active latches | When one is added or cleared |
 | `doseHistory` | `[atMs, line, ml]` from the last 24 h | When mL are delivered |
@@ -80,4 +92,7 @@ Provisional until `io_map.json` is agreed (§2.5).
 | Inputs | `ESTOP`, `MODE_REMOTE`, `MODE_MAINT` (neither means LOCAL), `LEAK` (not read yet) |
 | Outputs | `PUMP_<line>` for each entry in `doseLines`, `REFILL_VALVE`, `CIRC_PUMP` |
 | Sensors | `EC`, `PH`, `RESERVOIR_PCT`, `DAYTANK_<line>_PCT` |
-| Clocks | `now_ms()`: the controller's clock, simulated on playground sites, for 24 h totals. `utc_ms()`: real time, for expiry |
+| Flow meters | `FLOW_<line>`: `take_flow_ml()` gives the mL counted since the last call. Real firmware counts pulses and converts them with the meter's calibration |
+| Clocks | `now_ms()`: the controller's clock, simulated on playground sites, for pumps, timeouts, the mix wait and 24 h totals. `utc_ms()`: real time, for expiry and progress |
+
+In the simulator the HAL is `sim/farm_hal.py`, over the zone's part of the farm model. Its `nvs` is `simulator/.state/nvs_<device>.json`.

@@ -1,14 +1,15 @@
 """The simulated farm's live state, built from the config pack: what the devices report.
 
-Only physics moves it, through Farm.step(): the reservoirs follow the Track 3 model and the
-climate's run-time counters add up. Air and power are held constant until a weather model
-and the power drills exist. Nothing here switches equipment: every output stays as it
-started until a person's command reaches a controller (contract 0, "Phase A is manual").
+Only physics moves it, through Farm.step(): the reservoirs follow the Track 3 model, a running
+dosing pump moves stock from its day-tank into the reservoir at its rate in hardware.json, and the
+climate's run-time counters add up. Air and power are held constant until a weather model and the
+power drills exist. Nothing here switches equipment: outputs change only when a controller, acting
+on a person's command, sets them (contract 0, "Phase A is manual").
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -27,11 +28,13 @@ from .model.model_config import (
     parse_power,
     parse_zone_model,
 )
+from .model.nutrients import ML_PER_L
 from .model.params import ReservoirParams, require_finite
 from .model.water import (
     ReservoirReadings,
     ReservoirState,
     StepInputs,
+    dose,
     readings,
     refill_flow_lps,
     step_reservoir,
@@ -62,6 +65,9 @@ class ZoneFarm:
     operation: dict[str, Any] | None = None  # the running dose or refill (6.8)
     latches: set[str] = field(default_factory=set)
     config_version: int | None = None  # null until the first DEVICE_CONFIG (7.7)
+    name: str | None = None  # what people call it (layout.json), for event wording
+    dose_pump_ml_per_s: Mapping[str, float] = field(default_factory=dict)  # hardware.json
+    flow_meter_ml: dict[str, float] = field(default_factory=dict)  # counted since last read
 
     @property
     def active_cmd_id(self) -> str | None:
@@ -77,11 +83,26 @@ class ZoneFarm:
         return readings(self.reservoir, self.params)
 
     def step(self, dt_s: float, air_temp_c: float) -> None:
+        self._run_dose_pumps(dt_s)
         valve_open = self.outputs[f"{self.zone_id}-REFILL"] == "OPEN"
         inputs = StepInputs(
             air_temp_c=air_temp_c, refill_lps=refill_flow_lps(self.params) if valve_open else 0.0
         )  # no plants until a scenario plants them (contract 11.4)
         self.reservoir = step_reservoir(self.reservoir, dt_s, inputs, self.params)
+
+    def _run_dose_pumps(self, dt_s: float) -> None:
+        """A running pump moves stock from its day-tank into the reservoir: EC really changes.
+
+        A day-tank that runs dry delivers what it had left, and its flow meter counts only that.
+        """
+        for line, ml_per_s in self.dose_pump_ml_per_s.items():
+            if dt_s <= 0 or self.outputs[f"{self.zone_id}-DOSE-{line}"] != "ON":
+                continue
+            ml = min(ml_per_s * dt_s, self.day_tank_l[line] * ML_PER_L)
+            if ml > 0:
+                self.day_tank_l[line] -= ml / ML_PER_L
+                self.reservoir = dose(self.reservoir, line, ml, self.params)
+                self.flow_meter_ml[line] = self.flow_meter_ml.get(line, 0.0) + ml
 
 
 @dataclass
@@ -149,6 +170,7 @@ class Farm:
     zones: dict[str, ZoneFarm]
     climate: ClimateFarm
     power: PowerFarm
+    now: datetime | None = None  # simulated time the farm has reached; set at the start
 
     def step(self, dt_s: float, now: datetime) -> None:
         """Move the farm forward by dt_s simulated seconds, ending at simulated time `now`."""
@@ -156,6 +178,7 @@ class Farm:
         for zone in self.zones.values():
             zone.step(dt_s, air_temp_c)
         self.climate.step(dt_s, now)
+        self.now = now
 
 
 def load_farm(client_dir: Path) -> Farm:
@@ -166,7 +189,8 @@ def load_farm(client_dir: Path) -> Farm:
         raise ValueError(f"simulator.json: model must be an object, got {model!r}")
     climate_cfg = read_pack_file(client_dir, "climate.json")
     features = read_pack_file(client_dir, "features.json")
-    zones = [_build_zone(model, zone) for zone in layout.get("zones", ())]
+    hardware = read_pack_file(client_dir, "hardware.json")
+    zones = [_build_zone(model, zone, hardware) for zone in layout.get("zones", ())]
     return Farm(
         zones={zone.zone_id: zone for zone in zones},
         climate=_build_climate(model, layout, climate_cfg, features),
@@ -174,7 +198,9 @@ def load_farm(client_dir: Path) -> Farm:
     )
 
 
-def _build_zone(model: Mapping[str, Any], zone: Mapping[str, Any]) -> ZoneFarm:
+def _build_zone(
+    model: Mapping[str, Any], zone: Mapping[str, Any], hardware: Mapping[str, Any]
+) -> ZoneFarm:
     params = parse_zone_model(model, zone)
     zone_id = params.zone_id
     tanks = parse_day_tanks(model, zone)
@@ -189,7 +215,29 @@ def _build_zone(model: Mapping[str, Any], zone: Mapping[str, Any]) -> ZoneFarm:
         pump_flow_lpm=parse_circulation_flow_lpm(model),
         do_fitted=bool((zone.get("sensors") or {}).get("dissolvedOxygen", False)),
         outputs=outputs,
+        name=zone.get("name"),
+        dose_pump_ml_per_s=_dose_pump_rates(hardware, tanks),
+        flow_meter_ml=dict.fromkeys(tanks, 0.0),
     )
+
+
+def _dose_pump_rates(hardware: Mapping[str, Any], lines: Iterable[str]) -> dict[str, float]:
+    """Each line's pump flow (hardware.json pumps.doseLines); every installed line needs one."""
+    pumps = (hardware.get("pumps") or {}).get("doseLines") or {}
+    rates = {}
+    for line in lines:
+        rate = (pumps.get(line) or {}).get("flowMlPerS")
+        try:
+            require_finite(line, rate)
+        except ValueError:
+            rate = None
+        if rate is None or rate <= 0:
+            raise ValueError(
+                f"hardware.json: pumps.doseLines.{line}.flowMlPerS must be a number > 0, "
+                f"got {(pumps.get(line) or {}).get('flowMlPerS')!r}"
+            )
+        rates[line] = float(rate)
+    return rates
 
 
 def _build_climate(

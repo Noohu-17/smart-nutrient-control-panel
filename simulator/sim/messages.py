@@ -50,6 +50,22 @@ def climate_state_topic(site: str) -> str:
     return f"farm/{site}/climate/state"
 
 
+def zone_cmd_topic(site: str, zone_id: str) -> str:
+    return f"farm/{site}/zone/{zone_id}/cmd"
+
+
+def zone_cmd_state_topic(site: str, zone_id: str) -> str:
+    return f"farm/{site}/zone/{zone_id}/cmd/state"
+
+
+def zone_event_topic(site: str, zone_id: str) -> str:
+    return f"farm/{site}/zone/{zone_id}/event"
+
+
+def stop_topic(site: str) -> str:
+    return f"farm/{site}/stop"
+
+
 class Envelope:
     """Header for every message one device sends during one boot (contract 5).
 

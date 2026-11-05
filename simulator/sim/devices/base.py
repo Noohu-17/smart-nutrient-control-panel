@@ -172,13 +172,20 @@ class SimDevice:
     def on_reconnect(self) -> None:
         """The link is back after a drop: a device with retained state sends it again."""
 
+    def subscriptions(self) -> tuple[str, ...]:
+        """The topics this device listens to (contract 4); most devices listen to none."""
+        return ()
+
+    def on_message(self, topic: str, payload: bytes | str) -> None:
+        """One message on a subscribed topic."""
+
     async def session(self, client: aiomqtt.Client) -> None:
         """Run the device until the link drops (raises MqttError) or the task is cancelled."""
         if self._had_session:
             self.on_reconnect()
         self._had_session = True
         workers = {
-            asyncio.create_task(stay_connected(client)),
+            asyncio.create_task(self._listen(client)),
             asyncio.create_task(self._heartbeat()),
             asyncio.create_task(self._publisher(client)),
         }
@@ -193,6 +200,13 @@ class SimDevice:
             await _stop(workers)
         for task in done:
             task.result()
+
+    async def _listen(self, client: aiomqtt.Client) -> None:
+        """Subscribe (again after every reconnect) and hand each message on. Ends with the link."""
+        for topic in self.subscriptions():
+            await client.subscribe(topic, qos=1)
+        async for message in client.messages:
+            self.on_message(str(message.topic), message.payload)
 
     async def _heartbeat(self) -> None:
         while True:

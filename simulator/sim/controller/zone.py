@@ -4,8 +4,9 @@ It touches the farm only through the HAL, and speaks only through report(type, b
 layer adds the envelope and the topic. handle() takes a command; step() runs at a fixed rate and
 never waits.
 
-Not here yet: running a dose or refill to its end, which needs flow metering and pump rates. A
-dose starts its first line and stays there until a STOP, an E-STOP or the key switch ends it.
+A dose runs its lines one at a time, each until its flow meter has counted the request, then waits
+mixWaitS on the controller's clock (simulated time in the simulator) before reading `after`. A
+refill runs until the reservoir reaches its target. Both stop at maxDurationS.
 """
 
 from __future__ import annotations
@@ -27,26 +28,41 @@ CIRC_PUMP, REFILL_VALVE = "CIRC_PUMP", "REFILL_VALVE"
 INPUT_ESTOP, INPUT_REMOTE, INPUT_MAINT = "ESTOP", "MODE_REMOTE", "MODE_MAINT"
 NVS_JOURNAL, NVS_RECENT = "journal", "recentCmds"
 NVS_DOSED, NVS_LATCHES = "doseHistory", "latches"
+PROGRESS_MS = 5000  # contract 6.6, 14: EXECUTING at least every 5 s while a line runs
+# Contract 14's defaults, for when neither the DOSE nor limits.json "dose" gives one.
+DOSE_DEFAULTS = {"maxDurationS": 600, "mixWaitS": 300, "tolerancePct": 5}
+RUNNING = ("ACCEPTED", "EXECUTING")
 
 Report = Callable[[str, dict[str, Any]], None]
 
 
 @dataclass
 class Operation:
-    """The dose or refill running now."""
+    """The dose or refill running now, or a dose in its mix wait (contract 6.8)."""
 
     cmd_id: str
     kind: str
     state: str = "ACCEPTED"
+    reason: str | None = None
     line: str | None = None
     lines: list[dict[str, Any]] = field(default_factory=list)
     before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
     started_at: str | None = None
+    ended_at: str | None = None
     detail: dict[str, Any] | None = None
+    measured_ml: dict[str, float] = field(default_factory=dict)  # what the flow meters counted
+    tolerance_pct: float = 0.0
+    max_run_ms: int = 0
+    mix_wait_ms: int = 0
+    target_pct: float | None = None
+    deadline_ms: int | None = None  # on the controller's clock, like the mix wait
+    mix_until_ms: int | None = None
+    progress_utc_ms: int = 0  # real time: progress is for the people watching
 
 
 class ZoneController:
-    """One zone's rules. A new farm starts with the defaults; restart() follows a reboot."""
+    """One zone's rules. start() begins a run of the simulator; restart() follows a reboot."""
 
     def __init__(
         self,
@@ -123,19 +139,29 @@ class ZoneController:
             }
             for line in cmd["order"]
         ]
-        operation = Operation(cmd["cmdId"], "DOSE", lines=lines)
+        settings = {**DOSE_DEFAULTS, **(self.config.get("dose") or {})}
+        settings.update({key: cmd[key] for key in DOSE_DEFAULTS if key in cmd})  # 7.2: it may say
+        operation = Operation(
+            cmd["cmdId"],
+            "DOSE",
+            lines=lines,
+            tolerance_pct=settings["tolerancePct"],
+            max_run_ms=round(settings["maxDurationS"] * 1000),
+            mix_wait_ms=round(settings["mixWaitS"] * 1000),
+        )
         self._accept(operation)
         first = next(line for line in lines if line["state"] == "PENDING")
-        first["state"] = "RUNNING"
-        operation.line = first["line"]
-        operation.before = {
-            "ec": self.hal.read_sensor("EC")[0],
-            "ph": self.hal.read_sensor("PH")[0],
-        }
+        self._start_line(operation, first)
+        operation.before = self._ec_ph()
         self._run(operation, f"PUMP_{first['line']}")
 
     def _start_refill(self, cmd: Mapping[str, Any]) -> None:
-        operation = Operation(cmd["cmdId"], "REFILL")
+        operation = Operation(
+            cmd["cmdId"],
+            "REFILL",
+            target_pct=cmd["targetPct"],
+            max_run_ms=round(cmd["maxDurationS"] * 1000),
+        )
         self._accept(operation)
         operation.detail = {"fromPct": self.hal.read_sensor("RESERVOIR_PCT")[0]}
         self._run(operation, REFILL_VALVE)
@@ -150,6 +176,8 @@ class ZoneController:
     def _run(self, operation: Operation, output: str) -> None:
         operation.state = "EXECUTING"
         operation.started_at = self._utc_now()
+        operation.deadline_ms = self.hal.now_ms() + operation.max_run_ms
+        operation.progress_utc_ms = self.hal.utc_ms()
         self._write_journal(operation)
         self._switch(output, True)
         self._send_operation_state(operation)
@@ -170,22 +198,131 @@ class ZoneController:
         self._send_cmd_state(cmd["cmdId"], "COMPLETED")
 
     def _end_operation(self, state: str, reason: str) -> None:
-        """Dosing and refill off, the amounts so far reported. Circulation keeps running."""
+        """Dosing and refill off, the measured amounts reported. Circulation keeps running."""
         operation = self._operation
         for output in self._outputs:
             if output != CIRC_PUMP:
                 self._switch(output, False)
         if operation is None:
             return
+        self._operation = None
+        if operation.state not in RUNNING:
+            return  # in its mix wait: the final state stands and `after` stays null (6.6)
         for line in operation.lines:
             if line["state"] == "RUNNING":
-                line["state"] = "SHORT"
+                self._end_line(operation, line)
             elif line["state"] == "PENDING":
                 line["state"] = "SKIPPED"
-        operation.state, operation.line = state, None
+        if operation.kind == "REFILL":
+            operation.detail = {**(operation.detail or {}), "toPct": self._reservoir_pct()}
+        operation.state, operation.reason, operation.line = state, reason, None
+        operation.ended_at = self._utc_now()
+        self.hal.nvs_write(NVS_JOURNAL, {})
+        self._send_operation_state(operation)
+
+    # --- running a dose or a refill --------------------------------------------------------
+
+    def _start_line(self, operation: Operation, line: dict[str, Any]) -> None:
+        line["state"] = "RUNNING"
+        operation.line = line["line"]
+        self.hal.take_flow_ml(f"FLOW_{line['line']}")  # the meter starts from zero
+        operation.measured_ml[line["line"]] = 0.0
+
+    def _run_dose(self, operation: Operation, now_ms: int) -> None:
+        line = next(item for item in operation.lines if item["state"] == "RUNNING")
+        self._measure(operation, line)
+        if operation.measured_ml[line["line"]] >= line["requestedMl"]:
+            self._end_line(operation, line)
+            following = next((item for item in operation.lines if item["state"] == "PENDING"), None)
+            if following is None:
+                self._finish(operation, now_ms)
+                return
+            self._start_line(operation, following)  # one at a time, in `order` (7.2)
+            self._switch(f"PUMP_{following['line']}", True)
+            self._report_progress(operation)
+        elif now_ms >= operation.deadline_ms:
+            self._end_line(operation, line)
+            self._finish(operation, now_ms, "TIMEOUT")
+        elif self.hal.utc_ms() - operation.progress_utc_ms >= PROGRESS_MS:
+            self._report_progress(operation)
+
+    def _measure(self, operation: Operation, line: dict[str, Any]) -> None:
+        name = line["line"]
+        operation.measured_ml[name] = operation.measured_ml.get(name, 0.0) + self.hal.take_flow_ml(
+            f"FLOW_{name}"
+        )
+        line["deliveredMl"] = round(operation.measured_ml[name])  # whole mL (contract 1)
+
+    def _end_line(self, operation: Operation, line: dict[str, Any]) -> None:
+        """Pump off, then count what the meter saw: only measured mL go into the 24 h totals."""
+        self._switch(f"PUMP_{line['line']}", False)
+        self._measure(operation, line)
+        wanted = line["requestedMl"] * (1 - operation.tolerance_pct / 100)
+        line["state"] = "DONE" if operation.measured_ml[line["line"]] >= wanted else "SHORT"
+        operation.line = None
+        if line["deliveredMl"] > 0:
+            self.record_delivered(line["line"], line["deliveredMl"])
+
+    def _finish(self, operation: Operation, now_ms: int, reason: str | None = None) -> None:
+        """The final state goes out at once with after null; the mix wait follows (6.6)."""
+        for line in operation.lines:
+            if line["state"] == "PENDING":
+                line["state"] = "SKIPPED"
+        delivered = any(line["deliveredMl"] > 0 for line in operation.lines)
+        short = any(line["state"] == "SHORT" for line in operation.lines)
+        if reason is None and not short:
+            operation.state = "COMPLETED"
+        elif delivered:
+            operation.state, operation.reason = "PARTIAL", reason or "FLOW_SHORT"
+        else:
+            operation.state, operation.reason = "FAILED", reason or "NO_FLOW"
+        operation.ended_at = self._utc_now()
+        self.hal.nvs_write(NVS_JOURNAL, {})  # ended: nothing left to report after a reboot
+        if delivered:
+            operation.mix_until_ms = now_ms + operation.mix_wait_ms
+        else:
+            self._operation = None
+        self._send_operation_state(operation)
+        self._report_state_if_changed()
+
+    def _after_mixing(self, operation: Operation) -> None:
+        """One more CMD_STATE with the same final state and `after` filled in (6.6)."""
+        operation.after = self._ec_ph()
+        self._operation = None
+        self._send_operation_state(operation)
+        self._report_state_if_changed()
+
+    def _run_refill(self, operation: Operation, now_ms: int) -> None:
+        level = self._reservoir_pct()
+        reached = level is not None and level >= operation.target_pct
+        if not reached and now_ms < operation.deadline_ms:
+            return
+        self._switch(REFILL_VALVE, False)
+        start_pct = (operation.detail or {}).get("fromPct")
+        operation.detail = {**(operation.detail or {}), "toPct": level}
+        if reached:
+            operation.state = "COMPLETED"
+        else:
+            rose = level is not None and start_pct is not None and level > start_pct
+            operation.state, operation.reason = ("PARTIAL" if rose else "FAILED"), "TIMEOUT"
+        operation.ended_at = self._utc_now()
         self._operation = None
         self.hal.nvs_write(NVS_JOURNAL, {})
-        self._send_operation_state(operation, reason=reason, ended_at=self._utc_now())
+        self._send_operation_state(operation)
+        self._report_state_if_changed()
+
+    def _report_progress(self, operation: Operation) -> None:
+        self._write_journal(operation)  # so a reboot reports what was measured (8.3 rule 6)
+        operation.progress_utc_ms = self.hal.utc_ms()
+        self._send_operation_state(operation)
+        self._report_state_if_changed()
+
+    def _ec_ph(self) -> dict[str, Any]:
+        return {"ec": self.hal.read_sensor("EC")[0], "ph": self.hal.read_sensor("PH")[0]}
+
+    def _reservoir_pct(self) -> float | None:
+        value, status = self.hal.read_sensor("RESERVOIR_PCT")
+        return value if status == "OK" else None
 
     # --- the fixed-rate step ---------------------------------------------------------------
 
@@ -202,6 +339,14 @@ class ZoneController:
         if mode != self._mode:
             self._on_mode_changed(self._mode, mode)
             self._mode = mode
+        operation = self._operation
+        if operation is not None:
+            if operation.kind == "REFILL":
+                self._run_refill(operation, now_ms)
+            elif operation.state == "EXECUTING":
+                self._run_dose(operation, now_ms)
+            elif operation.mix_until_ms is not None and now_ms >= operation.mix_until_ms:
+                self._after_mixing(operation)
         self._report_state_if_changed()
 
     def _on_estop_pressed(self) -> None:
@@ -264,6 +409,13 @@ class ZoneController:
         ] + [[now_ms, line, ml]]
         self.hal.nvs_write(NVS_DOSED, {"items": self._history})
 
+    def start(self) -> None:
+        """A new run of the simulator. What nvs kept comes back, and an interrupted command is
+        closed, never resumed. The zone isn't stopped: a new run is not a reboot (contract 6.8)."""
+        self._load_saved()
+        self._close_interrupted_command()
+        self._report_state_if_changed()
+
     def restart(self, reason: str) -> None:
         """After a reboot or power cut: outputs safe, stopped, nothing replayed (8.3 rule 6)."""
         for output in self._outputs:
@@ -271,9 +423,7 @@ class ZoneController:
             self.hal.set_output(output, self._outputs[output])  # the panel starts it, not a command
         self.stopped = True
         self._operation = None
-        self._recent = {item["cmdId"]: item for item in self._nvs_items(NVS_RECENT)}
-        self._history = [list(entry) for entry in self._nvs_items(NVS_DOSED)]
-        self.latches = set(self._nvs_items(NVS_LATCHES))
+        self._load_saved()
         self._close_interrupted_command()
         self._send_event(
             "REBOOTED",
@@ -306,6 +456,12 @@ class ZoneController:
             started_at=journal.get("startedAt"),
             ended_at=self._utc_now(),
         )
+
+    def _load_saved(self) -> None:
+        """The cmdId memory, 24 h totals and latches, as nvs kept them."""
+        self._recent = {item["cmdId"]: item for item in self._nvs_items(NVS_RECENT)}
+        self._history = [list(entry) for entry in self._nvs_items(NVS_DOSED)]
+        self.latches = set(self._nvs_items(NVS_LATCHES))
 
     def _nvs_items(self, key: str) -> list[Any]:
         return (self.hal.nvs_read(key) or {}).get("items", [])
@@ -357,18 +513,17 @@ class ZoneController:
             },
         )
 
-    def _send_operation_state(
-        self, operation: Operation, *, reason: str | None = None, ended_at: str | None = None
-    ) -> None:
+    def _send_operation_state(self, operation: Operation) -> None:
         self._send_cmd_state(
             operation.cmd_id,
             operation.state,
-            reason,
+            operation.reason,
             lines=[dict(line) for line in operation.lines] if operation.kind == "DOSE" else None,
             before=operation.before,
+            after=operation.after,
             started_at=operation.started_at,
-            ended_at=ended_at,
-            detail=operation.detail,
+            ended_at=operation.ended_at,
+            detail=dict(operation.detail) if operation.detail else None,
         )
 
     def _send_cmd_state(
@@ -379,14 +534,15 @@ class ZoneController:
         *,
         lines: list[dict[str, Any]] | None = None,
         before: dict[str, Any] | None = None,
+        after: dict[str, Any] | None = None,
         started_at: str | None = None,
         ended_at: str | None = None,
         detail: dict[str, Any] | None = None,
     ) -> None:
         """Report a command's state, and remember it for a repeat of its cmdId (8.3 rule 1)."""
         body = _cmd_state_body(
-            cmd_id, state, reason, lines, before, started_at=started_at, ended_at=ended_at,
-            detail=detail,
+            cmd_id, state, reason, lines, before, after=after, started_at=started_at,
+            ended_at=ended_at, detail=detail,
         )
         self._recent.pop(cmd_id, None)
         self._recent[cmd_id] = body
@@ -473,15 +629,16 @@ def _cmd_state_body(
     lines: list[dict[str, Any]] | None = None,
     before: dict[str, Any] | None = None,
     *,
+    after: dict[str, Any] | None = None,
     started_at: str | None = None,
     ended_at: str | None = None,
     detail: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """CMD_STATE (contract 6.6) without its envelope. after stays null until dosing can mix."""
+    """CMD_STATE (contract 6.6) without its envelope. lines: doses; detail: everything else."""
     body: dict[str, Any] = {"cmdId": cmd_id, "state": state, "reason": reason}
     if lines is not None:
         body["lines"] = lines
-    body.update(before=before, after=None, startedAt=started_at, endedAt=ended_at)
+    body.update(before=before, after=after, startedAt=started_at, endedAt=ended_at)
     if detail is not None:
         body["detail"] = detail
     return body

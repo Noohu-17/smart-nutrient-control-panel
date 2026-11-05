@@ -9,16 +9,17 @@ staleness and offline detection work as on a real farm. The simulated time
 travels in simTs on playground sites (contract 1, 5, 11.4). Heartbeats keep
 running on real time whatever the speed.
 
-TickLoop is the clock task, the one scheduler of simulated work: it moves the farm forward
-and takes every reading (contract 6.1-6.3, 14). Readings sit on a fixed grid of simulated
-time, so they don't drift whatever the tick length or the real-time jitter. A fast clock
-widens the grid, so that readings never come more often than the config pack allows.
+TickLoop is the clock task, the one scheduler of simulated work: it moves the farm forward,
+steps the controllers and takes every reading (contract 6.1-6.3, 9, 14). Readings sit on a
+fixed grid of simulated time, so they don't drift whatever the tick length or real-time jitter.
+A fast clock widens the grid, so that readings never come more often than the config pack allows.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import time
 from collections.abc import Callable, Iterable
 from datetime import datetime, timedelta
@@ -30,6 +31,8 @@ READING_S = 60.0  # contract 6.1-6.3 and 14: one reading per 60 simulated second
 REAL_TICK_S = 1.0  # the longest wait between ticks, paused or not
 MAX_SIM_PER_TICK_S = 30.0  # fast clocks tick more often: about 10 times a second at x288
 MAX_CATCH_UP_READINGS = 60  # after a long stall (a laptop asleep), older readings are skipped
+CONTROL_STEP_S = 0.5  # simulated seconds between controller steps: a pump overshoots by one step
+MAX_CONTROL_STEPS = 600  # a tick's budget; after a long stall the steps get longer, not more
 
 
 class SimClock:
@@ -105,6 +108,10 @@ class SteppedFarm(Protocol):
     def step(self, dt_s: float, now: datetime) -> None: ...
 
 
+class Controller(Protocol):
+    def step(self, now_ms: int) -> None: ...
+
+
 class Reader(Protocol):
     def on_reading_due(self, sim_ts: datetime) -> None: ...
 
@@ -117,7 +124,10 @@ class TickLoop:
     A step is split at each reading's due time, so a reading shows the farm exactly as it
     was then, however long the step. Readings out of turn don't move the grid. While the
     clock is paused nothing moves, so no reading falls due and nothing crosses an alarm.
-    The farm moves on every tick, whatever the interval between readings.
+    The farm moves on every tick, whatever the interval between readings. With controllers,
+    the farm moves in steps of CONTROL_STEP_S simulated seconds, and every controller steps after
+    each one, so a pump stops close to its target at any speed. While paused they still step once
+    a tick: the farm is frozen, the panel is not.
     """
 
     def __init__(
@@ -128,8 +138,11 @@ class TickLoop:
         *,
         reading_s: float = READING_S,
         min_real_reading_s: float = 0.0,
+        controllers: Iterable[Controller] = (),
     ):
         self.clock, self.farm, self.readers = clock, farm, tuple(readers)
+        self.controllers = tuple(controllers)
+        self._control_step_s = CONTROL_STEP_S
         self._reading_s, self._min_real_reading_s = reading_s, min_real_reading_s
         self._sim_now = clock.last_tick
         self._last_reading: datetime | None = None
@@ -138,6 +151,8 @@ class TickLoop:
     def tick(self) -> None:
         self.clock.tick()
         end = self.clock.last_tick
+        span_s = (end - self._sim_now).total_seconds()
+        self._control_step_s = max(CONTROL_STEP_S, span_s / MAX_CONTROL_STEPS)
         period = timedelta(
             seconds=reading_interval_s(self.clock.speed, self._min_real_reading_s, self._reading_s)
         )
@@ -162,8 +177,18 @@ class TickLoop:
             await asyncio.sleep(tick_interval_s(self.clock.speed))
 
     def _move_farm_to(self, moment: datetime) -> None:
-        self.farm.step((moment - self._sim_now).total_seconds(), moment)
-        self._sim_now = moment
+        start = self._sim_now
+        span_s = (moment - start).total_seconds()
+        steps = 1
+        if self.controllers:
+            steps = max(1, math.ceil(span_s / self._control_step_s))
+        for n in range(1, steps + 1):
+            at = moment if n == steps else start + (moment - start) * n / steps
+            self.farm.step((at - self._sim_now).total_seconds(), at)
+            self._sim_now = at
+            now_ms = round(at.timestamp() * 1000)
+            for controller in self.controllers:
+                controller.step(now_ms)
 
     def _skip_stale_readings(self, end: datetime, period: timedelta) -> None:
         due = (end - self._next_reading) // period + 1

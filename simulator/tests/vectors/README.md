@@ -31,7 +31,11 @@ still to be written.
      `restart(reason)`, and the next messages carry the next `bootId` with `seq` starting again.
 4. Record every `set_output` call, every `nvs_write`, and every message the controller reports.
 
-Later vectors may need more actions (`FLOW_PULSES`, `ADVANCE_TO`). Add them here first.
+The runner's flow meters (`take_flow_ml`) read 0, so a dose in a vector starts and keeps running.
+Dose and refill execution are tested on the real farm model in `tests/rules/test_dose_execution.py`;
+their vectors need a `FLOW` action first.
+
+Later vectors may need more actions (`FLOW`, `ADVANCE_TO`). Add them here first.
 
 ## How results are compared
 

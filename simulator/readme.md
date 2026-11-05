@@ -132,10 +132,31 @@ safety check is a plain function in `checks.py` that returns a reason code from 
 and the controller's own (`limits.json`). It journals before switching anything, never switches
 circulation, and keeps the journal, the last 50 `cmdId`s, latches and 24 h totals through a reboot.
 
-It isn't wired into `sim.main` yet, and a dose starts its first line and stays there: running one to
-its end needs flow metering and pump rates. The rules, HAL names and decisions are in
-`docs/controller-spec.md`. `tests/rules/` plays every file in `tests/vectors/` against it, and
-`tests/vectors/TODO.md` lists the rules still to write.
+The rules, HAL names and decisions are in `docs/controller-spec.md`. `tests/rules/` plays every file in
+`tests/vectors/` against it, and `tests/vectors/TODO.md` lists the rules still to write.
+
+## Commands (contract 7, 8)
+
+Each zone controller runs that controller (`sim/main.py` `attach_controller`). It listens on
+`farm/{site}/zone/{zone}/cmd` and `farm/{site}/stop`, and answers with `CMD_STATE` on
+`.../cmd/state` and `EVENT` on `.../event`, at QoS 1, not retained. Its HAL (`sim/farm_hal.py`) is its
+zone of the farm model, and its nvs is `.state/nvs_<device>.json`.
+
+A dose runs line by line. Each pump moves stock from its day-tank into the reservoir at its rate in
+`hardware.json` `pumps.doseLines` (placeholders), so EC really changes, and a flow meter counts what
+it delivered. Then the mix wait runs on simulated time, and the final `CMD_STATE` carries `after`.
+The clock task steps the controllers every 0.5 simulated seconds, so a pump stops within about 1 mL
+of its target at any speed. Limits come from `limits.json` until `DEVICE_CONFIG` is handled.
+
+Try one with the dev broker. `expiresAt` must still be ahead: commands live 60 seconds (contract 14).
+
+```
+docker compose -f infra/docker-compose.dev.yml exec -T mqtt mosquitto_pub -q 1 -t farm/siet-ph1/zone/Z1/cmd -m '{"v": 1, "type": "CMD", "msgId": "<uuid>", "ts": "<now>", "site": "siet-ph1", "device": "CLOUD", "cmdId": "<uuid>", "kind": "DOSE", "issuedAt": "<now>", "expiresAt": "<now + 60 s>", "issuedBy": "user:1", "target": {"zone": "Z1"}, "lines": [{"line": "A", "ml": 120}], "order": ["A"], "mixWaitS": 300, "maxDurationS": 600, "tolerancePct": 5}'
+```
+
+Times are contract time, for example `2026-11-04T09:00:00.000Z`. Watch the answers with
+`mosquitto_sub -v -t "farm/+/zone/+/cmd/state"`, or with the contract watch tool, which checks
+`CMD_STATE`'s shape until its model exists.
 
 ## Tests
 

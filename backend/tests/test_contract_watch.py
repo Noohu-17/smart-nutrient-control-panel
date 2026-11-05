@@ -38,6 +38,43 @@ def test_a_type_without_a_model_is_skipped():
     assert check(payload({"v": 1, "type": "EVENT"}))[0] == "SKIP"
 
 
+# A CMD_STATE as the simulator's zone controller sends it (contract 6.6, T4-8).
+SIMULATOR_CMD_STATE = {
+    "v": 1, "type": "CMD_STATE", "msgId": "0b7f2c1e-5b8e-4a59-9c4e-0c8d3a7f1a21",
+    "ts": "2026-11-09T04:55:02.000Z", "site": "siet-ph1", "device": "ZC1", "bootId": 4, "seq": 9,
+    "cmdId": "6f1c2a90-3d1e-4c7b-9f52-2b8f0e6a1c44", "state": "COMPLETED", "reason": None,
+    "lines": [{"line": "A", "requestedMl": 120, "deliveredMl": 121, "state": "DONE"}],
+    "before": {"ec": 1.51, "ph": 6.21}, "after": {"ec": 1.57, "ph": 6.2},
+    "startedAt": "2026-11-09T04:55:00.000Z", "endedAt": "2026-11-09T04:56:00.000Z",
+}
+
+
+def test_cmd_state_has_no_model_yet_so_its_shape_is_checked():
+    result, detail = check(payload(SIMULATOR_CMD_STATE))
+    assert result == "OK"
+    assert "shape" in detail
+
+
+def test_a_rejected_cmd_state_with_its_reason_passes():
+    rejected = SIMULATOR_CMD_STATE | {"state": "REJECTED", "reason": "ESTOP", "before": None,
+                                      "after": None, "startedAt": None, "endedAt": None}
+    assert check(payload(rejected))[0] == "OK"
+
+
+def test_a_cmd_state_breaking_the_reason_rule_fails():
+    assert check(payload(SIMULATOR_CMD_STATE | {"state": "REJECTED"}))[0] == "FAIL"
+    assert check(payload(SIMULATOR_CMD_STATE | {"reason": "ESTOP"}))[0] == "FAIL"
+
+
+def test_a_cmd_state_with_a_bad_field_fails_and_names_it():
+    result, detail = check(payload(SIMULATOR_CMD_STATE | {"state": "DONE"}))
+    assert result == "FAIL" and "state" in detail
+    broken_line = [{"line": "A", "requestedMl": 120, "deliveredMl": "121", "state": "DONE"}]
+    result, detail = check(payload(SIMULATOR_CMD_STATE | {"lines": broken_line}))
+    assert result == "FAIL" and "deliveredMl" in detail
+    assert check(payload(SIMULATOR_CMD_STATE | {"cmdId": "x"}))[0] == "FAIL"
+
+
 def test_a_payload_that_is_not_a_json_object_fails():
     assert check(b"not json")[0] == "FAIL"
     assert check(b"[1, 2]")[0] == "FAIL"
