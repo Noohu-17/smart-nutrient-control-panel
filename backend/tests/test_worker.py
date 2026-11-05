@@ -346,7 +346,7 @@ def test_a_time_at_the_ends_of_the_calendar_never_blocks_the_worker(worker, ts):
     assert "ZC2" in last_seen(worker.engine)
 
 
-@pytest.mark.parametrize("kind", ["EVENT", "DOSE", "GATEWAY_JOURNAL"])
+@pytest.mark.parametrize("kind", ["CMD", "DOSE", "GATEWAY_JOURNAL"])
 def test_a_type_with_no_model_yet_is_skipped_quietly(worker, caplog, kind):
     handle(worker, {"v": 1, "type": kind})
     assert stored_readings(worker.engine) == []

@@ -35,7 +35,7 @@ def test_a_broken_message_fails_and_names_the_field():
 
 
 def test_a_type_without_a_model_is_skipped():
-    assert check(payload({"v": 1, "type": "EVENT"}))[0] == "SKIP"
+    assert check(payload({"v": 1, "type": "CMD"}))[0] == "SKIP"
 
 
 # A CMD_STATE as the simulator's zone controller sends it (contract 6.6, T4-8).

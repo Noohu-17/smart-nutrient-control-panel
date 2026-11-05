@@ -1,5 +1,5 @@
 """Farm → cloud messages (contract §6): ZONE_TELEMETRY, CLIMATE_TELEMETRY, POWER_STATE,
-DEVICE_STATUS, CMD_STATE, ZONE_STATE and CLIMATE_STATE.
+DEVICE_STATUS, EVENT, CMD_STATE, ZONE_STATE and CLIMATE_STATE.
 
 Maps keyed by equipment IDs, dose lines or sensor positions are plain dicts, because
 those keys come from the client's layout config (contract §2.4, OPEN-12), never from code.
@@ -13,7 +13,7 @@ import math
 from dataclasses import dataclass
 from typing import Annotated, Any, Literal
 
-from pydantic import UUID4, ConfigDict, StrictBool, StrictInt, model_validator
+from pydantic import UUID4, ConfigDict, StrictBool, StrictInt, StringConstraints, model_validator
 
 from .envelope import (
     ContractModel,
@@ -243,6 +243,62 @@ class DeviceStatusLastWill(ContractModel):
     online: Annotated[Literal[False], exact_type(bool)]
 
 
+# --- 6.5 Event ------------------------------------------------------------------------
+
+EventKind = Literal[
+    "ESTOP_PRESSED", "ESTOP_RELEASED", "MODE_CHANGED", "LEAK_DETECTED", "LEAK_CLEARED",
+    "CIRC_NO_FLOW", "CIRC_FLOW_RESTORED", "SENSOR_FAULT", "SENSOR_RECOVERED", "RESERVOIR_LOW",
+    "DAYTANK_LOW", "PUMP_FAULT", "CHILLER_FAULT", "CLIMATE_MODE_REVERTED", "REBOOTED",
+]
+Severity = Literal["CRITICAL", "WARNING", "INFO"]
+# The severity §6.5 gives each kind, but MODE_CHANGED: WARNING if leaving REMOTE, otherwise INFO.
+EVENT_SEVERITY: dict[str, Severity] = {
+    "ESTOP_PRESSED": "CRITICAL",
+    "ESTOP_RELEASED": "INFO",
+    "LEAK_DETECTED": "CRITICAL",
+    "LEAK_CLEARED": "INFO",
+    "CIRC_NO_FLOW": "CRITICAL",
+    "CIRC_FLOW_RESTORED": "INFO",
+    "SENSOR_FAULT": "WARNING",
+    "SENSOR_RECOVERED": "INFO",
+    "RESERVOIR_LOW": "WARNING",
+    "DAYTANK_LOW": "WARNING",
+    "PUMP_FAULT": "CRITICAL",
+    "CHILLER_FAULT": "CRITICAL",
+    "CLIMATE_MODE_REVERTED": "INFO",
+    "REBOOTED": "WARNING",
+}
+Text = Annotated[str, StringConstraints(min_length=1)]
+
+
+class Event(Envelope):
+    """Something the farm saw, sent once (§6.5).
+
+    message, systemAction and nextStep answer what happened, what the farm already did about it
+    and what a person should do (PRD rule 7); the back end copies them into the alert.
+    """
+
+    type: Literal["EVENT"]
+    zone: ZoneId | None = None  # a zone controller's events; CC1's (climate/event) have none
+    kind: EventKind
+    severity: Severity
+    message: Text
+    system_action: Text
+    next_step: Text
+    detail: dict[str, Any] | None = None  # from and to, metric, line, equipment or reason (§6.5)
+
+    @model_validator(mode="after")
+    def _severity_as_6_5_gives_it(self) -> "Event":
+        if self.kind == "MODE_CHANGED":
+            leaving_remote = (self.detail or {}).get("from") == "REMOTE"
+            expected = "WARNING" if leaving_remote else "INFO"
+        else:
+            expected = EVENT_SEVERITY[self.kind]
+        if self.severity != expected:
+            raise ValueError(f"a {self.kind} event is {expected}, not {self.severity}")
+        return self
+
+
 # --- 6.6 Command state ----------------------------------------------------------------
 
 
@@ -321,6 +377,7 @@ FARM_MESSAGE_MODELS: dict[str, type[Envelope]] = {
     "CLIMATE_TELEMETRY": ClimateTelemetry,
     "POWER_STATE": PowerState,
     "DEVICE_STATUS": DeviceStatus,
+    "EVENT": Event,
     "CMD_STATE": CommandState,
     "ZONE_STATE": ZoneState,
     "CLIMATE_STATE": ClimateState,
