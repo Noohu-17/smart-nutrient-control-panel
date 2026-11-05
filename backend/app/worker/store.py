@@ -132,24 +132,30 @@ def store_message(
     """Everything one checked message changes, in one transaction.
 
     Its readings, the latest message of its kind (KEPT_TYPES), and its device's last_seen, which
-    never moves back. A DEVICE_STATUS saying offline counts as a last will.
+    never moves back. A DEVICE_STATUS saying offline counts as a last will. Anything else new from
+    the device clears its last will; a replay doesn't.
     """
     with engine.begin() as connection:
         new_rows = _insert_rows(connection, rows) if rows else 0
         kept = _keep_if_newer(connection, message, org_id) if message.type in KEPT_TYPES else None
+        stored = Stored(len(rows), new_rows, kept)
         seen: dict[str, Any] = {"last_seen": func.greatest(Device.last_seen, message.ts)}
         if isinstance(message, DeviceStatus) and not message.online:
             seen["last_will_at"] = received_at
+        elif not stored.replay:
+            # The device is back. Its ts isn't compared with when the last will arrived: they
+            # come from different clocks (the device's and the server's).
+            seen["last_will_at"] = None
         connection.execute(
             update(Device).where(*_the_device(org_id, message.site, message.device)).values(seen)
         )
-    return Stored(len(rows), new_rows, kept)
+    return stored
 
 
 def mark_offline(
     engine: Engine, org_id: str, site_id: str, device_id: str, received_at: datetime
 ) -> bool:
-    """A last will (§6.4): the device is offline from now until it sends anything newer (§14).
+    """A last will (§6.4): the device is offline from now until it sends anything new (§14).
 
     A last will has no ts, so the time it arrived stands in. Returns whether the device is known.
     """

@@ -14,10 +14,14 @@ FRESH_FOR = timedelta(seconds=120)  # "Fresh EC/pH to dose: ≤ 120 s old" (§14
 def is_online(
     last_seen: datetime | None, now: datetime, last_will_at: datetime | None = None
 ) -> bool:
-    """Heard from within 3 minutes, and no last will since (§14)."""
-    if last_seen is None or now - last_seen >= OFFLINE_AFTER:
+    """Heard from within 3 minutes, and no last will waiting (§14).
+
+    The worker clears a device's last will when the device sends anything new, so last_seen (the
+    device's clock) and last_will_at (the server's) are never compared.
+    """
+    if last_will_at is not None or last_seen is None:
         return False
-    return last_will_at is None or last_will_at < last_seen
+    return now - last_seen < OFFLINE_AFTER
 
 
 def _no_readings(dose_lines: Iterable[str]) -> dict[str, Any]:

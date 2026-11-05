@@ -110,7 +110,7 @@ class Device(Base):
     # Set by the worker and kept by the seed. last_seen is the newest ts of any message from the
     # device (§5, §11.2): the message's own time, so a retained or replayed one can't make a
     # silent device look alive. last_will_at is when its last will (§6.4) arrived; the device is
-    # offline from then until it sends something newer (§14).
+    # offline from then until it sends something new, which clears it (§14).
     last_seen: Mapped[datetime | None] = mapped_column(Timestamp)
     last_will_at: Mapped[datetime | None] = mapped_column(Timestamp)
 

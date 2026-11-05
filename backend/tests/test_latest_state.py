@@ -29,6 +29,8 @@ ORG = "client_A"
 SITE = LAYOUT["site"]
 CMD_ID = "6f1c2a90-3d1e-4c7b-9f52-2b8f0e6a1c44"
 LAST_WILL = {"v": 1, "type": "DEVICE_STATUS", "device": "ZC1", "online": False}
+STATUS = "farm/siet-ph1/device/ZC1/status"
+SLOW_CLOCK_S = 30  # how far behind the server's clock a device's runs, in the tests that need it
 
 
 @pytest.fixture(autouse=True)
@@ -182,11 +184,47 @@ def test_an_offline_heartbeat_counts_as_a_last_will(worker):
     assert will is not None and not is_online(seen, datetime.now(UTC), will)
 
 
-def test_a_device_is_online_again_once_it_sends_something_newer(worker):
-    handle(worker, LAST_WILL, "farm/siet-ph1/device/ZC1/status")
-    handle(worker, heartbeat(ts=contract_time(datetime.now(UTC) + timedelta(milliseconds=5))))
+@pytest.mark.parametrize(
+    ("message", "topic"),
+    [
+        (heartbeat(), STATUS),
+        (zone_telemetry(), "farm/siet-ph1/zone/Z1/telemetry"),
+        (zone_state(), "farm/siet-ph1/zone/Z1/state"),
+    ],
+    ids=["heartbeat", "zone-telemetry", "zone-state"],
+)
+def test_anything_new_clears_the_last_will_even_from_a_slow_clock(worker, message, topic):
+    handle(worker, LAST_WILL, STATUS)
+    handle(worker, message | {"ts": now_ts(SLOW_CLOCK_S)}, topic)  # stamped before the will came
     seen, will = device_row(worker.engine)
-    assert is_online(seen, datetime.now(UTC) + timedelta(seconds=1), will)
+    assert will is None
+    assert is_online(seen, datetime.now(UTC), will)
+
+
+def test_a_replay_doesnt_clear_the_last_will(worker):
+    state, beat = zone_state(ts=now_ts(5), seq=50), heartbeat(ts=now_ts(5), seq=51)
+    handle(worker, state)
+    handle(worker, beat, STATUS)
+    handle(worker, LAST_WILL, STATUS)
+    handle(worker, state)  # the same messages again, as after a reconnect
+    handle(worker, beat, STATUS)
+    handle(worker, zone_state(ts=now_ts(5), seq=49))  # older than the kept one
+    seen, will = device_row(worker.engine)
+    assert will is not None and not is_online(seen, datetime.now(UTC), will)
+
+
+def test_another_devices_message_doesnt_clear_the_last_will(worker):
+    handle(worker, LAST_WILL, STATUS)
+    handle(worker, heartbeat("GW1", ts=now_ts()), "farm/siet-ph1/device/GW1/status")
+    assert device_row(worker.engine).last_will_at is not None
+
+
+def test_a_new_last_will_after_it_came_back_marks_it_offline_again(worker):
+    handle(worker, LAST_WILL, STATUS)
+    handle(worker, heartbeat(ts=now_ts(SLOW_CLOCK_S)), STATUS)
+    handle(worker, LAST_WILL, STATUS)
+    seen, will = device_row(worker.engine)
+    assert will is not None and not is_online(seen, datetime.now(UTC), will)
 
 
 def test_a_last_will_from_a_device_not_in_the_layout_is_harmless(worker, caplog):
@@ -319,7 +357,7 @@ def test_the_last_will_shows_the_zone_offline_at_once(api, worker):
 
 def test_the_zone_is_online_again_after_the_device_comes_back(api, worker):
     handle(worker, LAST_WILL, "farm/siet-ph1/device/ZC1/status")
-    handle(worker, heartbeat(ts=contract_time(datetime.now(UTC) + timedelta(milliseconds=20)), bootId=5, seq=1))
+    handle(worker, heartbeat(ts=now_ts(SLOW_CLOCK_S), bootId=5, seq=1))  # its clock runs slow
     assert api.get("/api/zones/Z1").json()["online"] is True
 
 
@@ -342,10 +380,11 @@ def test_another_clients_state_never_shows(api, seeded, tmp_path):
     ("seen_ago", "will_ago", "expected"),
     [
         (10, None, True),
-        (10, 20, True),  # the last will came before its newest message
-        (10, 10, False),  # at the same moment: the last will wins
-        (10, 5, False),  # a last will after its newest message
-        (OFFLINE_AFTER.total_seconds() + 1, None, False),
+        (10, 20, False),  # a last will is waiting: offline, whatever the two times say
+        (10, 5, False),
+        (OFFLINE_AFTER.total_seconds() - 1, None, True),
+        (OFFLINE_AFTER.total_seconds(), None, False),
+        (None, None, False),
         (None, 5, False),
     ],
 )
