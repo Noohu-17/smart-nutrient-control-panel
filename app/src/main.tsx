@@ -11,6 +11,7 @@ import "./styles/base.css";
 import "./styles/layout.css";
 import "./styles/components.css";
 import "./styles/cards.css";
+import "./styles/dosing.css";
 
 const router = createBrowserRouter(routes);
 const queryClient = makeQueryClient();

@@ -1,10 +1,19 @@
 // src/mocks/handlers.ts · T2-4 · the fake API. MSW answers these calls inside the browser (and in tests).
 // Shapes follow the real back end (T1-12): turn the fake API off with VITE_USE_MOCKS=false.
 import { delay, http, HttpResponse } from "msw";
-import type { ApiErrorBody, Farm, ZoneStatus } from "../api/types";
+import type {
+  ApiErrorBody,
+  DoseConfirmed,
+  DoseRequest,
+  DoseRequestBody,
+  Farm,
+  ZoneStatus,
+} from "../api/types";
 import { buildClimateTelemetry, buildPowerState } from "./data/climatePower";
+import { zoneDosing } from "./data/dosing";
 import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
+import { DoseInputError, runDoseChecks, validateLines } from "./dosing";
 import { currentScenario } from "./scenario";
 
 /** Error body in the contract §11.1 shape. */
@@ -54,6 +63,10 @@ function zoneStatus(zoneId: string): ZoneStatus {
   if (zoneId === "Z1" && scenario === "z1-estop") status.estop = true;
   return status;
 }
+
+// dose requests reviewed so far, and the answers already given to a confirm (by Idempotency-Key)
+const doseRequests = new Map<string, DoseRequest>();
+const confirmed = new Map<string, DoseConfirmed>();
 
 export const handlers = [
   // GET /api/health · uptime check (contract §11.2, public)
@@ -106,5 +119,40 @@ export const handlers = [
     const zoneId = String(params.zoneId);
     if (!findZone(zoneId)) return apiError(404, "NOT_FOUND", `There is no zone ${zoneId}`);
     return HttpResponse.json(zoneStatus(zoneId));
+  }),
+
+  // POST /api/dose-requests · run the safety checks; nothing is sent to the farm (contract §11.3)
+  http.post("/api/dose-requests", async ({ request }) => {
+    await networkDelay();
+    const body = (await request.json()) as DoseRequestBody;
+    const zone = findZone(body.zone);
+    const dosing = zoneDosing(body.zone);
+    if (!zone || !dosing) return apiError(404, "NOT_FOUND", `There is no zone ${body.zone}`);
+    try {
+      validateLines(zone, body.lines);
+    } catch (e) {
+      if (e instanceof DoseInputError) return apiError(422, "INVALID_COMMAND", e.message);
+      throw e;
+    }
+    const dr = runDoseChecks(`dr_${crypto.randomUUID()}`, zone, zoneStatus(body.zone), dosing, body.lines);
+    doseRequests.set(dr.id, dr);
+    return HttpResponse.json(dr, { status: 201 });
+  }),
+
+  // POST /api/dose-requests/:id/confirm · create and dispatch the command (contract §11.3)
+  http.post("/api/dose-requests/:id/confirm", async ({ params, request }) => {
+    await networkDelay();
+    const key = request.headers.get("Idempotency-Key");
+    const repeat = key ? confirmed.get(key) : undefined;
+    if (repeat) return HttpResponse.json(repeat, { status: 202 });
+
+    const dr = doseRequests.get(String(params.id));
+    if (!dr) return apiError(404, "NOT_FOUND", `There is no dose request ${String(params.id)}`);
+    const blocking = dr.checks.find((c) => c.result === "BLOCK");
+    if (blocking) return apiError(409, blocking.id, blocking.message);
+
+    const sent: DoseConfirmed = { cmdId: crypto.randomUUID(), state: "DISPATCHED" };
+    if (key) confirmed.set(key, sent);
+    return HttpResponse.json(sent, { status: 202 });
   }),
 ];

@@ -1,0 +1,169 @@
+/* Manual dose and its safety review (zone page). Tokens only. */
+
+.btn.primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--text-on-primary);
+}
+.btn.primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+.btn.primary:disabled {
+  border-color: var(--disabled-border);
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+}
+
+.banner {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-banner);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+.banner.crit {
+  border: 1px solid var(--status-critical-border);
+  background: var(--status-critical-bg);
+  color: var(--status-critical-text);
+}
+.banner.info {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+}
+
+/* ---------- amounts */
+.dose-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.dose-lines {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+}
+.dose-line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-label-size);
+  font-weight: var(--weight-semibold);
+  color: var(--text-label);
+}
+.dose-input {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.dose-input input {
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+  text-align: right;
+}
+.dose-input input:disabled {
+  border-color: var(--disabled-border);
+  background: var(--disabled-bg);
+}
+.dose-input input[aria-invalid="true"] {
+  border-color: var(--status-critical-action);
+}
+.dose-input small,
+.dose-note {
+  font-size: var(--text-caption-size);
+  font-weight: var(--weight-regular);
+  color: var(--text-muted);
+}
+.dose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+.dose-note {
+  margin-right: auto;
+}
+
+/* ---------- review */
+.dose-summary,
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dose-summary li {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.checks li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.checks li div {
+  display: flex;
+  flex-direction: column;
+}
+.checks li div span {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  color: var(--text-secondary);
+}
+.check-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  font-weight: var(--weight-bold);
+}
+.checks .pass .check-mark {
+  background: var(--status-success-bg);
+  color: var(--status-success-fg);
+}
+.checks .warn .check-mark {
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+}
+.checks .block .check-mark {
+  background: var(--status-critical-bg);
+  color: var(--status-critical-fg);
+}
+.dose-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.dose-facts div {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-tile);
+  background: var(--color-surface-subtle);
+}
+.dose-facts dt {
+  font-size: var(--text-label-size);
+  color: var(--text-secondary);
+}
+.dose-facts dd {
+  margin: 0;
+  font-weight: var(--weight-bold);
+}
+.dose-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.dose-confirm input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+}

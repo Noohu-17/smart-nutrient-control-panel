@@ -4,6 +4,7 @@ import { EmptyState } from "../components/EmptyState";
 import { ReadingCard } from "../components/ReadingCard";
 import { StatusChip } from "../components/StatusChip";
 import { ZONE_READINGS } from "../config/readings";
+import { DoseCard } from "../features/dosing/DoseCard";
 import { ZoneActions } from "../features/zones/ZoneActions";
 
 /** Zone page skeleton: name and benches from GET /api/farm, reading cards still empty. */
@@ -42,6 +43,8 @@ export function ZonePage() {
             </div>
             <ZoneActions full />
           </section>
+
+          <DoseCard key={zone.id} zone={zone} />
 
           <section className="zone-card" aria-labelledby="benches-title">
             <header className="zone-card-head">
