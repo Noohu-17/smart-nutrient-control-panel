@@ -152,6 +152,51 @@ export type DoseRequest = {
 /* ---------- POST /api/dose-requests/{id}/confirm (contract §11.3, states §8.1) ---------- */
 export type DoseConfirmed = { cmdId: string; state: "DISPATCHED" };
 
+/* ---------- Simulator control, playground sites only (contract §11.4) ---------- */
+/** Clock speed: 0 is paused, 288 is one simulated day in five minutes. */
+export type SimSpeed = 0 | 1 | 60 | 288;
+
+/** A failure drill that is running: Trigger turned it on, Fix turns it off (§11.4.3). */
+export type SimFault = { kind: string; target: string };
+
+/** A value set and held until released (§11.4.2). `target` is a zone ID or "POLYHOUSE". */
+export type SimHold = { target: string; metric: string; value: number; gradual: boolean };
+
+/** GET /api/sim/state. Field names follow the `sim_state` WebSocket message (§12). */
+export type SimState = {
+  scenario: string;
+  simTime: string; // the simulated date and time; every message's ts stays real time
+  speed: SimSpeed;
+  weather: string;
+  faults: SimFault[];
+  holds: SimHold[];
+};
+
+export type SimRange = { min: number; max: number };
+
+/** One entry of the failure-drill catalogue in scenarios.json (§11.4.3). */
+export type FailureDrill = {
+  kind: string;
+  group: string;
+  prdCode: string;
+  targetType: "ZONE" | "ZONE_SENSOR" | "DOSE_LINE" | "POLYHOUSE" | "DEVICE";
+  title: string;
+  explanation: string;
+  fix: string;
+  params: Record<string, unknown>;
+};
+
+/** GET /api/sim/scenario-options: the client's scenarios.json, the parts the app reads so far. */
+export type ScenarioOptions = {
+  failureDrills: FailureDrill[];
+  holdable: {
+    zone: Record<string, SimRange & { linesFrom?: string }>;
+    polyhouse: Record<string, SimRange>;
+  };
+};
+
+export type SimFaultBody = SimFault & { on: boolean };
+
 /* ---------- GET /api/commands/{cmdId} (contract §6.6, §8) ---------- */
 export type CommandState =
   | "DISPATCHED"

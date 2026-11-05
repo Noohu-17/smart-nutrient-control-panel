@@ -6,6 +6,7 @@ import { resetCommands } from "../mocks/commands";
 import { resetClimatePower } from "../mocks/data/climatePower";
 import { resetTelemetry } from "../mocks/data/telemetry";
 import { server } from "../mocks/node";
+import { resetSim } from "../mocks/sim";
 
 // The fake API alone takes 300 ms, which left little of the default 1 s on a busy laptop.
 configure({ asyncUtilTimeout: 5_000 });
@@ -26,6 +27,7 @@ afterEach(() => {
   server.resetHandlers();
   resetTelemetry();
   resetClimatePower();
+  resetSim();
   resetCommands();
 });
 

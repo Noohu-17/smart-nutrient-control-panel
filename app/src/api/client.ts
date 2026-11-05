@@ -64,3 +64,5 @@ export const postJson = <T>(path: string, body?: unknown, headers: Record<string
     headers: { "Content-Type": "application/json", ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+
+export const deleteJson = <T>(path: string) => send<T>(path, { method: "DELETE" });

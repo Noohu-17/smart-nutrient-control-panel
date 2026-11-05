@@ -4,7 +4,7 @@
 export const ROLES = ["Owner", "Agronomist", "Operator", "Viewer"] as const;
 export type Role = (typeof ROLES)[number];
 
-export type Permission = "operate" | "ack" | "export" | "recipe" | "clearFault";
+export type Permission = "operate" | "ack" | "export" | "recipe" | "clearFault" | "sim" | "simReset";
 
 const STAFF: Role[] = ["Owner", "Agronomist", "Operator"];
 
@@ -14,6 +14,8 @@ export const CAN: Record<Permission, Role[]> = {
   export: STAFF,
   recipe: ["Owner", "Agronomist"],
   clearFault: ["Owner"],
+  sim: STAFF, // playground: speed, failure drills, held values (§11.4)
+  simReset: ["Owner"],
 };
 
 /** One-line reason shown under a locked button. */
@@ -23,6 +25,8 @@ export const WHY: Record<Permission, string> = {
   export: "Viewers can’t export",
   recipe: "Only Owners and Agronomists change recipes",
   clearFault: "Only Owners clear a latched fault",
+  sim: "Viewers can’t change the simulated farm",
+  simReset: "Only Owners reset the simulated farm",
 };
 
 export const can = (role: Role, perm: Permission) => CAN[perm].includes(role);

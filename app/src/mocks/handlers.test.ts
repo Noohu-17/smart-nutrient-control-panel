@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import configFeatures from "../../../config/clients/client_A/features.json";
 import configLayout from "../../../config/clients/client_A/layout.json";
 import configLimits from "../../../config/clients/client_A/limits.json";
+import configScenarios from "../../../config/clients/client_A/scenarios.json";
 import type { ClimateTelemetry, Farm, PowerState, ZoneStatus } from "../api/types";
 import mockFeatures from "./data/features.json";
 import mockLayout from "./data/layout.json";
 import mockLimits from "./data/limits.json";
+import mockScenarios from "./data/scenarios.json";
 
 // Fields of the zone response example under GET /zones/{zoneId} in docs/contract.md §11.2 (T1-10),
 // which the real back end (T1-12) answers. simTs is left out: playground readings only.
@@ -69,6 +71,10 @@ describe("fake API (MSW)", () => {
 
   it("the mock limits are an exact copy of config/clients/client_A/limits.json", () => {
     expect(mockLimits).toEqual(configLimits);
+  });
+
+  it("the mock scenarios are an exact copy of config/clients/client_A/scenarios.json", () => {
+    expect(mockScenarios).toEqual(configScenarios);
   });
 
   it("GET /api/zones/Z1 has exactly the fields of the contract §11.2 zone response (T1-10)", async () => {

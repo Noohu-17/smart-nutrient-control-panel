@@ -1,6 +1,6 @@
 // src/api/hooks.ts · TanStack Query hooks. Screens call these, never fetch.
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getJson, postJson } from "./client";
+import { deleteJson, getJson, postJson } from "./client";
 import { isFinalCommand, isMixing } from "../config/dosing";
 import type {
   ClimateTelemetry,
@@ -10,6 +10,11 @@ import type {
   DoseRequestBody,
   Farm,
   PowerState,
+  ScenarioOptions,
+  SimFaultBody,
+  SimHold,
+  SimSpeed,
+  SimState,
   ZoneStatus,
 } from "./types";
 
@@ -91,6 +96,58 @@ export function useConfirmDose() {
       postJson<DoseConfirmed>(`/dose-requests/${id}/confirm`, undefined, { "Idempotency-Key": key }),
   });
 }
+
+/* ---------- Simulator control, playground sites only (§11.4) ---------- */
+
+const SIM_STATE = ["sim", "state"] as const;
+
+/** GET /api/sim/state · speed, simulated clock, running drills, held values. `enabled` is false
+    on a real farm, which has no simulator to ask. */
+export function useSimState(enabled = true) {
+  return useQuery({
+    queryKey: SIM_STATE,
+    queryFn: () => getJson<SimState>("/sim/state"),
+    refetchInterval: 30_000,
+    enabled,
+  });
+}
+
+/** GET /api/sim/scenario-options · the drill catalogue and the holdable ranges (scenarios.json). */
+export function useScenarioOptions(enabled = true) {
+  return useQuery({
+    queryKey: ["sim", "scenario-options"],
+    queryFn: () => getJson<ScenarioOptions>("/sim/scenario-options"),
+    staleTime: 5 * ONE_MINUTE,
+    enabled,
+  });
+}
+
+/** A simulator action. §11.4 doesn't fix what these answer, so ask for the sim state again
+    afterwards; the screen and the banner then show the change. */
+function useSimAction<V>(send: (vars: V) => Promise<unknown>) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: send,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: SIM_STATE }),
+  });
+}
+
+export const useSimSpeed = () => useSimAction((x: SimSpeed) => postJson("/sim/speed", { x }));
+
+/** Trigger (`on: true`) or Fix (`on: false`) a failure drill. */
+export const useSimFault = () => useSimAction((body: SimFaultBody) => postJson("/sim/faults", body));
+
+export const useSimHold = () => useSimAction((hold: SimHold) => postJson("/sim/holds", hold));
+
+export const useSimRelease = () =>
+  useSimAction(({ target, metric }: { target: string; metric: string }) =>
+    deleteJson(`/sim/holds/${encodeURIComponent(target)}/${encodeURIComponent(metric)}`),
+  );
+
+export const useSimReleaseAll = () => useSimAction(() => postJson("/sim/holds/release-all"));
+
+/** Owner only: back to the start of the scenario, all drills off and every value released. */
+export const useSimReset = () => useSimAction(() => postJson("/sim/reset"));
 
 /** Follow a command until the farm reports a final state, then until `after` arrives (mix wait).
     The WebSocket replaces the polling later (§12). */

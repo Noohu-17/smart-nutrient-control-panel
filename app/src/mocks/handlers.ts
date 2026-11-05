@@ -7,6 +7,8 @@ import type {
   DoseRequest,
   DoseRequestBody,
   Farm,
+  SimFaultBody,
+  SimHold,
   ZoneStatus,
 } from "../api/types";
 import {
@@ -25,6 +27,17 @@ import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
 import { DoseInputError, runDoseChecks, validateLines } from "./dosing";
 import { currentScenario } from "./scenario";
+import {
+  hold,
+  release,
+  releaseAll,
+  resetSim,
+  scenarioOptions,
+  setFault,
+  setSpeed,
+  SimInputError,
+  simState,
+} from "./sim";
 
 /** Error body in the contract §11.1 shape. */
 const apiError = (status: number, code: string, message: string) =>
@@ -90,6 +103,20 @@ function zoneStatus(zoneId: string): ZoneStatus {
   }
   if (zoneId === "Z1" && scenario === "z1-leak") status.leak = true;
   return status;
+}
+
+/** Run a simulator action and answer with the new sim state; a refused value is 422 (§11.1).
+    A real farm has no simulator, so every /sim call is 404 there (§11.4: playground only). */
+async function simAction(act: () => void) {
+  await networkDelay();
+  if (currentScenario() === "no-playground") return apiError(404, "NOT_FOUND", "This site has no simulator");
+  try {
+    act();
+  } catch (e) {
+    if (e instanceof SimInputError) return apiError(422, "VALIDATION_ERROR", e.message);
+    throw e;
+  }
+  return HttpResponse.json(simState());
 }
 
 // dose requests reviewed so far, and the answers already given to a confirm (by Idempotency-Key)
@@ -192,6 +219,49 @@ export const handlers = [
     });
     return HttpResponse.json(sent, { status: 202 });
   }),
+
+  // GET /api/sim/state · speed, simulated clock, running drills, held values (§11.4)
+  http.get("/api/sim/state", () => simAction(() => {})),
+
+  // GET /api/sim/scenario-options · the client's scenarios.json (§11.4.1)
+  http.get("/api/sim/scenario-options", async () => {
+    await networkDelay();
+    if (currentScenario() === "no-playground")
+      return apiError(404, "NOT_FOUND", "This site has no simulator");
+    return HttpResponse.json(scenarioOptions);
+  }),
+
+  // POST /api/sim/speed { x } · 0 (pause), 1, 60 or 288
+  http.post("/api/sim/speed", async ({ request }) => {
+    const { x } = (await request.json()) as { x: unknown };
+    return simAction(() => setSpeed(x));
+  }),
+
+  // POST /api/sim/faults { kind, target, on } · Trigger or Fix a failure drill (§11.4.3)
+  http.post("/api/sim/faults", async ({ request }) => {
+    const body = (await request.json()) as SimFaultBody;
+    return simAction(() => setFault(body));
+  }),
+
+  // POST /api/sim/holds { target, metric, value, gradual } · set a value and hold it (§11.4.2)
+  http.post("/api/sim/holds", async ({ request }) => {
+    const body = (await request.json()) as SimHold;
+    return simAction(() => hold(body));
+  }),
+
+  // POST /api/sim/holds/release-all
+  http.post("/api/sim/holds/release-all", () => simAction(releaseAll)),
+
+  // DELETE /api/sim/holds/:target/:metric · release one held value
+  http.delete("/api/sim/holds/:target/:metric", async ({ params }) => {
+    const [target, metric] = [String(params.target), String(params.metric)];
+    if (!simState().holds.some((h) => h.target === target && h.metric === metric))
+      return apiError(404, "NOT_FOUND", `Nothing is held on ${target} ${metric}`);
+    return simAction(() => release(target, metric));
+  }),
+
+  // POST /api/sim/reset · Owner only on the real back end; back to the start of the scenario
+  http.post("/api/sim/reset", () => simAction(resetSim)),
 
   // GET /api/commands/:cmdId · the command with its state and lines (contract §6.6, §8)
   http.get("/api/commands/:cmdId", async ({ params }) => {

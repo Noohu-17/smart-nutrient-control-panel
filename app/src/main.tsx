@@ -12,6 +12,7 @@ import "./styles/layout.css";
 import "./styles/components.css";
 import "./styles/cards.css";
 import "./styles/dosing.css";
+import "./styles/sim.css";
 
 const router = createBrowserRouter(routes);
 const queryClient = makeQueryClient();
