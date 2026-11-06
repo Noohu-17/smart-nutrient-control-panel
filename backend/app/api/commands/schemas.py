@@ -44,14 +44,29 @@ class CommandSent(ContractModel):
 
 
 class CommandStatus(ContractModel):
-    """A command as its controller last reported it (CMD_STATE, §6.6)."""
+    """A command as its controller last reported it (CMD_STATE, §6.6), or DISPATCHED until then."""
 
     cmd_id: str
-    device: str  # the controller that reported it
-    state: CmdState
+    device: str | None  # the controller that reported it; null while DISPATCHED
+    state: CmdState | Literal["DISPATCHED"]
     reason: str | None  # a reason code (§8.4) when PARTIAL, FAILED, STOPPED or REJECTED
     lines: list[CommandLine] | None  # DOSE only: requested and delivered mL per line
     before: EcPh | None
     after: EcPh | None
     started_at: ApiTime | None
     ended_at: ApiTime | None
+
+    @classmethod
+    def dispatched(cls, cmd_id: str) -> "CommandStatus":
+        """Sent, and nothing heard from the farm about it yet (§8.1)."""
+        return cls(
+            cmd_id=cmd_id,
+            device=None,
+            state="DISPATCHED",
+            reason=None,
+            lines=None,
+            before=None,
+            after=None,
+            started_at=None,
+            ended_at=None,
+        )

@@ -1,5 +1,5 @@
 """Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message, command
-report, dose request and user.
+report, dose request, sent command and user.
 
 Every table has org_id and site_id (OPEN-11), so more organisations and sites can share
 the database later. Rows are keyed by the contract's own IDs (§2.1, §2.2): siet-ph1, Z1,
@@ -208,6 +208,38 @@ class DoseRequest(Base):
     estimate: Mapped[dict[str, Any]] = mapped_column(JSONB)
     can_confirm: Mapped[bool]
     limits: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+class SentCommand(Base):
+    """A command this API has sent to the farm (§7), exactly as sent.
+
+    GET /api/commands/{cmdId} answers DISPATCHED from it until the first CMD_STATE arrives. A
+    confirmed dose is saved just before it is sent, with its dose request and Idempotency-Key, so
+    one dose request gives one command (§11.1, §11.3); dispatched_at is set once the broker has it.
+    A stop or a resume is saved once it has been sent.
+    """
+
+    __tablename__ = "sent_command"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "site_id", "dose_request_id"],
+            ["dose_request.org_id", "dose_request.site_id", "dose_request.request_id"],
+        ),
+        UniqueConstraint("org_id", "site_id", "dose_request_id"),
+        UniqueConstraint("org_id", "site_id", "idempotency_key"),
+    )
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    cmd_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32))  # DOSE, STOP, RESUME
+    topic: Mapped[str] = mapped_column(Text)
+    body: Mapped[dict[str, Any]] = mapped_column(JSONB)  # the command, with its wire names
+    issued_at: Mapped[datetime] = mapped_column(Timestamp)
+    expires_at: Mapped[datetime] = mapped_column(Timestamp)
+    dispatched_at: Mapped[datetime | None] = mapped_column(Timestamp)  # null until the broker has it
+    dose_request_id: Mapped[str | None] = mapped_column(ID)  # a confirmed dose only
+    idempotency_key: Mapped[str | None] = mapped_column(String(36))  # a UUID (§11.1)
 
 
 class User(Base):

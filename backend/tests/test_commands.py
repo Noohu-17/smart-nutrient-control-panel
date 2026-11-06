@@ -272,7 +272,7 @@ def test_stop_with_the_broker_down_is_503(api, publisher):
 
 def test_a_stop_can_be_followed_once_its_controller_reports(api, worker, publisher):
     cmd_id = api.post("/api/stop", json={"scope": "ZONE", "zone": "Z1"}).json()["cmdId"]
-    assert api.get(f"/api/commands/{cmd_id}").status_code == 404  # nothing reported yet
+    assert api.get(f"/api/commands/{cmd_id}").json()["state"] == "DISPATCHED"  # nothing reported yet
     for seq, state in ((40, "ACCEPTED"), (41, "COMPLETED")):
         handle(worker, cmd_state(state, seq, cmdId=cmd_id, lines=None, before=None, startedAt=None))
     assert api.get(f"/api/commands/{cmd_id}").json()["state"] == "COMPLETED"
