@@ -148,9 +148,14 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       SIM_SPEED: ${SIM_SPEED:-1}
       SIM_CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}
+      SIM_CONTROL_HOST: 0.0.0.0  # reachable on the internal network only
+      SIM_CONTROL_PORT: "8100"
     volumes:
       - ../config:/config:ro
       - simulator-state:/app/.state  # bootIds must keep rising across restarts (contract 5)
+    # The playground control API (contract 11.4): the api reaches it at http://simulator:8100.
+    # Exposed on the internal network only, never published: people go through /api/sim.
+    expose: ["8100"]
     networks: [internal]
     depends_on:
       mqtt:

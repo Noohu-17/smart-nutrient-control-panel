@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .config import read_pack_file
+from .config import load_demo_start, read_pack_file
 from .model.model_config import (
     AirConditions,
     PowerSupply,
@@ -68,6 +68,7 @@ class ZoneFarm:
     name: str | None = None  # what people call it (layout.json), for event wording
     dose_pump_ml_per_s: Mapping[str, float] = field(default_factory=dict)  # hardware.json
     flow_meter_ml: dict[str, float] = field(default_factory=dict)  # counted since last read
+    sensor_faults: set[str] = field(default_factory=set)  # probes that stopped answering (11.4.3)
 
     @property
     def active_cmd_id(self) -> str | None:
@@ -182,7 +183,8 @@ class Farm:
 
 
 def load_farm(client_dir: Path) -> Farm:
-    """Build the farm in its configured starting state; a scenario may override it later."""
+    """Build the farm in its configured starting state: model.initialState, with each zone's
+    demoStart values over it (T4-9). A scenario may override it later."""
     layout = read_pack_file(client_dir, "layout.json")
     model = read_pack_file(client_dir, "simulator.json").get("model")
     if not isinstance(model, Mapping):
@@ -190,12 +192,28 @@ def load_farm(client_dir: Path) -> Farm:
     climate_cfg = read_pack_file(client_dir, "climate.json")
     features = read_pack_file(client_dir, "features.json")
     hardware = read_pack_file(client_dir, "hardware.json")
-    zones = [_build_zone(model, zone, hardware) for zone in layout.get("zones", ())]
+    demo_zones = load_demo_start(client_dir)["zones"]
+    zones = [
+        _build_zone(_zone_model(model, demo_zones.get(zone.get("id"))), zone, hardware)
+        for zone in layout.get("zones", ())
+    ]
     return Farm(
         zones={zone.zone_id: zone for zone in zones},
         climate=_build_climate(model, layout, climate_cfg, features),
         power=_build_power(model, layout.get("power") or {}),
     )
+
+
+def _zone_model(model: Mapping[str, Any], start: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    """The model as one zone sees it: its demoStart values over model.initialState."""
+    initial = model.get("initialState")
+    if not start or not isinstance(initial, Mapping):
+        return model  # nothing to change, or an error the model's own checks will report
+    merged = {**initial, **start}
+    tanks, start_tanks = initial.get("dayTankPct"), start.get("dayTankPct")
+    if isinstance(tanks, Mapping) and isinstance(start_tanks, Mapping):
+        merged["dayTankPct"] = {**tanks, **start_tanks}
+    return {**model, "initialState": merged}
 
 
 def _build_zone(

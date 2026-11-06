@@ -7,7 +7,7 @@
     "placeholderKeys": [
       "model.ecPerGramPerL", "model.rawWater", "model.doseLines", "model.refill",
       "model.phDrift", "model.solutionTemp", "model.plantUptake", "model.initialState",
-      "model.circulation", "model.air", "model.power"
+      "model.circulation", "model.air", "model.power", "demoStart"
     ],
     "sources": {
       "model.ecPerGramPerL": "PLACEHOLDER: k in EC = k*M/V; 1.0 is the Track 3 guide's placeholder. Only k x nutrientGPerMl is observable, so a jar test of each stock fixes the product.",
@@ -34,7 +34,16 @@
       "model.air": "CONTRACT-EXAMPLE: contract 6.2 telemetry example. Held constant until a weather model exists (the scenario's region, month and weather). tempByPosC needs an entry for every layout.climate.airSensors position.",
       "model.power": "CONTRACT-EXAMPLE: contract 6.3 example (231/229/233 V, UPS 100 %, 42 min). Held constant until the power drills exist (contract 11.4.3).",
       "model.numerics": "NUMERICAL: solver settings, not farm values.",
-      "minRealReadingIntervalS": "NUMERICAL: fewest real seconds between periodic readings, so fast clocks don't flood the broker (T4-7). Not a farm value."
+      "minRealReadingIntervalS": "NUMERICAL: fewest real seconds between periodic readings, so fast clocks don't flood the broker (T4-7). Not a farm value.",
+      "demoStart": "DEMO: the playground farm's starting state, and where POST /reset returns (T4-9). A healthy farm, except Zone A's EC a little below its recipe target (Z1 LETTUCE GROWING, ecTarget 1.2-1.8 in recipes.json), so a dose of A 120 + B 120 mL (about +0.12, see model.doseLines) makes sense. Zone B sits inside its target (BASIL SEEDLING, 1.0-1.4). zones.* override model.initialState for that zone; anything not given comes from model.initialState. weather must be one of scenarios.json weather."
+    }
+  },
+  "demoStart": {
+    "scenario": "Demo farm",
+    "weather": "CLEAR",
+    "zones": {
+      "Z1": { "ecMsCm": 1.10 },
+      "Z2": { "ecMsCm": 1.20 }
     }
   },
   "speedOptions": [0, 1, 60, 288],

@@ -145,6 +145,8 @@ def zone_telemetry(zone: ZoneFarm) -> dict[str, Any]:
         },
         "dayTankL": {line: _rounded(litres, 1) for line, litres in zone.day_tank_l.items()},
     }
+    for name in zone.sensor_faults:  # a probe that stopped answering has nothing to report
+        readings[name] = None
     sensors = ("ec", "ph", "solTempC", "reservoirPct", "circFlowLpm")
     quality = {name: _quality(readings[name]) for name in sensors}
     if zone.do_fitted:

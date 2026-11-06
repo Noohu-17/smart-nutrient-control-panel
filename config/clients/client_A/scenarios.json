@@ -38,6 +38,7 @@
   "internet": ["STABLE", "FLAKY", "LONG_OUTAGE"],
   "failureDrills": [
     { "kind": "PROBE_DRIFT", "group": "SENSING", "prdCode": "F1", "targetType": "ZONE_SENSOR", "title": "Probe drift", "explanation": "A probe slowly reads away from the true value.", "fix": "Recalibrates the probe.", "params": {} },
+    { "kind": "SENSOR_OFFLINE", "group": "SENSING", "prdCode": "", "targetType": "ZONE_SENSOR", "title": "Sensor offline", "explanation": "A probe stops answering: its reading is null with FAULT, so doses that need it are refused.", "fix": "Reconnects the probe.", "params": {} },
     { "kind": "NO_FLOW", "group": "PUMPS_AND_VALVES", "prdCode": "F8", "targetType": "DOSE_LINE", "title": "Pump runs, nothing flows", "explanation": "The dosing pump runs but the flow meter sees no flow.", "fix": "Clears the blockage.", "params": {} },
     { "kind": "LEAK", "group": "WATER", "prdCode": "F17", "targetType": "ZONE", "title": "Leak sensor wet", "explanation": "The leak sensor under the zone panel reports water.", "fix": "Dries the leak sensor.", "params": {} },
     { "kind": "HEATWAVE", "group": "CLIMATE_AND_ROOMS", "prdCode": "F20", "targetType": "POLYHOUSE", "title": "Heatwave", "explanation": "Outside temperature climbs well above normal for the season.", "fix": "Returns the weather to normal.", "params": {} },

@@ -13,8 +13,13 @@
 #   docker compose -f infra/docker-compose.dev.yml exec api python -m app.db.seed   load the client's layout.json
 #   docker compose -f infra/docker-compose.dev.yml down            stop (add -v to also delete the database)
 #
+# The simulator usually runs on the laptop (simulator/readme.md). To run it here instead, add
+# --profile sim; never both at once, or two copies of each device share one MQTT client ID.
+# Either way its playground control API (contract 11.4) is on http://127.0.0.1:8100.
+#
 # Defaults can be overridden with environment variables or an infra/.env file:
 #   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT, API_PORT,
+#   SIM_CONTROL_PORT, SIM_SPEED,
 #   CLIENT (the config pack under config/clients/ that the api reads; default client_A)
 
 name: sna-dev
@@ -101,5 +106,29 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # The farm simulator, only with --profile sim. Its control API is for the back end alone
+  # (contract 11.4): published on 127.0.0.1, so only this machine reaches it.
+  simulator:
+    build: ../simulator
+    profiles: [sim]
+    stop_signal: SIGINT  # a clean stop: each device publishes its own offline status
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      SIM_SPEED: ${SIM_SPEED:-1}
+      SIM_CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      SIM_CONTROL_HOST: 0.0.0.0  # inside the container; the port below is this machine's only
+      SIM_CONTROL_PORT: "8100"
+    volumes:
+      - ../config:/config:ro
+      - sim-state:/app/.state  # bootIds must keep rising across restarts (contract 5)
+    ports:
+      - "127.0.0.1:${SIM_CONTROL_PORT:-8100}:8100"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   db-data:
+  sim-state:

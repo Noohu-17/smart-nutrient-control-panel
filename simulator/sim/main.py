@@ -24,6 +24,7 @@ from .config import (
     playground_enabled,
     read_pack_file,
 )
+from .control_api import run_control_api
 from .controller.zone import ZoneController
 from .devices.base import SimDevice
 from .devices.climate import ClimateDevice
@@ -32,6 +33,7 @@ from .devices.readings import ReadingDevice
 from .devices.zone import ZoneDevice
 from .farm import Farm, load_farm
 from .farm_hal import FarmHal
+from .playground import Playground
 from .settings import SIM_ROOT, Settings, load_settings
 from .state import next_boot_ids
 
@@ -105,7 +107,7 @@ async def run(settings: Settings) -> None:
     layout_devices = load_devices(settings.client_dir)  # one SimDevice per entry (contract 2.2)
     # The simulated day starts now; scenario start times (contract 11.4) come later.
     clock = SimClock(datetime.now(UTC), settings.sim_speed, load_speed_options(settings.client_dir))
-    playground = playground_enabled(settings.client_dir)
+    is_playground = playground_enabled(settings.client_dir)
     farm = load_farm(settings.client_dir)  # before bootIds: a refused start is not a restart
     farm.now = clock.last_tick
     alerts = read_pack_file(settings.client_dir, "alerts.json")
@@ -114,24 +116,36 @@ async def run(settings: Settings) -> None:
     )
     devices = [
         make_device(
-            d, site, boot_ids[d["id"]], farm, alerts, clock if playground else None,
+            d, site, boot_ids[d["id"]], farm, alerts, clock if is_playground else None,
             client_dir=settings.client_dir, state_dir=settings.state_dir,
         )
         for d in layout_devices
     ]
+    min_real_reading_s = load_min_real_reading_interval_s(settings.client_dir)
+    playground = None
+    if is_playground:  # the farm moves through it, so held values stay put (contract 11.4.2)
+        playground = Playground(
+            farm, clock, settings.client_dir, controllers=controllers_of(devices),
+            device_ids=[d.id for d in devices], min_real_reading_s=min_real_reading_s,
+        )
     tick_loop = TickLoop(
         clock,
-        farm,
+        playground or farm,
         [d for d in devices if isinstance(d, ReadingDevice)],
-        min_real_reading_s=load_min_real_reading_interval_s(settings.client_dir),
+        min_real_reading_s=min_real_reading_s,
         controllers=controllers_of(devices),
     )
     log.info("playing %s on site %s (bootId %s)", ", ".join(d.id for d in devices), site, boot_ids)
-    log.info("clock speed x%g; simTs in messages: %s", clock.speed, "yes" if playground else "no")
+    sim_ts = "yes" if is_playground else "no"
+    log.info("clock speed x%g; simTs in messages: %s", clock.speed, sim_ts)
     async with asyncio.TaskGroup() as tasks:
         for device in devices:
             tasks.create_task(device.run(settings))
         tasks.create_task(tick_loop.run())
+        if playground is not None:
+            tasks.create_task(
+                run_control_api(playground, settings.control_host, settings.control_port)
+            )
 
 
 def main() -> None:

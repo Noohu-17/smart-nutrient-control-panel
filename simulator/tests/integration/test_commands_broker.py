@@ -113,9 +113,9 @@ STOP_TOPIC = "farm/siet-ph1/stop"
 def test_a_dose_completes_and_ec_rises_in_a_later_reading(broker, run, tmp_path):
     async def scenario():
         async with Farm(broker, tmp_path) as farm:
-            ec_before = farm.received and [m for m in farm.received
-                                           if m["type"] == "ZONE_TELEMETRY"
-                                           and m["zone"] == "Z1"][-1]["readings"]["ec"]
+            readings = await farm.wait_for(  # start-up waits for ZONE_STATE, not a reading
+                lambda m: m["type"] == "ZONE_TELEMETRY" and m["zone"] == "Z1")
+            ec_before = readings[-1]["readings"]["ec"]
             cmd = dose(A=120, B=120)
             await farm.send(ZONE_CMD, cmd)
             mixed = await farm.wait_for(lambda m: m.get("cmdId") == cmd["cmdId"]

@@ -435,6 +435,21 @@ class ZoneController:
         )
         self._report_state_if_changed()
 
+    def reset_to_start(self) -> None:
+        """Playground only (POST /reset, contract 11.4), not firmware: as a fresh farm's controller.
+
+        Anything running ends STOPPED (STOP_REQUESTED: a person asked for everything to stop),
+        a mix wait ends with `after` null, and the zone is not stopped, with no latches and no
+        24 h totals. The cmdId memory stays, so a repeated command still gets its old answer.
+        """
+        self._end_operation("STOPPED", "STOP_REQUESTED")
+        self.stopped = False
+        self.latches.clear()
+        self._save_latches()
+        self._history = []
+        self.hal.nvs_write(NVS_DOSED, {"items": []})
+        self._report_state_if_changed()
+
     def _close_interrupted_command(self) -> None:
         """A journalled command is reported with what was delivered, and never resumed."""
         journal = self.hal.nvs_read(NVS_JOURNAL) or {}

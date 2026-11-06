@@ -51,7 +51,8 @@ its last retained status, which says offline, because the device said so when it
 
 `sim/clock.py` keeps the simulated time. `SIM_SPEED` sets the speed: `0` pauses, `1` is real time,
 `60` is one hour per real minute, `288` is one day in five minutes. Allowed speeds come from
-`simulator.json` `speedOptions`. The simulated day starts when the simulator starts.
+`simulator.json` `speedOptions`. The simulated day starts when the simulator starts. On playground
+sites `POST /speed` changes it while running (see Playground control API).
 
 Every message's `ts` stays real time. On playground sites (`features.json` `"playground": true`)
 messages also carry `simTs`, the simulated time. Heartbeats run on real time at any speed, even
@@ -122,6 +123,7 @@ controllers, and the tests change it directly.
 | `SIM_SPEED` | `1` | Simulated clock speed, one of `speedOptions` |
 | `SIM_CLIENT_DIR` | `../config/clients/client_A` | The client's config pack |
 | `SIM_STATE_DIR` | `.state` | Where bootIds are kept between runs |
+| `SIM_CONTROL_HOST`, `SIM_CONTROL_PORT` | `127.0.0.1`, `8100` | Where the playground control API listens. Keep it off public networks: only the back end may call it |
 
 ## Controller rules (contract 8.3, 9)
 
@@ -157,6 +159,50 @@ docker compose -f infra/docker-compose.dev.yml exec -T mqtt mosquitto_pub -q 1 -
 Times are contract time, for example `2026-11-04T09:00:00.000Z`. Watch the answers with
 `mosquitto_sub -v -t "farm/+/zone/+/cmd/state"`, or with the contract watch tool, which checks
 `CMD_STATE` against its contract model.
+
+## Playground control API (contract 11.4)
+
+On playground sites the simulator serves a small HTTP API for the back end, which forwards the
+app's `/api/sim/...` calls to it after checking the role and writing the audit log. It listens on
+`SIM_CONTROL_HOST:SIM_CONTROL_PORT` (127.0.0.1:8100); in Compose it is on the internal network only.
+`sim/control_api.py` is the HTTP part, `sim/playground.py` what each call does to the farm.
+
+| Call | Does |
+|---|---|
+| `GET /state` | `scenario`, `simTime`, `speed`, `weather`, `faults`, `holds` (the `sim_state` names) |
+| `POST /speed` `{"x": 0}` | One of `speedOptions`; `0` pauses |
+| `POST /holds` `{"target": "Z1", "metric": "reservoirPct", "value": 15, "gradual": true}` | Set a value and hold it (11.4.2) |
+| `DELETE /holds/Z1/reservoirPct` · `POST /holds/release-all` | Release one, or all |
+| `POST /faults` `{"kind": "SENSOR_OFFLINE", "target": "Z1.ph", "on": true}` | Trigger (`on: true`) or Fix a drill (11.4.3) |
+| `POST /reset` | Back to the demo starting state |
+
+Each change answers with the new state. A refused one is `422` with the field at fault, in the
+contract 11.1 error shape; releasing what isn't held is `404`.
+
+- **Everything is checked against the config pack**: speeds against `simulator.json`
+  `speedOptions`, values against `scenarios.json` `holdable`, drills against `failureDrills`, and
+  targets against the layout (`Z1`, `POLYHOUSE`, `Z1.ph`, `Z1.ACID`, device IDs).
+- **A held value changes the water or air itself**, so the controller reacts too: a reservoir held
+  at 15 % refuses a dose with `RESERVOIR_LOW`. The level changes, not the strength. EC, pH and
+  temperature move over about two readings (`gradual`, the default). The farm moves through the
+  playground, which puts held values back after every step. A dose releases `ec`, `ph` and the
+  day-tanks it draws from; a refill releases the level, `ec` and `ph`. Released water keeps its
+  value and drifts on; a released flow or air value goes back to normal. Until an air model exists,
+  held air is set, not added as a load.
+- **Drills built so far:** `SENSOR_OFFLINE` (the probe reads `null` with `FAULT`, in telemetry and
+  to the controller, which refuses doses with `SENSOR_STALE`). The others in the catalogue are
+  refused as not built yet.
+- **Reset** returns to `simulator.json` `demoStart`: a healthy farm with Zone A's EC a little below
+  its target, so a dose makes sense. Drills go off, holds are released, levels and readings go back,
+  the starting speed returns, and each controller starts afresh: anything running ends `STOPPED`
+  (`STOP_REQUESTED`), nothing is stopped, and latches and 24 h totals are cleared. Simulated time
+  carries on, so `simTs` never goes back.
+
+```
+curl -s http://127.0.0.1:8100/state
+curl -s -X POST http://127.0.0.1:8100/holds -d '{"target": "Z1", "metric": "reservoirPct", "value": 15}'
+curl -s -X POST http://127.0.0.1:8100/reset
+```
 
 ## Tests
 

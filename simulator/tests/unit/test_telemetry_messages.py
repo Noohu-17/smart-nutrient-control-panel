@@ -64,7 +64,9 @@ def farm():
 # --- the contract's own examples ------------------------------------------------------
 
 
-def test_zone_telemetry_matches_the_contract_example(farm):
+def test_zone_telemetry_matches_the_contract_example(tmp_path):
+    # The example is model.initialState; the demo start (T4-9) lowers Zone A's EC.
+    farm = load_farm(edited_pack(tmp_path, "simulator.json", lambda d: d.pop("demoStart")))
     message = validated("ZONE_TELEMETRY", "ZC1", zone_telemetry(farm.zones["Z1"]))
     example = contract_example("6.1")
     for field in ("zone", "readings", "quality", "equipment", "mode", "estop", "leak",

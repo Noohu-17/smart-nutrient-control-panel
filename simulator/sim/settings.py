@@ -28,6 +28,8 @@ class Settings:
     state_dir: Path
     sim_speed: float
     device_passwords: Mapping[str, str] = field(default_factory=dict, repr=False)
+    control_host: str = "127.0.0.1"  # the playground control API (contract 11.4): never public
+    control_port: int = 8100
 
     def login(self, device_id: str) -> tuple[str | None, str | None]:
         """Username and password for one device (contract 3: one login per device).
@@ -39,13 +41,7 @@ class Settings:
 
 
 def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
-    port_text = env.get("MQTT_PORT", "1883")
-    try:
-        port = int(port_text)
-    except ValueError:
-        raise ValueError(f"MQTT_PORT must be a whole number, got {port_text!r}") from None
-    if not 1 <= port <= 65535:
-        raise ValueError(f"MQTT_PORT must be 1-65535, got {port}")
+    port = _port(env, "MQTT_PORT", "1883")
     speed_text = env.get("SIM_SPEED", "1")
     try:
         speed = float(speed_text)
@@ -63,7 +59,20 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
             for key, value in env.items()
             if key.startswith(PASSWORD_PREFIX) and value
         },
+        control_host=env.get("SIM_CONTROL_HOST") or "127.0.0.1",
+        control_port=_port(env, "SIM_CONTROL_PORT", "8100"),
     )
+
+
+def _port(env: Mapping[str, str], name: str, default: str) -> int:
+    text = env.get(name, default)
+    try:
+        port = int(text)
+    except ValueError:
+        raise ValueError(f"{name} must be a whole number, got {text!r}") from None
+    if not 1 <= port <= 65535:
+        raise ValueError(f"{name} must be 1-65535, got {port}")
+    return port
 
 
 def _path(value: str | None, default: Path) -> Path:

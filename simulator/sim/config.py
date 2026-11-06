@@ -12,6 +12,7 @@ SITE_ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")  # contract 2.1: lowercase slug
 DEVICE_ID = re.compile(r"[A-Z][A-Z0-9]*")  # contract 2.2: GW1, ZC1 ...; also the MQTT client ID
 # The kinds of device the simulator knows how to play (layout.json "devices").
 DEVICE_KINDS = ("GATEWAY", "ZONE_CONTROLLER", "CLIMATE_CONTROLLER", "POWER_MONITOR")
+DEMO_ZONE_KEYS = ("reservoirPct", "ecMsCm", "ph", "solTempC", "dayTankPct")  # model.initialState's
 
 
 def read_pack_file(client_dir: Path, name: str) -> dict[str, Any]:
@@ -78,6 +79,40 @@ def load_zone_dose(client_dir: Path, zone_id: str) -> dict[str, Any]:
     if not isinstance(dose, dict):
         raise ValueError(f"limits.json: zones.{zone_id}.dose must be an object, got {dose!r}")
     return dose
+
+
+def load_demo_start(client_dir: Path) -> dict[str, Any]:
+    """The playground farm's starting state, where POST /reset returns (simulator.json "demoStart").
+
+    Its scenario name and weather (one of scenarios.json "weather"), and per zone the
+    model.initialState values that differ; the farm model checks those values. With no
+    demoStart, every zone starts as model.initialState and the scenario and weather are null.
+    """
+    start = read_pack_file(client_dir, "simulator.json").get("demoStart")
+    if start is None:
+        return {"scenario": None, "weather": None, "zones": {}}
+    if not isinstance(start, dict):
+        raise ValueError(f"simulator.json: demoStart must be an object, got {start!r}")
+    scenario = start.get("scenario")
+    if not isinstance(scenario, str) or not scenario.strip():
+        raise ValueError(f"simulator.json: demoStart.scenario must be a name, got {scenario!r}")
+    weather = start.get("weather")
+    options = read_pack_file(client_dir, "scenarios.json").get("weather") or []
+    if weather not in options:
+        raise ValueError(
+            f"simulator.json: demoStart.weather must be one of scenarios.json weather "
+            f"{options}, got {weather!r}"
+        )
+    zones = start.get("zones", {})
+    if not isinstance(zones, dict):
+        raise ValueError(f"simulator.json: demoStart.zones must be an object, got {zones!r}")
+    for zone_id, values in zones.items():  # a zone the layout doesn't have is ignored
+        if not isinstance(values, dict) or not set(values) <= set(DEMO_ZONE_KEYS):
+            raise ValueError(
+                f"simulator.json: demoStart.zones.{zone_id} may set {list(DEMO_ZONE_KEYS)}, "
+                f"got {values!r}"
+            )
+    return {"scenario": scenario, "weather": weather, "zones": zones}
 
 
 def load_site(client_dir: Path) -> str:

@@ -31,13 +31,30 @@ def farm():
     return load_farm(CLIENT_A)
 
 
-def test_every_layout_zone_starts_in_the_configured_state(farm):
+def test_every_layout_zone_starts_in_the_demo_starting_state(farm):
+    """simulator.json demoStart over model.initialState (T4-9): Zone A's EC a little low."""
     assert list(farm.zones) == ["Z1", "Z2"]
+    assert farm.zones["Z1"].water().ec_ms_cm == pytest.approx(1.10)
     water = farm.zones["Z2"].water()
     assert water.volume_l == pytest.approx(936.0)
-    assert water.ec_ms_cm == pytest.approx(1.62)
+    assert water.ec_ms_cm == pytest.approx(1.20)
     assert (water.ph, water.temp_c) == (6.04, 23.4)
     assert farm.zones["Z2"].day_tank_l == {"A": 32.0, "B": 33.0, "ACID": 40.5}
+
+
+def test_without_a_demo_start_every_zone_starts_as_the_initial_state(tmp_path):
+    farm = load_farm(edited_pack(tmp_path, "simulator.json", lambda d: d.pop("demoStart")))
+    assert {z: farm.zones[z].water().ec_ms_cm for z in farm.zones} == pytest.approx(
+        {"Z1": 1.62, "Z2": 1.62}
+    )
+
+
+def test_a_demo_start_can_set_a_day_tank_and_keeps_the_others(tmp_path):
+    def low_acid(simulator):
+        simulator["demoStart"]["zones"]["Z1"]["dayTankPct"] = {"ACID": 10}
+
+    farm = load_farm(edited_pack(tmp_path, "simulator.json", low_acid))
+    assert farm.zones["Z1"].day_tank_l == {"A": 32.0, "B": 33.0, "ACID": 5.0}
 
 
 def test_zones_do_not_share_state(farm):
@@ -162,6 +179,10 @@ def test_run_time_starts_again_at_midnight_on_the_farms_own_clock(farm):
         ("layout.json", lambda d: d.pop("climate"), "climate"),
         ("layout.json", lambda d: d["climate"].update(airSensors=[]), "airSensors"),
         ("layout.json", lambda d: d["zones"][0].pop("id"), "id"),
+        ("simulator.json", lambda d: d["demoStart"].update(weather="SNOW"), "demoStart.weather"),
+        ("simulator.json", lambda d: d["demoStart"].update(scenario=""), "demoStart.scenario"),
+        ("simulator.json", lambda d: d["demoStart"]["zones"]["Z1"].update(ec=1), "zones.Z1"),
+        ("simulator.json", lambda d: d["demoStart"]["zones"]["Z1"].update(ecMsCm="low"), "ecMsCm"),
     ],
 )
 def test_a_bad_pack_is_refused_with_the_key_at_fault(tmp_path, file_name, breaks, message):
@@ -173,7 +194,9 @@ def test_entries_for_equipment_the_layout_does_not_have_are_ignored(tmp_path):
     def extra(simulator):
         simulator["model"]["air"]["tempByPosC"]["ROOF"] = 50.0
         simulator["model"]["initialState"]["dayTankPct"]["BASE"] = 10
+        simulator["demoStart"]["zones"]["Z9"] = {"ecMsCm": 2.0}
 
     farm = load_farm(edited_pack(tmp_path, "simulator.json", extra))
     assert set(farm.climate.air.temp_by_pos_c) == {"PAD_END", "MIDDLE", "FAN_END"}
     assert "BASE" not in farm.zones["Z1"].day_tank_l
+    assert list(farm.zones) == ["Z1", "Z2"]
