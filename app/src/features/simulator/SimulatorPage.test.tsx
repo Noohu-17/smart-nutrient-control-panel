@@ -29,7 +29,8 @@ describe("Simulator screen", () => {
     await screen.findByRole("heading", { name: "Failure drills" });
     const main = within(screen.getByRole("main"));
     expect(main.getAllByRole("button").length).toBeGreaterThan(0);
-    expect(main.queryAllByRole("button", { name: /dose|refill|stop|resume/i })).toEqual([]);
+    // The E-STOP drill is the farm's side, which 11.4.1 puts here ("press the E-STOP").
+    expect(main.queryAllByRole("button", { name: /dose|refill|(?<!e-)stop|resume/i })).toEqual([]);
   });
 
   it("is linked in the menu on a playground site", async () => {

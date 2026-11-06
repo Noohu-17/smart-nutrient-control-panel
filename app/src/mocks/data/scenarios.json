@@ -88,6 +88,16 @@
       "params": {}
     },
     {
+      "kind": "ESTOP",
+      "group": "SAFETY_AND_MODES",
+      "prdCode": "F23",
+      "targetType": "ZONE",
+      "title": "E-STOP pressed",
+      "explanation": "Someone presses the E-STOP on the zone's dosing cabinet: any dose or refill stops at once and the zone is stopped.",
+      "fix": "Releases the E-STOP. Nothing restarts: the zone stays stopped until someone presses Resume.",
+      "params": {}
+    },
+    {
       "kind": "POWER_CUT",
       "group": "POWER",
       "prdCode": "F15",

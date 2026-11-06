@@ -1,4 +1,5 @@
-"""The playground's farm side (T4-9): speed, reset, held values and the sensor drill.
+"""The playground's farm side: speed, reset, held values, the sensor drill (T4-9) and the
+E-STOP drill (T4-10).
 
 The playground runs over the real farm model and the real zone controller, as in the simulator:
 the clock task moves the farm through playground.step(), then the controller steps.
@@ -295,6 +296,7 @@ def test_drill_targets_follow_the_layout(rig):
     assert rig.playground.drill_targets(drills["SENSOR_OFFLINE"]) == [
         "Z1.ec", "Z1.ph", "Z1.solTempC", "Z2.ec", "Z2.ph", "Z2.solTempC"]
     assert rig.playground.drill_targets(drills["NO_FLOW"])[:3] == ["Z1.A", "Z1.B", "Z1.ACID"]
+    assert rig.playground.drill_targets(drills["ESTOP"]) == ["Z1", "Z2"]
     assert rig.playground.drill_targets(drills["POWER_CUT"]) == DEVICES
 
 
@@ -344,3 +346,84 @@ def test_reset_leaves_nothing_stopped_and_clears_latches_and_24h_totals(rig):
     assert (state["stopped"], state["latches"], state["operation"]) == (False, [], None)
     cmd_id = rig.dose(A=20)
     assert rig.states(cmd_id)[0]["state"] == "ACCEPTED"
+
+
+# --- the E-STOP drill (T4-10) -----------------------------------------------------------------
+
+ESTOP = {"kind": "ESTOP", "target": "Z1"}
+
+
+def events(rig):
+    return [(body["kind"], body["severity"]) for kind, body in rig.reported if kind == "EVENT"]
+
+
+def last_zone_state(rig):
+    return [body for kind, body in rig.reported if kind == "ZONE_STATE"][-1]
+
+
+def test_estop_during_a_dose_ends_it_stopped_with_what_was_measured(rig):
+    cmd_id = rig.dose(A=300)
+    rig.run(20)  # about 40 mL at 2 mL/s
+    rig.playground.fault({**ESTOP, "on": True})
+    rig.run(STEP_S)  # the controller notices on its next step
+
+    final = rig.states(cmd_id)[-1]
+    assert (final["state"], final["reason"]) == ("STOPPED", "ESTOP_DURING")
+    [line] = final["lines"]
+    assert line["state"] == "SHORT" and 35 <= line["deliveredMl"] <= 45
+    assert events(rig) == [("ESTOP_PRESSED", "CRITICAL")]
+    state = last_zone_state(rig)
+    assert (state["estop"], state["stopped"], state["operation"]) == (True, True, None)
+    assert state["outputs"]["Z1-DOSE-A"] == "OFF" and state["outputs"]["Z1-CIRC"] == "ON"
+    assert rig.readings()["estop"] is True
+    assert rig.playground.state()["faults"] == [{"kind": "ESTOP", "target": "Z1"}]
+
+    tank_l = rig.zone.day_tank_l["A"]
+    rig.run(10)
+    assert rig.zone.day_tank_l["A"] == tank_l  # the pump really stopped
+
+
+def test_resume_is_refused_while_pressed_and_accepted_after_release(rig):
+    rig.playground.fault({**ESTOP, "on": True})
+    rig.run(STEP_S)
+    refused_resume = rig.command("RESUME")
+    assert [(s["state"], s["reason"]) for s in rig.states(refused_resume)] == [
+        ("REJECTED", "ESTOP")]
+
+    rig.playground.fault({**ESTOP, "on": False})
+    rig.run(STEP_S)
+    assert events(rig) == [("ESTOP_PRESSED", "CRITICAL"), ("ESTOP_RELEASED", "INFO")]
+    state = last_zone_state(rig)
+    assert (state["estop"], state["stopped"]) == (False, True)  # release alone restarts nothing
+    blocked = rig.dose(A=20)
+    assert rig.states(blocked)[0]["reason"] == "ZONE_STOPPED"
+
+    resume = rig.command("RESUME")
+    assert [s["state"] for s in rig.states(resume)] == ["ACCEPTED", "COMPLETED"]
+    assert last_zone_state(rig)["stopped"] is False
+    assert rig.states(rig.dose(A=20))[0]["state"] == "ACCEPTED"
+    assert rig.playground.state()["faults"] == []
+
+
+@pytest.mark.parametrize("target", ["Z1.ph", "Z9", "POLYHOUSE"])
+def test_the_estop_drill_aims_at_a_zone(rig, target):
+    refused(rig.playground.fault, {"kind": "ESTOP", "target": target, "on": True}, "body.target")
+    assert rig.zone.estop is False
+
+
+def test_reset_releases_a_pressed_estop_and_says_so_before_the_zone_is_unstopped(rig):
+    rig.playground.fault({**ESTOP, "on": True})
+    rig.run(STEP_S)
+    rig.playground.reset()
+
+    assert events(rig) == [("ESTOP_PRESSED", "CRITICAL"), ("ESTOP_RELEASED", "INFO")]
+    kinds = [(kind, body.get("kind")) for kind, body in rig.reported]
+    released_at = kinds.index(("EVENT", "ESTOP_RELEASED"))
+    unstopped = [i for i, (kind, body) in enumerate(rig.reported)
+                 if kind == "ZONE_STATE" and body["stopped"] is False]
+    assert unstopped and unstopped[-1] > released_at
+    state = last_zone_state(rig)
+    assert (state["estop"], state["stopped"]) == (False, False)
+    assert rig.playground.state()["faults"] == []
+    rig.run(STEP_S)
+    assert len(events(rig)) == 2  # the release is reported once

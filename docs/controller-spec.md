@@ -76,7 +76,7 @@ A `REFILL` `START` opens the valve and closes it when the reservoir reaches `tar
 
 A new run of the simulator is not a reboot (agreed on #31). `start()` brings back what `nvs` kept and closes a journalled command the same way, without a `REBOOTED` event, and the zone is not stopped.
 
-**Playground reset (simulator only, not firmware).** `POST /reset` (contract 11.4) calls `reset_to_start()`: a running command ends `STOPPED` with `STOP_REQUESTED` and its measured mL, a mix wait ends with `after` null, and the zone is left not stopped, with no latches and no 24 h totals. The `cmdId` memory stays, so a repeated command still gets its old answer.
+**Playground reset (simulator only, not firmware).** `POST /reset` (contract 11.4) calls `reset_to_start()`: a running command ends `STOPPED` with `STOP_REQUESTED` and its measured mL, a mix wait ends with `after` null, and the zone is left not stopped, with no latches and no 24 h totals. The `cmdId` memory stays, so a repeated command still gets its old answer. If the reset released a pressed E-STOP (the playground's `ESTOP` drill), `ESTOP_RELEASED` goes out first, as for any release.
 
 | `nvs` key | Holds | Written |
 |---|---|---|

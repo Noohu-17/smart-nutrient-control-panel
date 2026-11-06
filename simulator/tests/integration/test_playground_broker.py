@@ -40,15 +40,19 @@ def stamp(moment):
     return f"{moment:%Y-%m-%dT%H:%M:%S}.{moment.microsecond // 1000:03d}Z"
 
 
-def dose(**lines):
+def command(kind, **body):
     now = datetime.now(UTC)
     return {
         "v": 1, "type": "CMD", "msgId": str(uuid.uuid4()), "ts": stamp(now), "site": "siet-ph1",
-        "device": "CLOUD", "cmdId": str(uuid.uuid4()), "kind": "DOSE", "issuedAt": stamp(now),
+        "device": "CLOUD", "cmdId": str(uuid.uuid4()), "kind": kind, "issuedAt": stamp(now),
         "expiresAt": stamp(now + timedelta(seconds=60)), "issuedBy": "user:42",
-        "target": {"zone": "Z1"}, "lines": [{"line": k, "ml": v} for k, v in lines.items()],
-        "order": list(lines), "mixWaitS": 60, "maxDurationS": 600, "tolerancePct": 5,
+        "target": {"zone": "Z1"}, **body,
     }
+
+
+def dose(**lines):
+    return command("DOSE", lines=[{"line": k, "ml": v} for k, v in lines.items()],
+                   order=list(lines), mixWaitS=60, maxDurationS=600, tolerancePct=5)
 
 
 class Sim:
@@ -197,4 +201,49 @@ def test_pause_holds_the_clock_and_reset_returns_to_the_demo_start(broker, run, 
     assert held["readings"]["ec"] == 2.0
     assert (reset[0], reset[1]["holds"], reset[1]["faults"]) == (200, [], [])
     assert (after["readings"]["ec"], after["readings"]["reservoirPct"]) == (1.10, 78)
+    all_ok(sim)
+
+
+def test_estop_during_a_dose_and_resume_only_after_release(broker, run, tmp_path):
+    """T4-10: the E-STOP drill, then the person's RESUME."""
+    estop = {"kind": "ESTOP", "target": "Z1"}
+
+    async def scenario():
+        async with Sim(broker, tmp_path) as sim:
+            def answered(cmd, state=None):
+                return sim.wait_for(lambda m: m.get("cmdId") == cmd["cmdId"]
+                                    and (state is None or m["state"] == state))
+
+            cmd = dose(A=300)  # 150 simulated seconds: 2.5 real seconds at x60
+            await sim.cloud.publish(ZONE_CMD, json.dumps(cmd), qos=1)
+            await answered(cmd, "EXECUTING")
+            await asyncio.sleep(0.5)
+            pressed = await sim.api("POST", "/faults", {**estop, "on": True})
+            await answered(cmd, "STOPPED")
+            early = command("RESUME")
+            await sim.cloud.publish(ZONE_CMD, json.dumps(early), qos=1)
+            await answered(early)
+            released = await sim.api("POST", "/faults", {**estop, "on": False})
+            await sim.wait_for(lambda m: m.get("kind") == "ESTOP_RELEASED")
+            resume = command("RESUME")
+            await sim.cloud.publish(ZONE_CMD, json.dumps(resume), qos=1)
+            await answered(resume, "COMPLETED")
+            await sim.wait_for(lambda m: m["type"] == "ZONE_STATE" and m["zone"] == "Z1"
+                               and m["stopped"] is False and m["ts"] >= resume["ts"])
+            return sim, cmd, early, pressed, released
+
+    sim, cmd, early, pressed, released = run(scenario())
+
+    def states(c):
+        return [(m["state"], m.get("reason")) for m in sim.received
+                if m["type"] == "CMD_STATE" and m["cmdId"] == c["cmdId"]]
+
+    final = [m for m in sim.received if m.get("cmdId") == cmd["cmdId"]][-1]
+    assert (final["state"], final["reason"]) == ("STOPPED", "ESTOP_DURING")
+    assert 0 < final["lines"][0]["deliveredMl"] < 300
+    assert states(early) == [("REJECTED", "ESTOP")]
+    assert pressed[1]["faults"] == [estop] and released[1]["faults"] == []
+    z1 = [m for m in sim.received if m.get("zone") == "Z1"]
+    assert [m["kind"] for m in z1 if m["type"] == "EVENT"] == ["ESTOP_PRESSED", "ESTOP_RELEASED"]
+    assert any(m["type"] == "ZONE_STATE" and m["estop"] and m["stopped"] for m in z1)
     all_ok(sim)

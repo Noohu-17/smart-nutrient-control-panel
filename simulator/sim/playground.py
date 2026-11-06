@@ -30,7 +30,7 @@ GRADUAL = ("ec", "ph", "solTempC", "airTempC")  # 11.4.2: these move as real wat
 GRADUAL_READINGS = 2  # ... over about two readings
 ZONE_METRICS = ("ec", "ph", "solTempC", "circFlowLpm", "reservoirPct", "dayTankPct")  # settable
 AIR_METRICS = ("airTempC", "airRh")
-BUILT_DRILLS = ("SENSOR_OFFLINE",)  # the rest of the catalogue is refused until it is built
+BUILT_DRILLS = ("SENSOR_OFFLINE", "ESTOP")  # the rest of the catalogue is refused until built
 
 
 class PlaygroundError(Exception):
@@ -232,6 +232,10 @@ class Playground:
                 faults.add(part)
             else:
                 faults.discard(part)
+        elif kind == "ESTOP":
+            # The panel's E-STOP input: the controller notices it on its next step, as it
+            # would a real one, so pressing ends a dose STOPPED and releasing restarts nothing.
+            self.farm.zones[zone_id].estop = on
 
     # --- the clock task's step -------------------------------------------------------------
 

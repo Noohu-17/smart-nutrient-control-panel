@@ -328,6 +328,19 @@ class ZoneController:
 
     def step(self, now_ms: int) -> None:
         """Notice what changed on the panel. Returns at once, like firmware."""
+        self._notice_panel()
+        operation = self._operation
+        if operation is not None:
+            if operation.kind == "REFILL":
+                self._run_refill(operation, now_ms)
+            elif operation.state == "EXECUTING":
+                self._run_dose(operation, now_ms)
+            elif operation.mix_until_ms is not None and now_ms >= operation.mix_until_ms:
+                self._after_mixing(operation)
+        self._report_state_if_changed()
+
+    def _notice_panel(self) -> None:
+        """The E-STOP and the key switch, each acted on once when it changes."""
         pressed = self.hal.read_input(INPUT_ESTOP)
         if pressed != self._estop:
             self._estop = pressed
@@ -339,15 +352,6 @@ class ZoneController:
         if mode != self._mode:
             self._on_mode_changed(self._mode, mode)
             self._mode = mode
-        operation = self._operation
-        if operation is not None:
-            if operation.kind == "REFILL":
-                self._run_refill(operation, now_ms)
-            elif operation.state == "EXECUTING":
-                self._run_dose(operation, now_ms)
-            elif operation.mix_until_ms is not None and now_ms >= operation.mix_until_ms:
-                self._after_mixing(operation)
-        self._report_state_if_changed()
 
     def _on_estop_pressed(self) -> None:
         self.stopped = True
@@ -441,7 +445,9 @@ class ZoneController:
         Anything running ends STOPPED (STOP_REQUESTED: a person asked for everything to stop),
         a mix wait ends with `after` null, and the zone is not stopped, with no latches and no
         24 h totals. The cmdId memory stays, so a repeated command still gets its old answer.
+        An E-STOP the reset released is reported first, as any release is (ESTOP_RELEASED).
         """
+        self._notice_panel()
         self._end_operation("STOPPED", "STOP_REQUESTED")
         self.stopped = False
         self.latches.clear()

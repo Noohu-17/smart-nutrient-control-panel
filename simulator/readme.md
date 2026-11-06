@@ -173,7 +173,7 @@ app's `/api/sim/...` calls to it after checking the role and writing the audit l
 | `POST /speed` `{"x": 0}` | One of `speedOptions`; `0` pauses |
 | `POST /holds` `{"target": "Z1", "metric": "reservoirPct", "value": 15, "gradual": true}` | Set a value and hold it (11.4.2) |
 | `DELETE /holds/Z1/reservoirPct` · `POST /holds/release-all` | Release one, or all |
-| `POST /faults` `{"kind": "SENSOR_OFFLINE", "target": "Z1.ph", "on": true}` | Trigger (`on: true`) or Fix a drill (11.4.3) |
+| `POST /faults` `{"kind": "SENSOR_OFFLINE", "target": "Z1.ph", "on": true}` | Trigger (`on: true`) or Fix a drill (11.4.3); `{"kind": "ESTOP", "target": "Z1", ...}` presses or releases the E-STOP |
 | `POST /reset` | Back to the demo starting state |
 
 Each change answers with the new state. A refused one is `422` with the field at fault, in the
@@ -189,9 +189,16 @@ contract 11.1 error shape; releasing what isn't held is `404`.
   day-tanks it draws from; a refill releases the level, `ec` and `ph`. Released water keeps its
   value and drifts on; a released flow or air value goes back to normal. Until an air model exists,
   held air is set, not added as a load.
-- **Drills built so far:** `SENSOR_OFFLINE` (the probe reads `null` with `FAULT`, in telemetry and
-  to the controller, which refuses doses with `SENSOR_STALE`). The others in the catalogue are
-  refused as not built yet.
+- **Drills built so far:**
+  - `SENSOR_OFFLINE` on `Z1.ph` (or `.ec`, `.solTempC`): the probe reads `null` with `FAULT`, in
+    telemetry and to the controller, which refuses doses with `SENSOR_STALE`.
+  - `ESTOP` on `Z1`: Trigger presses the zone's E-STOP, Fix releases it. The controller sees its
+    panel input, as it would a real button: a running dose or refill ends `STOPPED`
+    (`ESTOP_DURING`) with what was measured, `estop` and `stopped` go true in `ZONE_STATE`, and
+    `ESTOP_PRESSED` goes out. Releasing sends `ESTOP_RELEASED` and restarts nothing: `RESUME` is
+    refused (`ESTOP`) while it is pressed, and a person sends it after the release.
+
+  The others in the catalogue are refused as not built yet.
 - **Reset** returns to `simulator.json` `demoStart`: a healthy farm with Zone A's EC a little below
   its target, so a dose makes sense. Drills go off, holds are released, levels and readings go back,
   the starting speed returns, and each controller starts afresh: anything running ends `STOPPED`
