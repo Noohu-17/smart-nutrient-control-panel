@@ -48,6 +48,16 @@
       "params": {}
     },
     {
+      "kind": "SENSOR_OFFLINE",
+      "group": "SENSING",
+      "prdCode": "",
+      "targetType": "ZONE_SENSOR",
+      "title": "Sensor offline",
+      "explanation": "A probe stops answering: its reading is null with FAULT, so doses that need it are refused.",
+      "fix": "Reconnects the probe.",
+      "params": {}
+    },
+    {
       "kind": "NO_FLOW",
       "group": "PUMPS_AND_VALVES",
       "prdCode": "F8",
