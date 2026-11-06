@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from .api.commands import add_command_api
 from .api.dose_requests import add_dose_api
 from .api.routes import add_read_api
+from .api.sim import add_sim_api
 from .config import load_settings
 from .errors import add_error_handlers
 from .health import UP, check_broker, check_database
@@ -24,6 +25,7 @@ add_error_handlers(app)
 add_read_api(app)
 add_dose_api(app)
 add_command_api(app)
+add_sim_api(app)
 
 
 @app.get("/api/health")

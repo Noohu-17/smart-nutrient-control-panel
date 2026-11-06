@@ -82,6 +82,7 @@ services:
       MQTT_USERNAME: CLOUD-api
       MQTT_PASSWORD: ${MQTT_PASSWORD_CLOUD_API:?set in infra/.env.staging}
       API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
+      SIM_CONTROL_URL: http://simulator:8100  # /api/sim forwards here, on the internal network
     volumes:
       - ../config:/config:ro  # the client config packs (contract 2.5), read only
     networks: [edge, internal]

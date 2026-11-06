@@ -17,6 +17,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEV = "dev"
 DEV_DB_PASSWORD = "sna-dev-only"
+DEV_SIM_CONTROL_URL = "http://127.0.0.1:8100"  # the simulator's control API on the laptop (T4-9)
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,9 @@ class Settings:
     health_timeout_s: float
     client_dir: Path  # the client's config pack, config/clients/<client> (contract §2.5)
     api_docs_enabled: bool
+    # The simulator's own control API (T4-9), reachable only from inside the server, for the
+    # /api/sim routes of a playground site (contract §11.4). None: no simulator to forward to.
+    sim_control_url: str | None = None
 
 
 def _db_password(app_env: str, password: str | None) -> str:
@@ -63,4 +67,5 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         health_timeout_s=float(env("HEALTH_TIMEOUT_S", "3")),
         client_dir=Path(env("CLIENT_DIR", str(REPO_ROOT / "config" / "clients" / "client_A"))),
         api_docs_enabled=env("API_DOCS_ENABLED", "true" if app_env == DEV else "false").lower() == "true",
+        sim_control_url=env("SIM_CONTROL_URL") or (DEV_SIM_CONTROL_URL if app_env == DEV else None),
     )

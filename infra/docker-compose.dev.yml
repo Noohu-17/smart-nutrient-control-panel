@@ -66,6 +66,8 @@ services:
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"
       CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      # /api/sim forwards here (contract 11.4): the simulator below, with --profile sim
+      SIM_CONTROL_URL: ${SIM_CONTROL_URL:-http://simulator:8100}
     volumes:
       - ../config:/config:ro  # the client config packs (contract 2.5), read only
     ports:
