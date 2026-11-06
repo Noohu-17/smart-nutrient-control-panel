@@ -7,6 +7,7 @@ import type {
   DoseRequest,
   DoseRequestBody,
   Farm,
+  PowerStatus,
   SimFaultBody,
   SimHold,
   ZoneStatus,
@@ -21,7 +22,7 @@ import {
   stopZoneCommands,
   type CommandEnding,
 } from "./commands";
-import { buildClimateTelemetry, buildPowerState } from "./data/climatePower";
+import { buildClimateStatus, buildPowerStatus } from "./data/climatePower";
 import { zoneDosing } from "./data/dosing";
 import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
@@ -141,16 +142,39 @@ export const handlers = [
     return HttpResponse.json(scenarioLayout());
   }),
 
-  // GET /api/climate · latest climate telemetry from CC1 (contract §6.2)
+  // GET /api/climate · CC1's latest readings and state (contract §11.2)
   http.get("/api/climate", async () => {
     await networkDelay();
-    return HttpResponse.json(buildClimateTelemetry(scenarioLayout()));
+    const climate = buildClimateStatus(scenarioLayout());
+    if (currentScenario() === "climate-offline") {
+      climate.online = false;
+      for (const key of Object.keys(climate.quality) as (keyof typeof climate.quality)[])
+        climate.quality[key] = "STALE"; // §11.2: OK becomes STALE once the controller is offline
+    }
+    return HttpResponse.json(climate);
   }),
 
-  // GET /api/power · latest power state from PM1 (contract §6.3)
+  // GET /api/power · PM1's latest POWER_STATE (contract §11.2)
   http.get("/api/power", async () => {
     await networkDelay();
-    const power = buildPowerState(scenarioLayout());
+    const layout = scenarioLayout();
+    if (currentScenario() === "power-never") {
+      // §11.2: a monitor that has never reported; generator and ups only when the layout has them
+      const never: PowerStatus = {
+        online: false,
+        lastSeen: null,
+        ts: null,
+        mains: null,
+        phases: { l1V: null, l2V: null, l3V: null },
+        source: null,
+        ats: null,
+        quality: {},
+      };
+      if (layout.power.generator) never.generator = null;
+      if (layout.power.ups) never.ups = null;
+      return HttpResponse.json(never);
+    }
+    const power = buildPowerStatus(layout);
     if (currentScenario() === "mains-lost") {
       power.mains = "LOST";
       power.phases = { l1V: null, l2V: null, l3V: null }; // §6.3: a lost phase is null, never 0

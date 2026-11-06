@@ -4,7 +4,8 @@ import { ReadingCard } from "../../components/ReadingCard";
 import { RoleButton } from "../../components/RoleButton";
 import { AIR_READINGS, airPositionSpec, ELEC_ROOM_READING } from "../../config/readings";
 
-/** Climate page: air inside and outside, each air sensor position and the electrical room (contract §6.2). */
+/** Climate page: air inside and outside, each air sensor position and the electrical room (contract §11.2).
+    While the controller is offline its last values show grey, never as the air now. */
 export function Climate() {
   const farm = useFarm();
   const climate = useClimate();
@@ -37,6 +38,7 @@ export function Climate() {
                   spec={spec}
                   value={c.readings[spec.key]}
                   quality={c.quality[spec.key]}
+                  stale={!c.online}
                 />
               ))}
             </div>
@@ -46,7 +48,12 @@ export function Climate() {
               <h2 id="climate-positions">Air temp along the house</h2>
               <div className="readings">
                 {positions.map((pos) => (
-                  <ReadingCard key={pos} spec={airPositionSpec(pos)} value={c.readings.airTempByPosC[pos]} />
+                  <ReadingCard
+                    key={pos}
+                    spec={airPositionSpec(pos)}
+                    value={c.readings.airTempByPosC[pos]}
+                    stale={!c.online}
+                  />
                 ))}
               </div>
             </section>
@@ -58,6 +65,7 @@ export function Climate() {
                 spec={ELEC_ROOM_READING}
                 value={c.readings.elecRoomTempC}
                 quality={c.quality.elecRoomTempC}
+                stale={!c.online}
               />
             </div>
           </section>

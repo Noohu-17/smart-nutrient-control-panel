@@ -13,6 +13,8 @@ export const SCENARIOS = {
   "no-playground": "A real farm: features.playground is false, so no Simulator",
   "mains-lost": "Mains lost: the generator runs the farm, UPS on battery",
   "no-generator": "A site with no generator or UPS in its layout",
+  "power-never": "The power monitor has never reported: every value null",
+  "climate-offline": "Climate controller silent: last values with online false, quality STALE",
   "dose-blocked": "The controller refuses every dose (24 h limit)",
   "dose-failed": "The first dosing line runs with no flow",
   "dose-partial": "The second dosing line stops short",

@@ -3,13 +3,13 @@ import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/rea
 import { deleteJson, getJson, postJson } from "./client";
 import { isFinalCommand, isMixing } from "../config/dosing";
 import type {
-  ClimateTelemetry,
+  ClimateStatus,
   Command,
   DoseConfirmed,
   DoseRequest,
   DoseRequestBody,
   Farm,
-  PowerState,
+  PowerStatus,
   ScenarioOptions,
   SimFaultBody,
   SimHold,
@@ -68,7 +68,7 @@ export function useZones(zoneIds: string[]) {
 export function useClimate() {
   return useQuery({
     queryKey: ["climate"],
-    queryFn: () => getJson<ClimateTelemetry>("/climate"),
+    queryFn: () => getJson<ClimateStatus>("/climate"),
     refetchInterval: ONE_MINUTE,
   });
 }
@@ -77,7 +77,7 @@ export function useClimate() {
 export function usePower() {
   return useQuery({
     queryKey: ["power"],
-    queryFn: () => getJson<PowerState>("/power"),
+    queryFn: () => getJson<PowerStatus>("/power"),
     refetchInterval: ONE_MINUTE,
   });
 }

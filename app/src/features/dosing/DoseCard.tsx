@@ -43,8 +43,9 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
   function runChecks() {
     setTicked(false);
     confirm.reset();
+    // only the lines with an amount: a 0 mL line would reach the farm as a line to skip (§7.2)
     review.mutate(
-      { zone: zone.id, lines },
+      { zone: zone.id, lines: lines.filter((l) => l.ml > 0) },
       {
         onSuccess: (next) => {
           setDr(next);

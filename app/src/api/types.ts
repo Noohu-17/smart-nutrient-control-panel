@@ -84,17 +84,12 @@ export type ZoneStatus = {
   configVersion: number | null;
 };
 
-/* ---------- GET /api/climate (contract §6.2, CLIMATE_TELEMETRY) ---------- */
-export type ClimateTelemetry = {
-  v: number;
-  type: "CLIMATE_TELEMETRY";
-  msgId: string;
-  ts: string;
+/* ---------- GET /api/climate (contract §11.2, climate answer; readings from §6.2) ---------- */
+export type ClimateStatus = {
+  online: boolean; // as for a zone: false after 3 minutes' silence or the controller's last will
+  lastSeen: string | null;
+  ts: string | null; // when the latest reading was taken
   simTs?: string; // playground sites only: the simulated time
-  site: string;
-  device: string;
-  bootId: number;
-  seq: number;
   readings: {
     airTempC: number | null; // average of the positions
     airTempByPosC: Record<string, number | null>; // keys from layout.climate.airSensors
@@ -103,31 +98,32 @@ export type ClimateTelemetry = {
     outsideRh: number | null;
     elecRoomTempC: number | null;
   };
+  // {} until the controller first reports; OK becomes STALE past the fresh limit or when offline
   quality: Partial<Record<"airTempC" | "airRh" | "outsideTempC" | "outsideRh" | "elecRoomTempC", Quality>>;
-  mode: "AUTOMATIC" | "MANUAL";
+  // the latest CLIMATE_STATE (§6.9); null until it first arrives
+  mode: "AUTOMATIC" | "MANUAL" | null;
   manualUntil: string | null;
+  stopped: boolean | null;
   equipment: Record<string, string | number | { state: string; setpointC: number }>;
-  runTimeTodayMin: Record<string, number>;
-  setpoints: { airTempMaxC: number; airRhMax: number; solTempMaxC: number };
+  latches: string[];
 };
 
-/* ---------- GET /api/power (contract §6.3, POWER_STATE) ---------- */
-export type PowerState = {
-  v: number;
-  type: "POWER_STATE";
-  msgId: string;
-  ts: string;
+/* ---------- GET /api/power (contract §11.2, power answer; values from §6.3) ---------- */
+export type PowerStatus = {
+  online: boolean;
+  lastSeen: string | null;
+  ts: string | null;
   simTs?: string;
-  site: string;
-  device: string;
-  bootId: number;
-  seq: number;
-  mains: "OK" | "LOST" | "PHASE_FAULT";
+  // null until the monitor first reports
+  mains: "OK" | "LOST" | "PHASE_FAULT" | null;
   phases: { l1V: number | null; l2V: number | null; l3V: number | null };
-  source: "MAINS" | "GENERATOR" | "UPS_ONLY";
-  generator?: "STOPPED" | "STARTING" | "RUNNING" | "FAULT"; // left out when layout.power.generator is false
-  ats: "MAINS" | "GENERATOR";
-  ups?: { onBattery: boolean; batteryPct: number; runtimeMin: number }; // left out when layout.power.ups is false
+  source: "MAINS" | "GENERATOR" | "UPS_ONLY" | null;
+  // left out when the layout has none; null when it has one but nothing has arrived
+  generator?: "STOPPED" | "STARTING" | "RUNNING" | "FAULT" | null;
+  ats: "MAINS" | "GENERATOR" | null;
+  ups?: { onBattery: boolean; batteryPct: number | null; runtimeMin: number | null } | null;
+  // {} while fresh; every value STALE once the message is over the fresh limit or the monitor is offline
+  quality: Partial<Record<"l1V" | "l2V" | "l3V" | "upsBatteryPct" | "upsRuntimeMin", Quality>>;
 };
 
 /* ---------- POST /api/dose-requests (contract §11.3) ---------- */
