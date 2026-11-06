@@ -2,11 +2,14 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
+import { resetCommands } from "../mocks/commands";
+import { resetClimatePower } from "../mocks/data/climatePower";
 import { resetTelemetry } from "../mocks/data/telemetry";
 import { server } from "../mocks/node";
+import { resetSim } from "../mocks/sim";
 
-// A cold first render plus the fake API delay can pass the 1 s default on a busy laptop.
-configure({ asyncUtilTimeout: 5000 });
+// The fake API alone takes 300 ms, which left little of the default 1 s on a busy laptop.
+configure({ asyncUtilTimeout: 5_000 });
 
 beforeAll(() => {
   server.listen({ onUnhandledFrame: "error" });
@@ -23,6 +26,9 @@ afterEach(() => {
   cleanup();
   server.resetHandlers();
   resetTelemetry();
+  resetClimatePower();
+  resetSim();
+  resetCommands();
 });
 
 afterAll(() => server.close());

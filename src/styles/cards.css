@@ -2,7 +2,7 @@
 
 .zone-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--zone-card-min)), 1fr));
   gap: var(--gap-card);
 }
 
@@ -11,7 +11,7 @@
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-5);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
 }
@@ -58,7 +58,7 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--reading-min), 1fr));
   gap: var(--space-3);
 }
 .benches li {
@@ -66,7 +66,7 @@
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius-tile);
 }
 .benches span {
@@ -117,4 +117,42 @@
 .plan-label {
   fill: var(--text-muted);
   font-size: var(--text-caption-size);
+}
+
+/* ---------- Overview power strip: mains, generator, UPS */
+.power-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--gap-card);
+}
+.power-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-tile);
+  background: var(--color-surface);
+}
+.power-label {
+  font-weight: var(--weight-semibold);
+}
+.power-detail {
+  font-size: var(--text-label-size);
+  color: var(--text-secondary);
+}
+
+/* ---------- Climate page sections */
+.climate-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--gap-card);
+}
+.climate-section h2 {
+  margin: 0;
+  font-size: var(--text-section-size);
+  line-height: var(--text-section-line);
+  font-weight: var(--weight-bold);
 }

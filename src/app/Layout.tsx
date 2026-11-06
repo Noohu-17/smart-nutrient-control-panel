@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useSession } from "../auth/session";
+import { DemoBanner } from "../components/DemoBanner";
+import { SimBanner } from "../components/SimBanner";
 import { BottomTabs } from "./BottomTabs";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -13,6 +15,8 @@ export function Layout() {
   if (!role) return <Navigate to="/sign-in" replace state={{ from: pathname }} />;
   return (
     <>
+      <DemoBanner />
+      <SimBanner />
       <TopBar />
       <div className="shell">
         <Sidebar open={menuOpen} onNavigate={() => setMenuOpen(false)} />

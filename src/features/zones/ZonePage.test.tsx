@@ -19,11 +19,12 @@ describe("Zone page", () => {
     ]);
   });
 
-  it("shows empty cards for EC, pH, solution temp and reservoir level", async () => {
+  it("shows live EC, pH, solution temp and reservoir level", async () => {
     renderAt("/zone/Z1");
     const readings = within((await screen.findByRole("heading", { name: "Readings" })).closest("section")!);
+    await readings.findByText(/^Updated/);
     for (const label of ["EC", "pH", "Solution temp", "Reservoir level"]) {
-      expect(readings.getByRole("group", { name: label })).toHaveTextContent("--");
+      expect(readings.getByRole("group", { name: label })).not.toHaveTextContent("--");
     }
   });
 

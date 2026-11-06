@@ -1,7 +1,8 @@
-// src/mocks/data/telemetry.ts · fake ZONE_TELEMETRY shaped like contract §6.1
+// src/mocks/data/telemetry.ts · fake GET /api/zones/{zoneId}, shaped like the contract §11.2 zone response
+// (T1-10), which the real back end (T1-12) answers. Readings are as in §6.1.
 // Each request moves the readings a little (sensor noise, plants drinking), so the screens look live.
 // Device IDs, capacities, dose lines and equipment IDs all come from the layout, never from here.
-import type { DoseLine, FarmZone, ZoneTelemetry } from "../../api/types";
+import type { DoseLine, FarmZone, ZoneStatus } from "../../api/types";
 import { farmLayout } from "./layout";
 
 type Chemistry = {
@@ -37,7 +38,6 @@ const DEFAULT_SEED: Chemistry = SEEDS.Z1;
 
 // Live state per zone, kept for as long as the page is open
 const state = new Map<string, Chemistry>();
-const seqByZone = new Map<string, number>();
 
 const round = (value: number, decimals: number) => Math.round(value * 10 ** decimals) / 10 ** decimals;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -65,24 +65,22 @@ function nextReadings(zoneId: string): Chemistry {
 /** Forget the live state (used by tests so each one starts from the seeds). */
 export function resetTelemetry() {
   state.clear();
-  seqByZone.clear();
 }
 
 export function findZone(zoneId: string): FarmZone | undefined {
   return farmLayout.zones.find((zone) => zone.id === zoneId);
 }
 
-export function buildZoneTelemetry(zoneId: string): ZoneTelemetry | null {
+export function buildZoneStatus(zoneId: string): ZoneStatus | null {
   const zone = findZone(zoneId);
   if (!zone) return null;
 
   const chem = nextReadings(zoneId);
-  const seq = (seqByZone.get(zoneId) ?? 18233) + 1;
-  seqByZone.set(zoneId, seq);
+  const now = new Date().toISOString(); // real time, so "Updated X s ago" and staleness work
 
   const dayTankPct = {} as Record<DoseLine, number | null>;
   const dayTankL = {} as Record<DoseLine, number | null>;
-  const equipment: Record<string, string> = { [`${zoneId}-CIRC`]: "ON", [`${zoneId}-REFILL`]: "CLOSED" };
+  const equipment: ZoneStatus["equipment"] = { [`${zoneId}-CIRC`]: "ON", [`${zoneId}-REFILL`]: "CLOSED" };
   for (const line of zone.doseLines) {
     const pct = chem.dayTankPct[line];
     dayTankPct[line] = Math.round(pct);
@@ -91,15 +89,10 @@ export function buildZoneTelemetry(zoneId: string): ZoneTelemetry | null {
   }
 
   return {
-    v: 1,
-    type: "ZONE_TELEMETRY",
-    msgId: crypto.randomUUID(),
-    ts: new Date().toISOString(), // real time, so "Updated X s ago" and staleness work
-    site: farmLayout.site,
-    device: zone.controller,
-    bootId: 412,
-    seq,
     zone: zoneId,
+    online: true,
+    lastSeen: now,
+    ts: now,
     readings: {
       // precision from contract §1 "Units"
       ec: round(chem.ec, 2),
@@ -117,6 +110,10 @@ export function buildZoneTelemetry(zoneId: string): ZoneTelemetry | null {
     mode: "REMOTE",
     estop: false,
     leak: false,
+    stopped: false,
     activeCmdId: null,
+    operation: null,
+    latches: [],
+    configVersion: 7,
   };
 }

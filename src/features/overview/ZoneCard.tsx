@@ -1,42 +1,24 @@
 import { Link } from "react-router-dom";
-import { useZone } from "../../api/hooks";
 import type { FarmZone } from "../../api/types";
-import { ReadingCard } from "../../components/ReadingCard";
-import { StatusChip } from "../../components/StatusChip";
-import { ZONE_READINGS, zonePath } from "../../config/readings";
+import { zonePath } from "../../config/readings";
 import { ZoneActions } from "../zones/ZoneActions";
+import { ZoneReadings, ZoneStatusChip } from "../zones/ZoneLive";
+import { useZoneStatus } from "../zones/useZoneStatus";
 
-/** Overview card for one zone: its latest readings, or an Offline look when there are none. */
+/** Overview card for one zone: its latest readings and how fresh they are. Its alerts are in the
+    strip at the top of the Overview. */
 export function ZoneCard({ zone }: { zone: FarmZone }) {
-  const telemetry = useZone(zone.id);
-  const t = telemetry.data;
-  const offline = telemetry.isError;
+  const status = useZoneStatus(zone.id);
 
   return (
-    <section className={`zone-card${offline ? " offline" : ""}`} aria-labelledby={`zone-${zone.id}`}>
+    <section className={`zone-card${status.offline ? " offline" : ""}`} aria-labelledby={`zone-${zone.id}`}>
       <header className="zone-card-head">
         <h2 id={`zone-${zone.id}`}>
           <Link to={zonePath(zone.id)}>{zone.name}</Link>
         </h2>
-        {offline ? (
-          <StatusChip tone="off">Offline</StatusChip>
-        ) : t ? (
-          <StatusChip tone="ok">Live</StatusChip>
-        ) : (
-          <StatusChip>Loading</StatusChip>
-        )}
+        <ZoneStatusChip status={status} />
       </header>
-      <div className="readings">
-        {ZONE_READINGS.map((spec) => (
-          <ReadingCard
-            key={spec.key}
-            spec={spec}
-            value={t?.readings[spec.key]}
-            quality={t?.quality[spec.key]}
-            stale={offline}
-          />
-        ))}
-      </div>
+      <ZoneReadings status={status} />
       <ZoneActions />
     </section>
   );

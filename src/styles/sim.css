@@ -1,0 +1,108 @@
+/* Simulator screen playground controls (§11.4). Tokens only. */
+
+/* the "Simulated farm · ×60" line: same strip as the demo banner, info colours */
+.sim-banner {
+  border-bottom-color: var(--color-border);
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+}
+.sim-banner b {
+  color: var(--status-info-fg);
+}
+
+.sim-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+}
+.btn[aria-pressed="true"] {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: var(--text-on-primary);
+}
+.btn[aria-pressed="true"]:disabled {
+  border-color: var(--disabled-border);
+  background: var(--disabled-bg);
+  color: var(--disabled-fg);
+}
+.sim-reason {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  max-width: none;
+}
+
+/* running drills, held values and the drill catalogue */
+.sim-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sim-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--color-border);
+}
+.sim-list li > div:first-child {
+  flex: 1 1 220px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.sim-list li span,
+.sim-list li small {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  color: var(--text-muted);
+}
+/* the drill name keeps body text; only its PRD code is small */
+.sim-list li .sim-title {
+  font-size: var(--text-body-size);
+  color: inherit;
+}
+
+/* the "Hold a value" form: label beside its field, one column on a phone */
+.sim-form {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.sim-form > label {
+  font-size: var(--text-label-size);
+  font-weight: var(--weight-semibold);
+  color: var(--text-label);
+}
+.sim-wide {
+  grid-column: 1 / -1;
+}
+.sim-select {
+  min-height: var(--touch-min);
+  max-width: 100%;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-button);
+  background: var(--color-surface);
+}
+.sim-select:disabled {
+  border-color: var(--disabled-border);
+  background: var(--disabled-bg);
+}
+.sim-form .sim-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: var(--weight-regular);
+}
+@media (max-width: 520px) {
+  .sim-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

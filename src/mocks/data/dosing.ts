@@ -1,6 +1,7 @@
 // src/mocks/data/dosing.ts · what the fake back end knows about dosing in each zone.
 // The app gets none of this directly: it only sees it in the POST /api/dose-requests answer (§11.3).
-// limits.json is a copy of config/clients/client_A/limits.json. The rest has no config file yet.
+// limits.json is a copy of config/clients/client_A/limits.json; handlers.test.ts fails if they drift apart.
+// The rest has no config file yet.
 import type { DoseLine } from "../../api/types";
 import limitsJson from "./limits.json";
 

@@ -1,6 +1,6 @@
 /* Fake dose checks for POST /api/dose-requests (§11.3), run against the fake telemetry the
    way the back end will. Check IDs and PASS / WARN / BLOCK follow the §11.3 example. */
-import type { DoseCheck, DoseLineAmount, DoseRequest, FarmZone, ZoneTelemetry } from "../api/types";
+import type { DoseCheck, DoseLineAmount, DoseRequest, FarmZone, ZoneStatus } from "../api/types";
 import type { ZoneDosing } from "./data/dosing";
 
 // rough mixing model for the fake projection: EC gained per mL of stock A or B in each litre,
@@ -26,7 +26,7 @@ export function validateLines(zone: FarmZone, lines: DoseLineAmount[]) {
 export function runDoseChecks(
   id: string,
   zone: FarmZone,
-  t: ZoneTelemetry,
+  t: ZoneStatus,
   d: ZoneDosing,
   lines: DoseLineAmount[],
   now = Date.now(),
@@ -44,26 +44,40 @@ export function runDoseChecks(
   const busy =
     t.activeCmdId !== null ||
     Object.entries(t.equipment).some(([k, v]) => /-(DOSE|REFILL)/.test(k) && (v === "ON" || v === "OPEN"));
-  const ageS = Math.round((now - Date.parse(t.ts)) / 1000);
+  const secondsSince = (ts: string | null) =>
+    ts === null ? null : Math.round((now - Date.parse(ts)) / 1000);
+  const ageS = secondsSince(t.ts); // null: no reading yet
+  const silentS = secondsSince(t.lastSeen);
 
   add(
     "STATE_KNOWN",
-    t.activeCmdId === null,
+    t.stopped === false && t.activeCmdId === null,
     `${zone.name} state known: nothing unconfirmed, not stopped`,
-    `${zone.name} has a command still in flight`,
+    t.stopped === null
+      ? `${zone.name} state not known yet`
+      : t.stopped
+        ? `${zone.name} is stopped. Resume the zone first`
+        : `${zone.name} has a command still in flight`,
   );
   add(
     "DEVICES_ONLINE",
-    ageS <= FRESH_READING_S,
-    `${t.device} and sensors online`,
-    `${t.device} not heard from for ${ageS} s`,
+    t.online,
+    `${zone.controller} and sensors online`,
+    silentS === null
+      ? `${zone.controller} has never reported`
+      : `${zone.controller} not heard from for ${silentS} s`,
   );
-  add("ESTOP", !t.estop, "No E-STOP pressed", `E-STOP pressed in ${zone.name}`);
+  add(
+    "ESTOP",
+    t.estop === false,
+    "No E-STOP pressed",
+    t.estop === null ? `E-STOP state of ${zone.name} not known yet` : `E-STOP pressed in ${zone.name}`,
+  );
   add(
     "ZONE_REMOTE",
     t.mode === "REMOTE",
     `${zone.name} is in REMOTE`,
-    `${zone.name} key switch is in ${t.mode}`,
+    `${zone.name} key switch is in ${t.mode ?? "an unknown position"}`,
   );
   add("NO_CONFLICT", !busy, "Nothing else running", `Another dose or refill is running in ${zone.name}`);
 
@@ -135,16 +149,18 @@ export function runDoseChecks(
       message: `Projected EC ${ec}, pH ${ph} ${target}`,
     });
   }
-
-  const unreliable = (["ec", "ph"] as const).filter((k) => (t.quality[k] ?? "OK") !== "OK" || r[k] === null);
-  const fresh = ageS <= FRESH_READING_S && unreliable.length === 0;
+   // only a reading marked OK can be dosed on, a missing quality is not OK
+  const unreliable = (["ec", "ph"] as const).filter((k) => t.quality[k] !== "OK" || r[k] === null);
+  const fresh = ageS !== null && ageS <= FRESH_READING_S && unreliable.length === 0;
   add(
     "FRESH_READINGS",
     fresh,
     `EC/pH ${ageS} s old`,
     unreliable.length
       ? `${unreliable.map((k) => (k === "ec" ? "EC" : "pH")).join(" and ")} reading not usable (${unreliable.map((k) => t.quality[k] ?? "missing").join(", ")})`
-      : `EC/pH ${ageS} s old, more than ${FRESH_READING_S} s`,
+      : ageS === null
+        ? "No EC/pH reading yet"
+        : `EC/pH ${ageS} s old, more than ${FRESH_READING_S} s`,
   );
 
   const pumpMin = dosing.reduce((s, l) => s + l.ml / d.pumpMlPerMin[l.line], 0);

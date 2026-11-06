@@ -4,7 +4,7 @@
 .chip {
   display: inline-flex;
   align-items: center;
-  padding: var(--space-1) 10px;
+  padding: var(--space-1) var(--space-2-5);
   border-radius: var(--radius-pill);
   background: var(--status-neutral-bg);
   color: var(--status-neutral-fg);
@@ -27,13 +27,43 @@
 .chip-off {
   background: var(--disabled-bg);
   color: var(--disabled-fg);
-  border: 1px solid var(--disabled-border);
+  border: var(--border-width) solid var(--disabled-border);
+}
+
+/* ---------- Banner */
+.banner {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-banner);
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+}
+.banner.crit {
+  border: var(--border-width) solid var(--status-critical-border);
+  background: var(--status-critical-bg);
+  color: var(--status-critical-text);
+}
+.banner.info {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+}
+.banner a {
+  color: inherit;
+  font-weight: var(--weight-bold);
+  white-space: nowrap;
+}
+
+/* ---------- Alert strip (T2-20): top of the Overview and the zone page, critical first */
+.alert-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 /* ---------- ReadingCard: green in target, amber outside, grey when stale or missing */
 .readings {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--reading-min-sm), 1fr));
   gap: var(--space-3);
 }
 .reading {
@@ -41,8 +71,8 @@
   flex-direction: column;
   gap: var(--space-1);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid transparent;
-  border-left-width: 4px;
+  border: var(--border-width) solid transparent;
+  border-left-width: var(--border-accent);
   border-radius: var(--radius-tile);
   background: var(--color-surface-subtle);
 }
@@ -113,7 +143,7 @@
   gap: var(--space-2);
   min-height: var(--touch-min);
   padding: 0 var(--space-4);
-  border: 1px solid var(--color-primary-border);
+  border: var(--border-width) solid var(--color-primary-border);
   border-radius: var(--radius-button);
   background: var(--color-surface);
   color: var(--color-primary);
@@ -141,7 +171,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-8) var(--space-5);
-  border: 1px dashed var(--dashed-border);
+  border: var(--border-width) dashed var(--dashed-border);
   border-radius: var(--radius-card);
   background: var(--color-surface);
   text-align: center;

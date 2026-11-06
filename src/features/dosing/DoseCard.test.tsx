@@ -66,7 +66,7 @@ describe("Manual dose and review", () => {
     await user.click(screen.getByRole("checkbox", { name: /I have checked the quantities/ }));
     expect(startButton()).toBeEnabled();
     await user.click(startButton());
-    expect(await screen.findByText("Sent — waiting for the farm.")).toBeInTheDocument();
+    expect(await screen.findByText("Sent — waiting for the farm")).toBeInTheDocument();
   });
 
   it("shows Error and why for a dose over the per-dose limit, with the limit from the fake API", async () => {

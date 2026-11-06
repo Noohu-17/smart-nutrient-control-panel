@@ -13,20 +13,23 @@ const notPlayground = () =>
   );
 
 describe("Simulator screen", () => {
-  it("opens with the three areas", async () => {
+  it("opens with its four areas", async () => {
     renderAt("/simulator");
-    expect(await screen.findByRole("heading", { level: 2, name: "Farm view" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 2, name: "Held values" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "Simulator" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Held values" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Clock" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Farm view" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 2, name: "Failure drills" })).toBeInTheDocument();
     expect(screen.getByText("No values are being held.")).toBeInTheDocument();
     expect(screen.getByText("No failure drills are running.")).toBeInTheDocument();
   });
 
-  it("has no buttons for dose, refill or stop", async () => {
+  it("has no buttons for dose, refill or stop (11.4.1)", async () => {
     renderAt("/simulator");
-    await screen.findByRole("heading", { name: "Farm view" });
-    expect(within(screen.getByRole("main")).queryAllByRole("button")).toEqual([]);
+    await screen.findByRole("heading", { name: "Failure drills" });
+    const main = within(screen.getByRole("main"));
+    expect(main.getAllByRole("button").length).toBeGreaterThan(0);
+    expect(main.queryAllByRole("button", { name: /dose|refill|stop|resume/i })).toEqual([]);
   });
 
   it("is linked in the menu on a playground site", async () => {

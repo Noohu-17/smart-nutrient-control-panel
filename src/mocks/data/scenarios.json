@@ -1,0 +1,106 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder values until the team fills in the scenario list and presets; field names are agreed (contract 11.4.1). Do not use for a real farm."
+  },
+  "layoutOptions": {
+    "zones": { "min": 1, "max": 4 },
+    "benchesPerZone": { "min": 1, "max": 8 },
+    "channelsPerBench": { "min": 1, "max": 12 },
+    "benchLengthM": { "min": 1, "max": 30 },
+    "reservoirUsableL": { "min": 100, "max": 5000 },
+    "dayTankUsableL": { "min": 10, "max": 200 },
+    "nurseryTables": { "min": 0, "max": 12 },
+    "fans": { "min": 0, "max": 8 },
+    "padPumps": { "min": 0, "max": 2 },
+    "shade": { "min": 0, "max": 2 },
+    "haf": { "min": 0, "max": 2 },
+    "foggers": { "min": 0, "max": 2 }
+  },
+  "sandbox": { "idleRemoveMin": 120, "maxRunning": 5 },
+  "presets": [],
+  "regions": ["COIMBATORE", "COASTAL_HUMID", "HOT_DRY_INLAND", "HILL_STATION"],
+  "months": { "min": 1, "max": 12 },
+  "weather": ["CLEAR", "CLOUDY", "HEATWAVE", "MONSOON_RAIN", "HUMID_SPELL"],
+  "surprises": ["HEAT_SPIKE", "COLD_RAINY_DAY"],
+  "cropsFrom": "recipes.crops",
+  "startingWater": {
+    "ec": ["LOW", "NORMAL", "HIGH"],
+    "ph": ["LOW", "NORMAL", "HIGH"],
+    "solTemp": ["COOL", "NORMAL", "WARM"],
+    "reservoir": ["LOW", "HALF", "FULL"],
+    "dayTanks": ["LOW", "HALF", "FULL"]
+  },
+  "rawWater": ["SOFT", "HARD", "HIGH_BICARBONATE"],
+  "power": ["STABLE", "OCCASIONAL_CUTS", "FREQUENT_CUTS"],
+  "internet": ["STABLE", "FLAKY", "LONG_OUTAGE"],
+  "failureDrills": [
+    {
+      "kind": "PROBE_DRIFT",
+      "group": "SENSING",
+      "prdCode": "F1",
+      "targetType": "ZONE_SENSOR",
+      "title": "Probe drift",
+      "explanation": "A probe slowly reads away from the true value.",
+      "fix": "Recalibrates the probe.",
+      "params": {}
+    },
+    {
+      "kind": "NO_FLOW",
+      "group": "PUMPS_AND_VALVES",
+      "prdCode": "F8",
+      "targetType": "DOSE_LINE",
+      "title": "Pump runs, nothing flows",
+      "explanation": "The dosing pump runs but the flow meter sees no flow.",
+      "fix": "Clears the blockage.",
+      "params": {}
+    },
+    {
+      "kind": "LEAK",
+      "group": "WATER",
+      "prdCode": "F17",
+      "targetType": "ZONE",
+      "title": "Leak sensor wet",
+      "explanation": "The leak sensor under the zone panel reports water.",
+      "fix": "Dries the leak sensor.",
+      "params": {}
+    },
+    {
+      "kind": "HEATWAVE",
+      "group": "CLIMATE_AND_ROOMS",
+      "prdCode": "F20",
+      "targetType": "POLYHOUSE",
+      "title": "Heatwave",
+      "explanation": "Outside temperature climbs well above normal for the season.",
+      "fix": "Returns the weather to normal.",
+      "params": {}
+    },
+    {
+      "kind": "POWER_CUT",
+      "group": "POWER",
+      "prdCode": "F15",
+      "targetType": "DEVICE",
+      "title": "Power cut",
+      "explanation": "The controller restarts with all outputs off.",
+      "fix": "Restores mains power.",
+      "params": {}
+    }
+  ],
+  "holdable": {
+    "zone": {
+      "ec": { "min": 0, "max": 10 },
+      "ph": { "min": 0, "max": 14 },
+      "solTempC": { "min": 0, "max": 50 },
+      "circFlowLpm": { "min": 0, "max": 60 },
+      "reservoirPct": { "min": 0, "max": 100 },
+      "dayTankPct": { "min": 0, "max": 100, "linesFrom": "layout.zones.doseLines" }
+    },
+    "polyhouse": {
+      "airTempC": { "min": 0, "max": 50 },
+      "airRh": { "min": 0, "max": 100 }
+    }
+  },
+  "thingsToTry": []
+}
