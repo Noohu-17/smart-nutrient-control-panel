@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +21,7 @@ from typing import Any, Protocol
 from .clock import SimClock, reading_interval_s
 from .config import load_demo_start, read_pack_file
 from .farm import Farm, ZoneFarm, load_farm
-from .messages import utc_ts
+from .messages import utc_ts, zone_telemetry
 from .model.nutrients import nutrient_g_for_ec
 
 POLYHOUSE = "POLYHOUSE"  # the target of a held air value and of a POLYHOUSE drill
@@ -30,7 +30,9 @@ GRADUAL = ("ec", "ph", "solTempC", "airTempC")  # 11.4.2: these move as real wat
 GRADUAL_READINGS = 2  # ... over about two readings
 ZONE_METRICS = ("ec", "ph", "solTempC", "circFlowLpm", "reservoirPct", "dayTankPct")  # settable
 AIR_METRICS = ("airTempC", "airRh")
-BUILT_DRILLS = ("SENSOR_OFFLINE", "ESTOP")  # the rest of the catalogue is refused until built
+BUILT_DRILLS = (  # the rest of the catalogue is refused until it is built
+    "SENSOR_OFFLINE", "STUCK_READING", "ESTOP", "DEVICE_OFFLINE",
+)
 
 
 class PlaygroundError(Exception):
@@ -53,6 +55,17 @@ class Controller(Protocol):
     def reset_to_start(self) -> None: ...
 
 
+class Device(Protocol):
+    """A simulated device a DEVICE_OFFLINE drill stops and starts (devices/base.py)."""
+
+    id: str
+    powered: bool
+
+    def go_offline(self) -> None: ...
+
+    def come_back(self, boot_id: int) -> None: ...
+
+
 @dataclass
 class Hold:
     target: str
@@ -72,11 +85,18 @@ class Playground:
         client_dir: Path,
         *,
         controllers: Iterable[Controller] = (),
+        devices: Iterable[Device] = (),
         device_ids: Iterable[str] = (),
         min_real_reading_s: float = 0.0,
+        next_boot_id: Callable[[str], int] | None = None,
     ):
+        """devices: what DEVICE_OFFLINE stops and starts; device_ids, without them, only names
+        the targets. next_boot_id gives a restarting device its new bootId (state.py)."""
         self.farm, self.clock, self.client_dir = farm, clock, client_dir
-        self.controllers, self.device_ids = tuple(controllers), tuple(device_ids)
+        self.controllers = tuple(controllers)
+        self.devices = {device.id: device for device in devices}
+        self.device_ids = tuple(device_ids) or tuple(self.devices)
+        self._next_boot_id = next_boot_id
         self.start_speed = clock.speed
         self._min_real_reading_s = min_real_reading_s
         scenarios = read_pack_file(client_dir, "scenarios.json")
@@ -135,6 +155,7 @@ class Playground:
             zone.day_tank_l.update(start.day_tank_l)
             zone.pump_flow_lpm = start.pump_flow_lpm
             zone.flow_meter_ml.update(dict.fromkeys(zone.flow_meter_ml, 0.0))
+            zone.unmixed_ml.clear()
             zone.mode, zone.leak = start.mode, start.leak
         self.farm.climate.air = fresh.climate.air
         for item in dataclasses.fields(self.farm.power):
@@ -198,6 +219,8 @@ class Playground:
         if kind not in BUILT_DRILLS:
             title = drill.get("title", kind)
             raise invalid("body.kind", f"{title} isn't built in the simulator yet")
+        if kind == "DEVICE_OFFLINE" and (target not in self.devices or not self._next_boot_id):
+            raise invalid("body.target", f"{target} can't be switched off in this run")
         self._drill(kind, target, on)
         if on:
             self.faults[(kind, target)] = None
@@ -232,10 +255,24 @@ class Playground:
                 faults.add(part)
             else:
                 faults.discard(part)
+        elif kind == "STUCK_READING":
+            stuck = self.farm.zones[zone_id].stuck_readings
+            if not on:
+                stuck.pop(part, None)
+            elif part not in stuck:  # it sticks at what it reads now; Trigger again keeps that
+                stuck[part] = zone_telemetry(self.farm.zones[zone_id])["readings"][part]
         elif kind == "ESTOP":
             # The panel's E-STOP input: the controller notices it on its next step, as it
             # would a real one, so pressing ends a dose STOPPED and releasing restarts nothing.
             self.farm.zones[zone_id].estop = on
+        elif kind == "DEVICE_OFFLINE":
+            # The device stops: silent, last will, outputs off. Fix starts it again as a new
+            # boot; a zone controller comes back stopped (devices/base.py, devices/zone.py).
+            device = self.devices[target]
+            if on:
+                device.go_offline()
+            elif not device.powered:
+                device.come_back(self._next_boot_id(target))
 
     # --- the clock task's step -------------------------------------------------------------
 

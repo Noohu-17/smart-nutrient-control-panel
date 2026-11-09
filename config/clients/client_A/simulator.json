@@ -7,7 +7,7 @@
     "placeholderKeys": [
       "model.ecPerGramPerL", "model.rawWater", "model.doseLines", "model.refill",
       "model.phDrift", "model.solutionTemp", "model.plantUptake", "model.initialState",
-      "model.circulation", "model.air", "model.power", "demoStart"
+      "model.circulation", "model.air", "model.power", "model.mixing", "demoStart"
     ],
     "sources": {
       "model.ecPerGramPerL": "PLACEHOLDER: k in EC = k*M/V; 1.0 is the Track 3 guide's placeholder. Only k x nutrientGPerMl is observable, so a jar test of each stock fixes the product.",
@@ -30,19 +30,21 @@
       "model.initialState": "CONTRACT-EXAMPLE: contract 6.1 telemetry example (78 %, EC 1.62, pH 6.04, 23.4 C). Scenarios may override.",
       "model.initialState.dayTankPct": "CONTRACT-EXAMPLE: contract 6.1 telemetry example (A 64, B 66, ACID 81 %). Scenarios may override. Every installed line needs an entry.",
       "model.initialState.chillerSetpointC": "CONTRACT-EXAMPLE: contract 6.2 telemetry example (22.0 C). Must lie inside climate.json chillerSetpointC.",
+      "model.mixing.timeConstantS": "PLACEHOLDER: (T4-11) how fast dosed stock spreads through the reservoir while circulation runs; the probes see a share 1 - exp(-t / timeConstantS) of it. 600 s mixes 95 % in 30 min, plausible for about 900 L stirred by channel return at 31 L/min (one turnover in about 30 min). Measure by dosing and logging EC every minute.",
       "model.circulation.flowLpm": "CONTRACT-EXAMPLE: contract 6.1 telemetry example (31.0 L/min), the flow while the circulation pump runs. Measure at the pump.",
       "model.air": "CONTRACT-EXAMPLE: contract 6.2 telemetry example. Held constant until a weather model exists (the scenario's region, month and weather). tempByPosC needs an entry for every layout.climate.airSensors position.",
       "model.power": "CONTRACT-EXAMPLE: contract 6.3 example (231/229/233 V, UPS 100 %, 42 min). Held constant until the power drills exist (contract 11.4.3).",
       "model.numerics": "NUMERICAL: solver settings, not farm values.",
       "minRealReadingIntervalS": "NUMERICAL: fewest real seconds between periodic readings, so fast clocks don't flood the broker (T4-7). Not a farm value.",
-      "demoStart": "DEMO: the playground farm's starting state, and where POST /reset returns (T4-9). A healthy farm, except Zone A's EC a little below its recipe target (Z1 LETTUCE GROWING, ecTarget 1.2-1.8 in recipes.json), so a dose of A 120 + B 120 mL (about +0.12, see model.doseLines) makes sense. Zone B sits inside its target (BASIL SEEDLING, 1.0-1.4). zones.* override model.initialState for that zone; anything not given comes from model.initialState. weather must be one of scenarios.json weather."
+      "demoStart": "DEMO: the playground farm's starting state, and where POST /reset returns (T4-9, C-3). A healthy farm, with Zone A's EC 0.2 below its target: Z1 is LETTUCE GROWING, ecTarget 1.2-1.8 in recipes.json, whose middle is 1.5, so 1.30. The demo dose that brings it there is A 200 + B 200 mL (about +0.20 into 936 L, see model.doseLines): under limits.json maxPerDoseMl 300 per line and max24hMl 1500. Zone B sits at the middle of its target (BASIL SEEDLING, 1.0-1.4). zones.* override model.initialState for that zone; anything not given comes from model.initialState. weather must be one of scenarios.json weather. speed: the clock speed the demo starts at and Reset returns to, one of speedOptions, unless SIM_SPEED is set: at x60 a reading comes every 5 real seconds (5 simulated minutes), and the demo dose with its mix wait takes under a minute."
     }
   },
   "demoStart": {
     "scenario": "Demo farm",
     "weather": "CLEAR",
+    "speed": 60,
     "zones": {
-      "Z1": { "ecMsCm": 1.10 },
+      "Z1": { "ecMsCm": 1.30 },
       "Z2": { "ecMsCm": 1.20 }
     }
   },
@@ -81,6 +83,7 @@
       "chillerSetpointC": 22.0
     },
     "circulation": { "flowLpm": 31.0 },
+    "mixing": { "timeConstantS": 600 },
     "air": {
       "tempByPosC": { "PAD_END": 29.4, "MIDDLE": 31.0, "FAN_END": 33.1 },
       "rh": 71,

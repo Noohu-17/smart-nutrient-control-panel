@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from sim.clock import SimClock
-from sim.config import load_speed_options, load_zone_dose, load_zone_limits
+from sim.config import load_speed_options, load_zone_dose, load_zone_limits, read_pack_file
 from sim.controller.zone import ZoneController
 from sim.farm import load_farm
 from sim.farm_hal import FarmHal
@@ -144,7 +144,7 @@ def test_holding_the_reservoir_at_15_lowers_the_water_and_the_controller_refuses
     rig.playground.hold({"target": "Z1", "metric": "reservoirPct", "value": 15})
     readings = rig.readings()["readings"]
     assert readings["reservoirPct"] == 15
-    assert readings["ec"] == 1.10  # less water, same strength
+    assert readings["ec"] == 1.30  # less water, same strength
     cmd_id = rig.dose(A=20)
     assert [(s["state"], s["reason"]) for s in rig.states(cmd_id)] == [
         ("REJECTED", "RESERVOIR_LOW")]
@@ -162,14 +162,14 @@ def test_a_held_value_stays_put_while_the_water_around_it_drifts(rig):
 
 def test_ec_moves_to_a_held_value_over_about_two_readings(rig):
     """At x60 readings are 300 simulated seconds apart (contract 11.4), so 600 s."""
-    rig.playground.hold({"target": "Z1", "metric": "ec", "value": 1.5})
-    assert rig.readings()["readings"]["ec"] == 1.10
+    rig.playground.hold({"target": "Z1", "metric": "ec", "value": 1.7})
+    assert rig.readings()["readings"]["ec"] == 1.30
     rig.playground.step(300, SIM_START + timedelta(seconds=300))
-    assert rig.readings()["readings"]["ec"] == pytest.approx(1.30, abs=0.01)
+    assert rig.readings()["readings"]["ec"] == pytest.approx(1.50, abs=0.01)
     rig.playground.step(300, SIM_START + timedelta(seconds=600))
-    assert rig.readings()["readings"]["ec"] == 1.5
+    assert rig.readings()["readings"]["ec"] == 1.7
     rig.playground.step(3600, SIM_START + timedelta(seconds=4200))
-    assert rig.readings()["readings"]["ec"] == 1.5
+    assert rig.readings()["readings"]["ec"] == 1.7
 
 
 def test_gradual_false_jumps_at_once(rig):
@@ -221,14 +221,15 @@ def test_a_released_flow_returns_to_normal_and_release_all_empties_the_list(rig)
 
 
 def test_a_dose_releases_ec_ph_and_the_day_tanks_it_draws_from(rig):
-    for metric, value in [("ec", 1.10), ("ph", 6.0), ("dayTankPct.A", 50),
+    for metric, value in [("ec", 1.30), ("ph", 6.0), ("dayTankPct.A", 50),
                           ("dayTankPct.ACID", 50), ("reservoirPct", 78)]:
         rig.playground.hold({"target": "Z1", "metric": metric, "value": value, "gradual": False})
     rig.dose(A=20)
     rig.run(15)
     held = {hold["metric"] for hold in rig.playground.state()["holds"]}
     assert held == {"dayTankPct.ACID", "reservoirPct"}
-    assert rig.readings()["readings"]["ec"] > 1.10  # the dose has its real effect
+    rig.run(1800, step_s=60)  # mixing in (simulator.json model.mixing)
+    assert rig.readings()["readings"]["ec"] > 1.30  # the dose has its real effect
 
 
 def test_a_refill_releases_the_level_and_ec_and_ph_which_it_dilutes(rig):
@@ -323,7 +324,7 @@ def test_reset_returns_to_the_demo_starting_state(rig):
     assert state["simTime"] >= sim_time_before  # simulated time never goes back
     z1, z2 = rig.readings("Z1")["readings"], rig.readings("Z2")
     assert (z1["ec"], z1["ph"], z1["reservoirPct"], z1["dayTankPct"]) == (
-        1.10, 6.04, 78, {"A": 64, "B": 66, "ACID": 81})
+        1.30, 6.04, 78, {"A": 64, "B": 66, "ACID": 81})
     assert (z2["readings"]["ec"], z2["readings"]["circFlowLpm"], z2["quality"]["ec"]) == (
         1.20, 31.0, "OK")
     assert rig.zone.outputs == {"Z1-CIRC": "ON", "Z1-REFILL": "CLOSED", "Z1-DOSE-A": "OFF",
@@ -427,3 +428,105 @@ def test_reset_releases_a_pressed_estop_and_says_so_before_the_zone_is_unstopped
     assert rig.playground.state()["faults"] == []
     rig.run(STEP_S)
     assert len(events(rig)) == 2  # the release is reported once
+
+
+# --- the stuck reading drill (T4-11) ---------------------------------------------------------
+
+def stuck(rig, probe, on=True):
+    rig.playground.fault({"kind": "STUCK_READING", "target": f"Z1.{probe}", "on": on})
+
+
+def test_a_stuck_probe_repeats_its_value_as_stale_while_the_water_changes(rig):
+    stuck(rig, "ec")
+    rig.playground.hold({"target": "Z1", "metric": "ec", "value": 1.6, "gradual": False})
+    telemetry = rig.readings()
+    assert (telemetry["readings"]["ec"], telemetry["quality"]["ec"]) == (1.30, "STALE")
+    assert rig.zone.water().ec_ms_cm == pytest.approx(1.6)  # the water did change
+    assert rig.hal.read_sensor("EC") == (1.3, "STALE")  # and the controller sees the probe
+    assert rig.playground.state()["faults"] == [{"kind": "STUCK_READING", "target": "Z1.ec"}]
+
+    stuck(rig, "ec", on=False)
+    telemetry = rig.readings()
+    assert (telemetry["readings"]["ec"], telemetry["quality"]["ec"]) == (1.6, "OK")
+    assert rig.playground.state()["faults"] == []
+
+
+@pytest.mark.parametrize("probe", ["ec", "ph"])
+def test_a_dose_is_refused_while_ec_or_ph_is_stuck(rig, probe):
+    stuck(rig, probe)
+    cmd = rig.dose(A=20)
+    assert [(s["state"], s["reason"]) for s in rig.states(cmd)] == [("REJECTED", "SENSOR_STALE")]
+    stuck(rig, probe, on=False)
+    assert rig.states(rig.dose(A=20))[0]["state"] == "ACCEPTED"
+
+
+def test_a_stuck_temperature_probe_does_not_block_a_dose(rig):
+    """Contract 6.1: it is EC or pH that is never used for dosing unless OK."""
+    stuck(rig, "solTempC")
+    assert rig.readings()["quality"]["solTempC"] == "STALE"
+    assert rig.states(rig.dose(A=20))[0]["state"] == "ACCEPTED"
+
+
+def test_triggering_again_keeps_the_value_it_stuck_at(rig):
+    stuck(rig, "ph")
+    rig.playground.hold({"target": "Z1", "metric": "ph", "value": 6.5, "gradual": False})
+    stuck(rig, "ph")
+    assert rig.readings()["readings"]["ph"] == 6.04
+
+
+def test_a_stuck_probe_that_also_goes_offline_reads_null_with_fault(rig):
+    stuck(rig, "ph")
+    rig.playground.fault({"kind": "SENSOR_OFFLINE", "target": "Z1.ph", "on": True})
+    telemetry = rig.readings()
+    assert (telemetry["readings"]["ph"], telemetry["quality"]["ph"]) == (None, "FAULT")
+    rig.playground.fault({"kind": "SENSOR_OFFLINE", "target": "Z1.ph", "on": False})
+    telemetry = rig.readings()
+    assert (telemetry["readings"]["ph"], telemetry["quality"]["ph"]) == (6.04, "STALE")
+
+
+def test_reset_frees_a_stuck_probe(rig):
+    stuck(rig, "ec")
+    rig.playground.reset()
+    assert rig.readings()["quality"]["ec"] == "OK" and rig.zone.stuck_readings == {}
+
+
+# --- the believable demo dose (T4-11) --------------------------------------------------------
+
+
+DEMO_DOSE_ML = 200  # per line, A and B (C-3)
+
+
+def test_the_demo_dose_is_allowed_by_the_limits_and_fits_the_daily_limit():
+    """C-3: Zone A's EC is 0.2 below the middle of its target, and the dose that closes the gap
+    stays under limits.json's per-dose and 24 h limits, so the demo is never blocked."""
+    limits = read_pack_file(CLIENT_A, "limits.json")["zones"]["Z1"]["limits"]
+    for line in ("A", "B"):
+        assert limits["maxPerDoseMl"][line] > DEMO_DOSE_ML
+        assert limits["max24hMl"][line] >= 7 * DEMO_DOSE_ML  # seven demo doses a day still fit
+
+
+def test_the_demo_dose_brings_zone_a_to_its_target_in_under_a_minute_at_x60(rig):
+    """From the demo starting state, A 200 + B 200 mL with the config pack's own settings:
+    hardware.json pump rates, limits.json mix wait, simulator.json mixing (C-3, T4-11)."""
+    started = rig.farm.now
+    cmd = rig.command(
+        "DOSE", lines=[{"line": "A", "ml": DEMO_DOSE_ML}, {"line": "B", "ml": DEMO_DOSE_ML}],
+        order=["A", "B"],
+    )
+    ec_seen = []
+    while not rig.states(cmd)[-1].get("after"):
+        rig.run(60)
+        ec_seen.append(rig.readings()["readings"]["ec"])
+        assert len(ec_seen) < 120, "no `after` within two simulated hours"
+    final = rig.states(cmd)[-1]
+    assert final["state"] == "COMPLETED"
+    assert [line["state"] for line in final["lines"]] == ["DONE", "DONE"]
+    before, after = final["before"], final["after"]
+    assert before == {"ec": 1.30, "ph": 6.04}
+    assert 1.45 <= after["ec"] <= 1.55  # the middle of LETTUCE GROWING's 1.2-1.8 (recipes.json)
+    assert abs(after["ph"] - before["ph"]) <= 0.02  # A and B are pH-neutral: only its slow drift
+    real_s = (rig.farm.now - started).total_seconds() / 60  # at the demo speed, x60
+    assert 45 <= real_s <= 75, real_s
+    # The probes see the stock as it mixes in: EC climbs over minutes, not in one jump.
+    assert ec_seen == sorted(ec_seen)
+    assert ec_seen[4] < after["ec"] - 0.05  # 5 minutes in: pumped, not yet mixed

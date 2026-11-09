@@ -84,13 +84,14 @@ def load_zone_dose(client_dir: Path, zone_id: str) -> dict[str, Any]:
 def load_demo_start(client_dir: Path) -> dict[str, Any]:
     """The playground farm's starting state, where POST /reset returns (simulator.json "demoStart").
 
-    Its scenario name and weather (one of scenarios.json "weather"), and per zone the
-    model.initialState values that differ; the farm model checks those values. With no
-    demoStart, every zone starts as model.initialState and the scenario and weather are null.
+    Its scenario name, weather (one of scenarios.json "weather") and clock speed (one of
+    "speedOptions", or None), and per zone the model.initialState values that differ; the farm
+    model checks those values. With no demoStart, every zone starts as model.initialState, and
+    the scenario, weather and speed are None.
     """
     start = read_pack_file(client_dir, "simulator.json").get("demoStart")
     if start is None:
-        return {"scenario": None, "weather": None, "zones": {}}
+        return {"scenario": None, "weather": None, "speed": None, "zones": {}}
     if not isinstance(start, dict):
         raise ValueError(f"simulator.json: demoStart must be an object, got {start!r}")
     scenario = start.get("scenario")
@@ -103,6 +104,12 @@ def load_demo_start(client_dir: Path) -> dict[str, Any]:
             f"simulator.json: demoStart.weather must be one of scenarios.json weather "
             f"{options}, got {weather!r}"
         )
+    speed, speeds = start.get("speed"), load_speed_options(client_dir)
+    if speed is not None and (isinstance(speed, bool) or speed not in speeds):
+        raise ValueError(
+            f"simulator.json: demoStart.speed must be one of speedOptions {list(speeds)}, "
+            f"got {speed!r}"
+        )
     zones = start.get("zones", {})
     if not isinstance(zones, dict):
         raise ValueError(f"simulator.json: demoStart.zones must be an object, got {zones!r}")
@@ -112,7 +119,7 @@ def load_demo_start(client_dir: Path) -> dict[str, Any]:
                 f"simulator.json: demoStart.zones.{zone_id} may set {list(DEMO_ZONE_KEYS)}, "
                 f"got {values!r}"
             )
-    return {"scenario": scenario, "weather": weather, "zones": zones}
+    return {"scenario": scenario, "weather": weather, "speed": speed, "zones": zones}
 
 
 def load_site(client_dir: Path) -> str:

@@ -163,8 +163,8 @@ def test_the_projection_and_estimate_come_from_the_config_pack(api, worker):
     assert body["projected"] == {"ec": 1.74, "ph": 5.9}
     # recipes.json: Z1 is LETTUCE GROWING, EC 1.2–1.8 and pH 5.6–6.2
     assert check(body, "PROJECTED_EC_PH") == ("PASS", "Projected EC 1.74, pH 5.9 (target 1.2–1.8, 5.6–6.2)")
-    # hardware.json: every pump at 2 mL/s, so 270 mL takes 2.25 min; limits.json: 300 s mix wait
-    assert body["estimate"] == {"durationMin": 8, "totalMl": 270}
+    # hardware.json: every pump at 2 mL/s, so 270 mL takes 2.25 min; limits.json: 3000 s mix wait
+    assert body["estimate"] == {"durationMin": 53, "totalMl": 270}
 
 
 def test_the_answer_has_the_fields_of_the_contract_example(api, worker):

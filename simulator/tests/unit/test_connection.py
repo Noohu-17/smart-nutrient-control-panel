@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import socket
 
 import aiomqtt
 import pytest
@@ -13,6 +14,7 @@ from sim.devices.base import (
     RECONNECT_JITTER,
     RECONNECT_MAX_S,
     connect_forever,
+    drop_link,
     jittered,
     reconnect_delay,
 )
@@ -121,3 +123,49 @@ def test_connects_as_the_device_with_a_persistent_session():
     assert (kwargs["username"], kwargs["password"]) == ("ZC1", "pw")
     assert kwargs["clean_session"] is False
     assert kwargs["protocol"] == aiomqtt.ProtocolVersion.V311
+
+
+def test_a_device_that_is_switched_off_does_not_connect_until_it_is_back():
+    """T4-11: connect_forever waits for `ready` before every attempt."""
+    connects, power_on = [], asyncio.Event()
+
+    def factory(**kwargs):
+        connects.append(kwargs["identifier"])
+        return FakeConnection(refuse=False)
+
+    async def session(client):
+        pass
+
+    async def scenario():
+        task = asyncio.create_task(connect_forever(
+            load_settings({}), "ZC1", session, client_factory=factory, ready=power_on.wait))
+        await asyncio.sleep(0.05)
+        before = list(connects)
+        power_on.set()
+        await asyncio.wait_for(task, 1.0)
+        return before
+
+    assert asyncio.run(scenario()) == [] and connects == ["ZC1"]
+
+
+def test_dropping_the_link_shuts_the_socket_and_sends_no_disconnect():
+    """T4-11: as a crash would, so the broker publishes the last will."""
+
+    class Socket:
+        shut = None
+
+        def shutdown(self, how):
+            self.shut = how
+
+    class Paho:
+        sock = Socket()
+
+        def socket(self):
+            return self.sock
+
+        def disconnect(self):
+            raise AssertionError("a crash sends no DISCONNECT")
+
+    client = type("Client", (), {"_client": Paho()})()
+    drop_link(client)
+    assert client._client.sock.shut == socket.SHUT_WR

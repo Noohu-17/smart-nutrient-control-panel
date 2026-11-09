@@ -62,6 +62,7 @@ class Sim:
         self.settings, self.state_dir = settings, tmp_path
         self.received: list[dict] = []
         self.verdicts: list[tuple[str, str]] = []
+        self.wills: list[tuple[str, dict]] = []  # last wills: they carry no bootId (6.4)
 
     async def __aenter__(self):
         client_dir = self.settings.client_dir
@@ -79,9 +80,9 @@ class Sim:
                                state_dir=self.state_dir) for d in load_devices(client_dir)]
         min_real_s = load_min_real_reading_interval_s(client_dir)
         self.playground = Playground(farm, self.clock, client_dir,
-                                     controllers=controllers_of(devices),
-                                     device_ids=[d.id for d in devices],
-                                     min_real_reading_s=min_real_s)
+                                     controllers=controllers_of(devices), devices=devices,
+                                     min_real_reading_s=min_real_s,
+                                     next_boot_id=lambda _: BOOT_ID + 1)
         loop = TickLoop(self.clock, self.playground,
                         [d for d in devices if isinstance(d, ReadingDevice)],
                         min_real_reading_s=min_real_s, controllers=controllers_of(devices))
@@ -104,7 +105,10 @@ class Sim:
             if message.retain:
                 continue  # left by earlier runs
             payload = json.loads(message.payload)
-            if payload.get("bootId") == BOOT_ID:
+            if payload.get("type") == "DEVICE_STATUS" and "bootId" not in payload:
+                self.wills.append((str(message.topic), payload))
+                self.verdicts.append(check(message.payload))
+            elif payload.get("bootId") in (BOOT_ID, BOOT_ID + 1):  # + 1: after a drill's reboot
                 self.received.append(payload)
                 self.verdicts.append(check(message.payload))
 
@@ -200,7 +204,7 @@ def test_pause_holds_the_clock_and_reset_returns_to_the_demo_start(broker, run, 
     assert running[1]["speed"] == 60 and moved[1]["simTime"] > running[1]["simTime"]
     assert held["readings"]["ec"] == 2.0
     assert (reset[0], reset[1]["holds"], reset[1]["faults"]) == (200, [], [])
-    assert (after["readings"]["ec"], after["readings"]["reservoirPct"]) == (1.10, 78)
+    assert (after["readings"]["ec"], after["readings"]["reservoirPct"]) == (1.30, 78)
     all_ok(sim)
 
 
@@ -246,4 +250,78 @@ def test_estop_during_a_dose_and_resume_only_after_release(broker, run, tmp_path
     z1 = [m for m in sim.received if m.get("zone") == "Z1"]
     assert [m["kind"] for m in z1 if m["type"] == "EVENT"] == ["ESTOP_PRESSED", "ESTOP_RELEASED"]
     assert any(m["type"] == "ZONE_STATE" and m["estop"] and m["stopped"] for m in z1)
+    all_ok(sim)
+
+
+def test_a_stuck_probe_reads_stale_and_a_dose_is_rejected(broker, run, tmp_path):
+    """T4-11: STUCK_READING on EC."""
+
+    async def scenario():
+        async with Sim(broker, tmp_path) as sim:
+            drill = {"kind": "STUCK_READING", "target": "Z1.ec"}
+            triggered = await sim.api("POST", "/faults", {**drill, "on": True})
+            reading = await sim.next_reading(triggered[1]["simTime"])
+            cmd = dose(A=120, B=120)
+            await sim.cloud.publish(ZONE_CMD, json.dumps(cmd), qos=1)
+            answer = await sim.wait_for(lambda m: m.get("cmdId") == cmd["cmdId"])
+            fixed = await sim.api("POST", "/faults", {**drill, "on": False})
+            back = await sim.next_reading(fixed[1]["simTime"])
+            return sim, reading, answer, back
+
+    sim, reading, answer, back = run(scenario())
+    assert (reading["readings"]["ec"], reading["quality"]["ec"]) == (1.30, "STALE")
+    assert [(m["state"], m["reason"]) for m in answer] == [("REJECTED", "SENSOR_STALE")]
+    assert back["quality"]["ec"] == "OK"
+    all_ok(sim)
+
+
+def test_a_controller_lost_mid_dose_comes_back_stopped_with_outputs_off(broker, run, tmp_path):
+    """T4-11: DEVICE_OFFLINE on ZC1 while it doses. Its last will goes out, a dose sent while
+    it is away waits at the broker, and it comes back as a new boot, stopped."""
+    offline = {"kind": "DEVICE_OFFLINE", "target": "ZC1"}
+
+    async def scenario():
+        async with Sim(broker, tmp_path) as sim:
+            def answered(cmd, state=None):
+                return sim.wait_for(lambda m: m.get("cmdId") == cmd["cmdId"]
+                                    and (state is None or m["state"] == state))
+
+            cmd = dose(A=300)
+            await sim.cloud.publish(ZONE_CMD, json.dumps(cmd), qos=1)
+            await answered(cmd, "EXECUTING")
+            await asyncio.sleep(0.5)
+            await sim.api("POST", "/faults", {**offline, "on": True})
+            async with asyncio.timeout(10):
+                while not sim.wills:
+                    await asyncio.sleep(0.05)
+            held = dose(A=20)  # sent while ZC1 is away: the broker keeps it
+            await sim.cloud.publish(ZONE_CMD, json.dumps(held), qos=1)
+            await asyncio.sleep(1.5)
+            unanswered = [m for m in sim.received if m.get("cmdId") == held["cmdId"]]
+            await sim.api("POST", "/faults", {**offline, "on": False})
+            await answered(cmd, "PARTIAL")
+            await answered(held)
+            resume = command("RESUME")
+            await sim.cloud.publish(ZONE_CMD, json.dumps(resume), qos=1)
+            await answered(resume, "COMPLETED")
+            return sim, cmd, held, unanswered
+
+    sim, cmd, held, unanswered = run(scenario())
+    assert sim.wills == [("farm/siet-ph1/device/ZC1/status",
+                          {"v": 1, "type": "DEVICE_STATUS", "device": "ZC1", "online": False})]
+    assert unanswered == []  # nothing answers while the controller is away
+    zc1 = [m for m in sim.received if m["device"] == "ZC1"]
+    new_boot = [m for m in zc1 if m["bootId"] == BOOT_ID + 1]
+    assert (new_boot[0]["type"], new_boot[0]["seq"], new_boot[0]["online"]) == (
+        "DEVICE_STATUS", 1, True)
+    closed = [m for m in new_boot if m.get("cmdId") == cmd["cmdId"]][-1]
+    assert (closed["state"], closed["reason"]) == ("PARTIAL", "REBOOT_MID_DOSE")
+    assert 0 < closed["lines"][0]["deliveredMl"] < 300
+    assert [(m["state"], m["reason"]) for m in new_boot if m.get("cmdId") == held["cmdId"]] == [
+        ("REJECTED", "ZONE_STOPPED")]
+    assert [m["detail"] for m in new_boot if m["type"] == "EVENT"] == [{"reason": "REBOOT"}]
+    back = next(m for m in new_boot if m["type"] == "ZONE_STATE")
+    assert back["stopped"] is True and back["operation"] is None
+    assert back["outputs"] == {"Z1-CIRC": "ON", "Z1-REFILL": "CLOSED", "Z1-DOSE-A": "OFF",
+                               "Z1-DOSE-B": "OFF", "Z1-DOSE-ACID": "OFF"}
     all_ok(sim)

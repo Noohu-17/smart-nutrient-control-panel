@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from .alarms import climate_alarms, zone_alarms
 from .clock import SimClock, TickLoop
 from .config import (
+    load_demo_start,
     load_devices,
     load_min_real_reading_interval_s,
     load_site,
@@ -98,16 +99,28 @@ def attach_controller(device: ZoneDevice, farm: Farm, client_dir: Path, state_di
     device.controller.start()
 
 
-def controllers_of(devices: list[SimDevice]) -> list[ZoneController]:
-    return [d.controller for d in devices if isinstance(d, ZoneDevice) and d.controller]
+def starting_speed(settings: Settings, playground: bool) -> float:
+    """SIM_SPEED when it is set. Otherwise a playground site starts at its demo speed
+    (simulator.json demoStart.speed, C-3) and any other site at real time."""
+    if settings.sim_speed is not None:
+        return settings.sim_speed
+    demo_speed = load_demo_start(settings.client_dir)["speed"] if playground else None
+    return demo_speed if demo_speed is not None else 1
+
+
+def controllers_of(devices: list[SimDevice]) -> list[ZoneDevice]:
+    """The zone devices with a controller: the clock task steps them and Reset resets them,
+    through the device, so a device that is offline (a playground drill) doesn't run."""
+    return [d for d in devices if isinstance(d, ZoneDevice) and d.controller]
 
 
 async def run(settings: Settings) -> None:
     site = load_site(settings.client_dir)
     layout_devices = load_devices(settings.client_dir)  # one SimDevice per entry (contract 2.2)
     # The simulated day starts now; scenario start times (contract 11.4) come later.
-    clock = SimClock(datetime.now(UTC), settings.sim_speed, load_speed_options(settings.client_dir))
     is_playground = playground_enabled(settings.client_dir)
+    speed = starting_speed(settings, is_playground)
+    clock = SimClock(datetime.now(UTC), speed, load_speed_options(settings.client_dir))
     farm = load_farm(settings.client_dir)  # before bootIds: a refused start is not a restart
     farm.now = clock.last_tick
     alerts = read_pack_file(settings.client_dir, "alerts.json")
@@ -124,9 +137,11 @@ async def run(settings: Settings) -> None:
     min_real_reading_s = load_min_real_reading_interval_s(settings.client_dir)
     playground = None
     if is_playground:  # the farm moves through it, so held values stay put (contract 11.4.2)
+        boot_file = settings.state_dir / "boot_ids.json"
         playground = Playground(
             farm, clock, settings.client_dir, controllers=controllers_of(devices),
-            device_ids=[d.id for d in devices], min_real_reading_s=min_real_reading_s,
+            devices=devices, min_real_reading_s=min_real_reading_s,
+            next_boot_id=lambda device_id: next_boot_ids(boot_file, [device_id])[device_id],
         )
     tick_loop = TickLoop(
         clock,

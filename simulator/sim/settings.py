@@ -26,7 +26,7 @@ class Settings:
     log_level: str
     client_dir: Path
     state_dir: Path
-    sim_speed: float
+    sim_speed: float | None  # None: not set, so the demo's speed or real time (main.py)
     device_passwords: Mapping[str, str] = field(default_factory=dict, repr=False)
     control_host: str = "127.0.0.1"  # the playground control API (contract 11.4): never public
     control_port: int = 8100
@@ -42,9 +42,9 @@ class Settings:
 
 def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
     port = _port(env, "MQTT_PORT", "1883")
-    speed_text = env.get("SIM_SPEED", "1")
+    speed_text = env.get("SIM_SPEED", "").strip()
     try:
-        speed = float(speed_text)
+        speed = float(speed_text) if speed_text else None  # None: the run's own (main.py)
     except ValueError:
         raise ValueError(f"SIM_SPEED must be a number, got {speed_text!r}") from None
     return Settings(

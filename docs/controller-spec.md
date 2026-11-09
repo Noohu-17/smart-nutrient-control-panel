@@ -71,7 +71,7 @@ A `REFILL` `START` opens the valve and closes it when the reservoir reaches `tar
 1. All outputs off, and circulation on. The controller starts circulation itself; no command can.
 2. `stopped` is true until a person sends `RESUME`.
 3. The `cmdId` memory, latches and 24 h totals come back from `nvs`.
-4. A command still in the journal is reported `PARTIAL` if anything was delivered, otherwise `FAILED`, with `REBOOT_MID_DOSE`. It is never resumed.
+4. A command still in the journal is reported `PARTIAL` if anything was delivered, otherwise `FAILED`, with `REBOOT_MID_DOSE`. It is never resumed. The line that was running when it stopped adds its journalled mL to the 24 h totals (lines that had ended were counted as they ended), so a reboot can't hide a delivery from the daily limit.
 5. A `REBOOTED` event gives the reason.
 
 A new run of the simulator is not a reboot (agreed on #31). `start()` brings back what `nvs` kept and closes a journalled command the same way, without a `REBOOTED` event, and the zone is not stopped.
@@ -80,7 +80,7 @@ A new run of the simulator is not a reboot (agreed on #31). `start()` brings bac
 
 | `nvs` key | Holds | Written |
 |---|---|---|
-| `journal` | The running command, with the mL measured so far | Before any output switches on, at each line and progress report; emptied when it ends |
+| `journal` | The running command, with the mL measured so far | Before any output switches on, at each line and progress report, and every 5 s of the controller's own clock while a line runs (so a fast simulated clock loses at most 5 s of pumping); emptied when it ends |
 | `recentCmds` | The last 50 `cmdId`s with their last `CMD_STATE` | At every state |
 | `latches` | Active latches | When one is added or cleared |
 | `doseHistory` | `[atMs, line, ml]` from the last 24 h | When mL are delivered |

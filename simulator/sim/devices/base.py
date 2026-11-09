@@ -8,6 +8,8 @@ broker goes away, the connection retries with a growing delay and logs
 SimDevice adds the heartbeat: DEVICE_STATUS every 30 real seconds, retained,
 with a last will saying offline (contract 6.4). Everything a device sends goes through
 one outbox, so seq follows publish order whatever the message type (contract 5).
+A playground drill can stop a device as a crash would (go_offline: silent, last will)
+and start it again as a new boot (come_back: next bootId, seq from 1).
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import contextlib
 import json
 import logging
 import random
+import socket
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
@@ -78,16 +81,20 @@ async def connect_forever(
     client_factory: Callable[..., Any] = aiomqtt.Client,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     rng: random.Random | None = None,
+    ready: Callable[[], Awaitable[Any]] | None = None,
 ) -> None:
     """Connect as `client_id` and run `session`; reconnect whenever the link drops.
 
     Returns only when `session` returns normally. Cancelling the task stops it. The jitter is
     seeded with the device ID: each device waits differently, and each run repeats exactly.
+    `ready` is awaited before each attempt: a device that is switched off doesn't connect.
     """
     username, password = settings.login(client_id)
     rng = rng or random.Random(client_id)
     attempt = 0
     while True:
+        if ready is not None:
+            await ready()
         try:
             async with client_factory(
                 hostname=settings.mqtt_host,
@@ -134,9 +141,14 @@ class SimDevice:
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
         monotonic: Callable[[], float] = time.monotonic,
     ):
-        self.id, self.kind = device_id, kind
+        self.id, self.kind, self.site = device_id, kind, site
         self.topic = status_topic(site, device_id)
         self.envelope = Envelope(site, device_id, boot_id)
+        self.powered = True  # False while a playground drill has stopped it (contract 11.4.3)
+        self._power_on = asyncio.Event()
+        self._power_on.set()
+        self._client: aiomqtt.Client | None = None
+        self._status_queued = False
         self.clock = clock
         self.heartbeat_s = heartbeat_s
         self._now, self._monotonic = now, monotonic
@@ -157,12 +169,52 @@ class SimDevice:
         return aiomqtt.Will(self.topic, json.dumps(offline_status(self.id)), qos=1, retain=True)
 
     async def run(self, settings: Settings, **connect_options: Any) -> None:
-        await connect_forever(settings, self.id, self.session, will=self.will(), **connect_options)
+        await connect_forever(
+            settings, self.id, self.session, will=self.will(), ready=self._power_on.wait,
+            **connect_options,
+        )
+
+    def go_offline(self) -> None:
+        """The device stops (a crash, a hang, its power): it goes silent at once. The link drops
+        without a goodbye, so the broker publishes its last will (contract 6.4, 10 rule 6), and
+        what it had not sent yet is lost with its RAM."""
+        if not self.powered:
+            return
+        self.powered = False
+        self._power_on.clear()
+        self._outbox.clear()
+        self._in_flight = None
+        if self._client is not None:
+            drop_link(self._client)
+        log.info("%s is offline (playground drill)", self.id)
+        self.on_power_lost()
+
+    def come_back(self, boot_id: int) -> None:
+        """The device starts again: a new boot, so a new bootId and seq from 1 (contract 5). It
+        says it is online first, then does what a starting device does, then reconnects."""
+        if self.powered:
+            return
+        self.powered = True
+        self.envelope = Envelope(self.site, self.id, boot_id)
+        self._booted = self._monotonic()
+        self.send(self.topic, self.status, qos=1, retain=True)
+        self._status_queued = True
+        log.info("%s is back (bootId %d)", self.id, boot_id)
+        self.on_boot()
+        self._power_on.set()
+
+    def on_power_lost(self) -> None:
+        """What stops with the device, beyond its messages: a controller's outputs."""
+
+    def on_boot(self) -> None:
+        """What the device does as it starts again after go_offline()."""
 
     def send(
         self, topic: str, build: Callable[[], dict[str, Any]], *, qos: int, retain: bool
     ) -> None:
         """Queue one message. It goes out in turn, as soon as the device is connected."""
+        if not self.powered:
+            return  # a stopped device sends nothing
         if len(self._outbox) == OUTBOX_MAX and not self._warned_full:
             log.warning("%s outbox full; dropping the oldest messages", self.id)
             self._warned_full = True
@@ -184,6 +236,7 @@ class SimDevice:
         if self._had_session:
             self.on_reconnect()
         self._had_session = True
+        self._client = client
         workers = {
             asyncio.create_task(self._listen(client)),
             asyncio.create_task(self._heartbeat()),
@@ -197,6 +250,7 @@ class SimDevice:
                 await self._publish(client, offline_status(self.id))
             raise
         finally:
+            self._client = None
             await _stop(workers)
         for task in done:
             task.result()
@@ -210,7 +264,10 @@ class SimDevice:
 
     async def _heartbeat(self) -> None:
         while True:
-            self.send(self.topic, self.status, qos=1, retain=True)
+            if self._status_queued:
+                self._status_queued = False  # come_back() already queued this one
+            else:
+                self.send(self.topic, self.status, qos=1, retain=True)
             await asyncio.sleep(self.heartbeat_s)
 
     async def _publisher(self, client: aiomqtt.Client) -> None:
@@ -235,6 +292,17 @@ class SimDevice:
         await client.publish(
             self.topic, json.dumps(message), qos=1, retain=True, timeout=PUBLISH_TIMEOUT_S
         )
+
+
+def drop_link(client: aiomqtt.Client) -> None:
+    """Close the connection without MQTT's DISCONNECT, as a crash would, so the broker publishes
+    the last will. aiomqtt has no public call for this, so it shuts down paho's socket for
+    sending: the broker sees the connection end and closes it, aiomqtt sees a lost connection,
+    and the session ends with MqttError as on any drop."""
+    sock = client._client.socket()  # noqa: SLF001
+    if sock is not None:
+        with contextlib.suppress(OSError):
+            sock.shutdown(socket.SHUT_WR)
 
 
 async def _stop(tasks: set[asyncio.Task[None]]) -> None:

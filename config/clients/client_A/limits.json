@@ -3,7 +3,7 @@
   "_meta": {
     "client": "client_A",
     "placeholder": true,
-    "note": "Placeholder values until the agronomy numbers arrive (OPEN-5). Do not use for a real farm. Only limits.maxPerDoseMl.A and limits.maxPerDoseMl.B (300 mL each, from the handoff) are real. limits.maxPerDoseMl.ACID (100 mL) is a placeholder.",
+    "note": "Placeholder values until the agronomy numbers arrive (OPEN-5). Do not use for a real farm. Only limits.maxPerDoseMl.A and limits.maxPerDoseMl.B (300 mL each, from the handoff) are real. limits.maxPerDoseMl.ACID (100 mL) is a placeholder. dose.mixWaitS (3000 s, T4-11): how long to circulate before reading `after` (contract 7.2); 5 times simulator.json model.mixing.timeConstantS, so `after` reads mixed water. With it the demo dose (A 200 + B 200 mL at 2 mL/s, simulator.json demoStart) takes under a minute of real time at x60.",
     "placeholderKeys": [
       "zones.*.limits.maxPerDoseMl.ACID",
       "zones.*.limits.max24hMl",
@@ -26,7 +26,7 @@
         "phMax": 6.8,
         "minReservoirPctToDose": 30
       },
-      "dose": { "maxDurationS": 600, "mixWaitS": 300, "tolerancePct": 5 }
+      "dose": { "maxDurationS": 600, "mixWaitS": 3000, "tolerancePct": 5 }
     },
     "Z2": {
       "limits": {
@@ -37,7 +37,7 @@
         "phMax": 6.8,
         "minReservoirPctToDose": 30
       },
-      "dose": { "maxDurationS": 600, "mixWaitS": 300, "tolerancePct": 5 }
+      "dose": { "maxDurationS": 600, "mixWaitS": 3000, "tolerancePct": 5 }
     }
   }
 }

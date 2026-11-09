@@ -29,6 +29,7 @@ INPUT_ESTOP, INPUT_REMOTE, INPUT_MAINT = "ESTOP", "MODE_REMOTE", "MODE_MAINT"
 NVS_JOURNAL, NVS_RECENT = "journal", "recentCmds"
 NVS_DOSED, NVS_LATCHES = "doseHistory", "latches"
 PROGRESS_MS = 5000  # contract 6.6, 14: EXECUTING at least every 5 s while a line runs
+JOURNAL_MS = 5000  # the measured mL go to nvs this often on the controller's own clock
 # Contract 14's defaults, for when neither the DOSE nor limits.json "dose" gives one.
 DOSE_DEFAULTS = {"maxDurationS": 600, "mixWaitS": 300, "tolerancePct": 5}
 RUNNING = ("ACCEPTED", "EXECUTING")
@@ -59,6 +60,7 @@ class Operation:
     deadline_ms: int | None = None  # on the controller's clock, like the mix wait
     mix_until_ms: int | None = None
     progress_utc_ms: int = 0  # real time: progress is for the people watching
+    journal_ms: int = 0  # the controller's clock: a reboot loses at most JOURNAL_MS of pumping
 
 
 class ZoneController:
@@ -245,6 +247,8 @@ class ZoneController:
             self._finish(operation, now_ms, "TIMEOUT")
         elif self.hal.utc_ms() - operation.progress_utc_ms >= PROGRESS_MS:
             self._report_progress(operation)
+        elif now_ms - operation.journal_ms >= JOURNAL_MS:
+            self._write_journal(operation)  # what was measured, should the controller die now
 
     def _measure(self, operation: Operation, line: dict[str, Any]) -> None:
         name = line["line"]
@@ -465,6 +469,9 @@ class ZoneController:
         lines = journal.get("lines") or []
         delivered = any(line["deliveredMl"] > 0 for line in lines)
         for line in lines:
+            if line["state"] == "RUNNING" and line["deliveredMl"] > 0:
+                # Ended lines were counted as they ended; this one's measured mL count now.
+                self.record_delivered(line["line"], line["deliveredMl"])
             if line["state"] in ("RUNNING", "PENDING"):
                 line["state"] = "SHORT" if line["deliveredMl"] > 0 else "SKIPPED"
         self.hal.nvs_write(NVS_JOURNAL, {})
@@ -522,6 +529,7 @@ class ZoneController:
             self.hal.set_output(output, on)
 
     def _write_journal(self, operation: Operation) -> None:
+        operation.journal_ms = self.hal.now_ms()
         self.hal.nvs_write(
             NVS_JOURNAL,
             {

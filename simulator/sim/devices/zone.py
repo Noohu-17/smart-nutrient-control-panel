@@ -69,6 +69,28 @@ class ZoneDevice(StateDevice):
         """Its zone's commands and every stop (contract 4); nothing without a controller."""
         return (self.cmd_topic, self.stop_topic) if self.controller else ()
 
+    def step(self, now_ms: int) -> None:
+        """The clock task's controller step. A stopped device's controller isn't running."""
+        if self.powered and self.controller:
+            self.controller.step(now_ms)
+
+    def reset_to_start(self) -> None:
+        """POST /reset (contract 11.4), for the controller of a device that is running."""
+        if self.powered and self.controller:
+            self.controller.reset_to_start()
+
+    def on_power_lost(self) -> None:
+        """Its relays drop out: every pump and valve it drives stops, circulation too."""
+        refill = f"{self.zone.zone_id}-REFILL"
+        for equipment in self.zone.outputs:
+            self.zone.outputs[equipment] = "CLOSED" if equipment == refill else "OFF"
+
+    def on_boot(self) -> None:
+        """The controller starts again from what nvs kept: outputs safe, the zone stopped, and
+        an interrupted command closed with what was measured, never resumed (6.8, 8.3)."""
+        if self.controller:
+            self.controller.restart("REBOOT")
+
     def on_message(self, topic: str, payload: bytes | str) -> None:
         try:
             cmd = json.loads(payload)

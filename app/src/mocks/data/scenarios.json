@@ -58,6 +58,16 @@
       "params": {}
     },
     {
+      "kind": "STUCK_READING",
+      "group": "SENSING",
+      "prdCode": "F3",
+      "targetType": "ZONE_SENSOR",
+      "title": "Stuck reading",
+      "explanation": "A probe keeps sending the same value while the water changes. Its reading is not fresh any more (STALE), so doses that need it are refused.",
+      "fix": "Frees the probe: it reads the water again.",
+      "params": {}
+    },
+    {
       "kind": "NO_FLOW",
       "group": "PUMPS_AND_VALVES",
       "prdCode": "F8",
@@ -105,6 +115,16 @@
       "title": "Power cut",
       "explanation": "The controller restarts with all outputs off.",
       "fix": "Restores mains power.",
+      "params": {}
+    },
+    {
+      "kind": "DEVICE_OFFLINE",
+      "group": "CONNECTIVITY_AND_DATA",
+      "prdCode": "",
+      "targetType": "DEVICE",
+      "title": "Device offline",
+      "explanation": "The device stops and goes silent: the broker sends its last will, and a controller's outputs switch off. The cloud refuses doses while its controller is offline.",
+      "fix": "Brings it back: it restarts with a new bootId. A zone controller comes back stopped, with dosing and refill off, until someone presses Resume.",
       "params": {}
     }
   ],

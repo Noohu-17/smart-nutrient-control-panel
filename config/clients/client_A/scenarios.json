@@ -39,11 +39,13 @@
   "failureDrills": [
     { "kind": "PROBE_DRIFT", "group": "SENSING", "prdCode": "F1", "targetType": "ZONE_SENSOR", "title": "Probe drift", "explanation": "A probe slowly reads away from the true value.", "fix": "Recalibrates the probe.", "params": {} },
     { "kind": "SENSOR_OFFLINE", "group": "SENSING", "prdCode": "", "targetType": "ZONE_SENSOR", "title": "Sensor offline", "explanation": "A probe stops answering: its reading is null with FAULT, so doses that need it are refused.", "fix": "Reconnects the probe.", "params": {} },
+    { "kind": "STUCK_READING", "group": "SENSING", "prdCode": "F3", "targetType": "ZONE_SENSOR", "title": "Stuck reading", "explanation": "A probe keeps sending the same value while the water changes. Its reading is not fresh any more (STALE), so doses that need it are refused.", "fix": "Frees the probe: it reads the water again.", "params": {} },
     { "kind": "NO_FLOW", "group": "PUMPS_AND_VALVES", "prdCode": "F8", "targetType": "DOSE_LINE", "title": "Pump runs, nothing flows", "explanation": "The dosing pump runs but the flow meter sees no flow.", "fix": "Clears the blockage.", "params": {} },
     { "kind": "LEAK", "group": "WATER", "prdCode": "F17", "targetType": "ZONE", "title": "Leak sensor wet", "explanation": "The leak sensor under the zone panel reports water.", "fix": "Dries the leak sensor.", "params": {} },
     { "kind": "HEATWAVE", "group": "CLIMATE_AND_ROOMS", "prdCode": "F20", "targetType": "POLYHOUSE", "title": "Heatwave", "explanation": "Outside temperature climbs well above normal for the season.", "fix": "Returns the weather to normal.", "params": {} },
     { "kind": "ESTOP", "group": "SAFETY_AND_MODES", "prdCode": "F23", "targetType": "ZONE", "title": "E-STOP pressed", "explanation": "Someone presses the E-STOP on the zone's dosing cabinet: any dose or refill stops at once and the zone is stopped.", "fix": "Releases the E-STOP. Nothing restarts: the zone stays stopped until someone presses Resume.", "params": {} },
-    { "kind": "POWER_CUT", "group": "POWER", "prdCode": "F15", "targetType": "DEVICE", "title": "Power cut", "explanation": "The controller restarts with all outputs off.", "fix": "Restores mains power.", "params": {} }
+    { "kind": "POWER_CUT", "group": "POWER", "prdCode": "F15", "targetType": "DEVICE", "title": "Power cut", "explanation": "The controller restarts with all outputs off.", "fix": "Restores mains power.", "params": {} },
+    { "kind": "DEVICE_OFFLINE", "group": "CONNECTIVITY_AND_DATA", "prdCode": "", "targetType": "DEVICE", "title": "Device offline", "explanation": "The device stops and goes silent: the broker sends its last will, and a controller's outputs switch off. The cloud refuses doses while its controller is offline.", "fix": "Brings it back: it restarts with a new bootId. A zone controller comes back stopped, with dosing and refill off, until someone presses Resume.", "params": {} }
   ],
   "holdable": {
     "zone": {

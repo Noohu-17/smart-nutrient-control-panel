@@ -119,7 +119,7 @@ def test_a_zone_device_from_the_layout_gets_its_controller_and_nvs_in_the_state_
     assert isinstance(rig.device.controller, ZoneController)
     rig.device.on_message(rig.device.cmd_topic, json.dumps(dose(A=10)))
     assert (tmp_path / "nvs_ZC1.json").exists()
-    assert controllers_of([rig.device]) == [rig.device.controller]
+    assert controllers_of([rig.device]) == [rig.device]  # stepped through the device (T4-11)
 
 
 def test_without_a_state_folder_a_zone_device_has_no_controller_and_listens_to_nothing():

@@ -1,14 +1,16 @@
 """The simulated farm's live state, built from the config pack: what the devices report.
 
 Only physics moves it, through Farm.step(): the reservoirs follow the Track 3 model, a running
-dosing pump moves stock from its day-tank into the reservoir at its rate in hardware.json, and the
-climate's run-time counters add up. Air and power are held constant until a weather model and the
+dosing pump moves stock from its day-tank into the reservoir at its rate in hardware.json, where
+circulation mixes it in over time (simulator.json model.mixing), and the climate's run-time
+counters add up. Air and power are held constant until a weather model and the
 power drills exist. Nothing here switches equipment: outputs change only when a controller, acting
 on a person's command, sets them (contract 0, "Phase A is manual").
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -41,6 +43,7 @@ from .model.water import (
 )
 
 FANS_GROUP = "FANS"  # contract 6.2 runTimeTodayMin: all the fans count as one
+MIXED_ML = 1e-3  # stock left unmixed below this is mixed in at once
 RESERVED_FOGGER = "FOG1"  # contract 2.3: reported as not installed, so the app can say so
 SHADE_START = "OPEN"  # where a new farm's screens are, as in contract 6.2; a scenario moves them
 SETPOINTS = ("airTempMaxC", "airRhMax", "solTempMaxC")  # contract 6.2
@@ -69,6 +72,9 @@ class ZoneFarm:
     dose_pump_ml_per_s: Mapping[str, float] = field(default_factory=dict)  # hardware.json
     flow_meter_ml: dict[str, float] = field(default_factory=dict)  # counted since last read
     sensor_faults: set[str] = field(default_factory=set)  # probes that stopped answering (11.4.3)
+    stuck_readings: dict[str, float | None] = field(default_factory=dict)  # stuck probes' values
+    mix_time_constant_s: float = 0.0  # simulator.json model.mixing; 0 mixes at once
+    unmixed_ml: dict[str, float] = field(default_factory=dict)  # stock not yet through the water
 
     @property
     def active_cmd_id(self) -> str | None:
@@ -92,7 +98,8 @@ class ZoneFarm:
         self.reservoir = step_reservoir(self.reservoir, dt_s, inputs, self.params)
 
     def _run_dose_pumps(self, dt_s: float) -> None:
-        """A running pump moves stock from its day-tank into the reservoir: EC really changes.
+        """A running pump moves stock from its day-tank into the reservoir, where it mixes in
+        over time (_mix): EC really changes, as the probes see it.
 
         A day-tank that runs dry delivers what it had left, and its flow meter counts only that.
         """
@@ -102,8 +109,24 @@ class ZoneFarm:
             ml = min(ml_per_s * dt_s, self.day_tank_l[line] * ML_PER_L)
             if ml > 0:
                 self.day_tank_l[line] -= ml / ML_PER_L
-                self.reservoir = dose(self.reservoir, line, ml, self.params)
+                self.unmixed_ml[line] = self.unmixed_ml.get(line, 0.0) + ml
                 self.flow_meter_ml[line] = self.flow_meter_ml.get(line, 0.0) + ml
+        self._mix(dt_s)
+
+    def _mix(self, dt_s: float) -> None:
+        """Circulation carries new stock through the reservoir: each step, a share
+        1 - exp(-dt / timeConstant) of what is still unmixed reaches the water the probes measure.
+        Nothing mixes while circulation is off; a time constant of 0 mixes at once."""
+        tau = self.mix_time_constant_s
+        if tau > 0 and (dt_s <= 0 or self.outputs[f"{self.zone_id}-CIRC"] != "ON"):
+            return
+        share = 1.0 if tau <= 0 else -math.expm1(-dt_s / tau)
+        for line, ml in self.unmixed_ml.items():
+            if ml <= 0:
+                continue
+            mixed = ml if ml * (1.0 - share) < MIXED_ML else ml * share
+            self.reservoir = dose(self.reservoir, line, mixed, self.params)
+            self.unmixed_ml[line] = ml - mixed
 
 
 @dataclass
@@ -236,7 +259,26 @@ def _build_zone(
         name=zone.get("name"),
         dose_pump_ml_per_s=_dose_pump_rates(hardware, tanks),
         flow_meter_ml=dict.fromkeys(tanks, 0.0),
+        mix_time_constant_s=_mix_time_constant_s(model),
     )
+
+
+def _mix_time_constant_s(model: Mapping[str, Any]) -> float:
+    """How fast new stock mixes through the reservoir (simulator.json model.mixing)."""
+    mixing = model.get("mixing")
+    if mixing is None:
+        return 0.0  # no mixing model: stock reaches the probes at once
+    value = mixing.get("timeConstantS") if isinstance(mixing, Mapping) else None
+    try:
+        require_finite("timeConstantS", value)
+    except ValueError:
+        value = None
+    if value is None or value < 0:
+        raise ValueError(
+            f"simulator.json: model.mixing.timeConstantS must be a number >= 0, got "
+            f"{mixing.get('timeConstantS') if isinstance(mixing, Mapping) else mixing!r}"
+        )
+    return float(value)
 
 
 def _dose_pump_rates(hardware: Mapping[str, Any], lines: Iterable[str]) -> dict[str, float]:

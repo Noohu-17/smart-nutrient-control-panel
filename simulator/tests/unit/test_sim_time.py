@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from datetime import UTC, datetime
 
 import pytest
@@ -11,6 +12,7 @@ import pytest
 from sim.clock import SimClock
 from sim.config import load_speed_options, playground_enabled
 from sim.devices.base import SimDevice
+from sim.main import starting_speed
 from sim.messages import Envelope
 from sim.settings import load_settings
 
@@ -97,3 +99,34 @@ def test_sim_speed_setting(text, speed):
 def test_sim_speed_must_be_a_number():
     with pytest.raises(ValueError, match="SIM_SPEED"):
         load_settings({"SIM_SPEED": "fast"})
+
+
+# --- the demo's speed (C-3) ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("env", [{}, {"SIM_SPEED": ""}, {"SIM_SPEED": "  "}])
+def test_sim_speed_left_out_or_empty_is_not_set(env):
+    assert load_settings(env).sim_speed is None
+
+
+@pytest.mark.parametrize(
+    ("env", "playground", "speed"),
+    [
+        ({}, True, 60),  # simulator.json demoStart.speed
+        ({"SIM_SPEED": "288"}, True, 288),  # set: it wins
+        ({"SIM_SPEED": ""}, True, 60),  # what the Compose files pass when it isn't set
+        ({}, False, 1),  # not a playground: real time
+    ],
+)
+def test_a_playground_starts_at_the_demo_speed_unless_sim_speed_is_set(env, playground, speed):
+    assert starting_speed(load_settings(env), playground) == speed
+
+
+def test_without_a_demo_speed_the_clock_runs_in_real_time(tmp_path):
+    client_dir = shutil.copytree(load_settings({}).client_dir, tmp_path / "client")
+    path = client_dir / "simulator.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    del data["demoStart"]["speed"]
+    path.write_text(json.dumps(data), encoding="utf-8")
+    settings = load_settings({"SIM_CLIENT_DIR": str(client_dir)})
+    assert starting_speed(settings, True) == 1

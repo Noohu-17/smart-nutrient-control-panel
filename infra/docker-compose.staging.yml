@@ -147,7 +147,7 @@ services:
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      SIM_SPEED: ${SIM_SPEED:-1}
+      SIM_SPEED: ${SIM_SPEED:-}  # empty: the demo's speed (simulator.json demoStart.speed)
       SIM_CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}
       SIM_CONTROL_HOST: 0.0.0.0  # reachable on the internal network only
       SIM_CONTROL_PORT: "8100"

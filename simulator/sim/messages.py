@@ -18,6 +18,9 @@ if TYPE_CHECKING:
     from .farm import ClimateFarm, PowerFarm, ZoneFarm
 
 SIM_FIRMWARE = "sim-0.1.0"
+# A stuck probe's quality. Contract 6.1 has no STUCK; STALE is "no fresh sample", which is what a
+# stuck probe gives, and like any quality but OK it is never used for dosing.
+STUCK_QUALITY = "STALE"
 
 
 def utc_ts(moment: datetime) -> str:
@@ -145,12 +148,16 @@ def zone_telemetry(zone: ZoneFarm) -> dict[str, Any]:
         },
         "dayTankL": {line: _rounded(litres, 1) for line, litres in zone.day_tank_l.items()},
     }
+    readings.update(zone.stuck_readings)  # a stuck probe repeats what it last read
     for name in zone.sensor_faults:  # a probe that stopped answering has nothing to report
         readings[name] = None
     sensors = ("ec", "ph", "solTempC", "reservoirPct", "circFlowLpm")
     quality = {name: _quality(readings[name]) for name in sensors}
     if zone.do_fitted:
         quality["doMgL"] = _quality(readings["doMgL"])
+    for name in zone.stuck_readings:
+        if name in quality and readings[name] is not None:
+            quality[name] = STUCK_QUALITY
     return {
         "zone": zone.zone_id,
         "readings": readings,

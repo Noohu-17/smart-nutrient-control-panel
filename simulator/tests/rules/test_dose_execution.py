@@ -248,7 +248,7 @@ def test_a_pump_delivering_nothing_ends_failed_timeout_with_no_mix_wait(rig):
 
 
 def test_the_24h_totals_add_what_the_meters_measured(rig):
-    cmd = rig.dose(A=300)
+    cmd = rig.dose(A=300, mixWaitS=300)  # over before the next dose (limits.json waits longer)
     rig.run(160)
     measured = rig.states(cmd)[-1]["lines"][0]["deliveredMl"]
     history = rig.controller.hal.nvs_read("doseHistory")["items"]
@@ -275,6 +275,16 @@ def test_the_journal_carries_what_was_measured_so_far(rig):
     journal = rig.controller.hal.nvs_read("journal")
     assert journal["state"] == "EXECUTING"
     assert journal["lines"][0]["deliveredMl"] > 0
+
+
+def test_the_journal_follows_the_controllers_clock_so_a_fast_clock_loses_little(tmp_path):
+    """At x288, 20 simulated seconds are 0.07 real seconds: no progress report (real time) is
+    due, but a controller lost now must still count what went in (T4-11)."""
+    rig = Rig(tmp_path, speed=288)
+    rig.dose(A=120)
+    rig.run(20)  # 40 mL at 2 mL/s
+    delivered = rig.controller.hal.nvs_read("journal")["lines"][0]["deliveredMl"]
+    assert 30 <= delivered <= 40  # at most JOURNAL_MS (5 s, 10 mL) behind
 
 
 # --- refill to its target -------------------------------------------------------------------------

@@ -51,8 +51,11 @@ its last retained status, which says offline, because the device said so when it
 
 `sim/clock.py` keeps the simulated time. `SIM_SPEED` sets the speed: `0` pauses, `1` is real time,
 `60` is one hour per real minute, `288` is one day in five minutes. Allowed speeds come from
-`simulator.json` `speedOptions`. The simulated day starts when the simulator starts. On playground
-sites `POST /speed` changes it while running (see Playground control API).
+`simulator.json` `speedOptions`. Left unset (or empty), a playground site starts at its demo speed,
+`simulator.json` `demoStart.speed` (x60: a reading every 5 real seconds, and the demo dose with its
+mix wait in under a minute), and any other site at real time. The simulated day starts when the
+simulator starts. On playground sites `POST /speed` changes it while running (see Playground
+control API).
 
 Every message's `ts` stays real time. On playground sites (`features.json` `"playground": true`)
 messages also carry `simTs`, the simulated time. Heartbeats run on real time at any speed, even
@@ -120,7 +123,7 @@ controllers, and the tests change it directly.
 | `MQTT_HOST`, `MQTT_PORT` | `localhost`, `1883` | Broker address |
 | `MQTT_PASSWORD_<DEVICE>` | unset | Password for that device's login (username = device ID). Unset = anonymous (dev broker) |
 | `LOG_LEVEL` | `INFO` | Python logging level |
-| `SIM_SPEED` | `1` | Simulated clock speed, one of `speedOptions` |
+| `SIM_SPEED` | unset | Simulated clock speed, one of `speedOptions`. Unset or empty: `demoStart.speed` (60) on a playground site, otherwise `1` |
 | `SIM_CLIENT_DIR` | `../config/clients/client_A` | The client's config pack |
 | `SIM_STATE_DIR` | `.state` | Where bootIds are kept between runs |
 | `SIM_CONTROL_HOST`, `SIM_CONTROL_PORT` | `127.0.0.1`, `8100` | Where the playground control API listens. Keep it off public networks: only the back end may call it |
@@ -146,7 +149,10 @@ zone of the farm model, and its nvs is `.state/nvs_<device>.json`.
 
 A dose runs line by line. Each pump moves stock from its day-tank into the reservoir at its rate in
 `hardware.json` `pumps.doseLines` (placeholders), so EC really changes, and a flow meter counts what
-it delivered. Then the mix wait runs on simulated time, and the final `CMD_STATE` carries `after`.
+it delivered. Circulation then mixes the stock through the water: the probes see a share
+`1 - exp(-t / timeConstantS)` of it (`simulator.json` `model.mixing`, 600 s), and nothing mixes while
+circulation is off. The mix wait (`limits.json` `dose.mixWaitS`, 3000 s) runs on simulated time,
+and the final `CMD_STATE` carries `after`, read from mixed water.
 The clock task steps the controllers every 0.5 simulated seconds, so a pump stops within about 1 mL
 of its target at any speed. Limits come from `limits.json` until `DEVICE_CONFIG` is handled.
 
@@ -197,6 +203,19 @@ contract 11.1 error shape; releasing what isn't held is `404`.
     (`ESTOP_DURING`) with what was measured, `estop` and `stopped` go true in `ZONE_STATE`, and
     `ESTOP_PRESSED` goes out. Releasing sends `ESTOP_RELEASED` and restarts nothing: `RESUME` is
     refused (`ESTOP`) while it is pressed, and a person sends it after the release.
+  - `STUCK_READING` on `Z1.ec` (or `.ph`, `.solTempC`): the probe repeats the value it had while
+    the water changes, with quality `STALE` (contract 6.1 has no `STUCK`; `STALE` is "no fresh
+    sample"). EC or pH that is not `OK` is never used for dosing, so the controller refuses doses
+    with `SENSOR_STALE`. Fix reads the water again.
+  - `DEVICE_OFFLINE` on a device (`ZC1`): it stops, as a crash would. Its link drops without a
+    DISCONNECT, so the broker publishes its last will; it sends nothing, its controller doesn't
+    run, and its relays drop out (every pump and valve off, circulation too). Commands sent to it
+    wait at the broker (persistent session). Fix starts it again as a new boot: the next `bootId`,
+    `seq` from 1, `DEVICE_STATUS` online first. A zone controller then runs `restart()`: dosing
+    and refill off, the zone stopped, a dose it was running closed `PARTIAL` (or `FAILED`) with
+    `REBOOT_MID_DOSE` and its measured mL, a `REBOOTED` event, and the commands that waited are
+    answered (`ZONE_STOPPED`, or `EXPIRED_ON_ARRIVAL`). `RESUME` is needed. The cloud refuses
+    doses while the controller is offline (the dose review's `DEVICES_ONLINE`).
 
   The others in the catalogue are refused as not built yet.
 - **Reset** returns to `simulator.json` `demoStart`: a healthy farm with Zone A's EC a little below
@@ -204,6 +223,11 @@ contract 11.1 error shape; releasing what isn't held is `404`.
   the starting speed returns, and each controller starts afresh: anything running ends `STOPPED`
   (`STOP_REQUESTED`), nothing is stopped, and latches and 24 h totals are cleared. Simulated time
   carries on, so `simTs` never goes back.
+- **The demo dose (C-3).** The demo starts Zone A at EC 1.30, 0.2 below the middle (1.5) of
+  lettuce's 1.2-1.8. A 200 + B 200 mL brings it there: 200 mL is 67 % of `limits.json`
+  `maxPerDoseMl` (300) and 13 % of `max24hMl` (1500), so seven fit in a day. EC climbs as the stock
+  mixes in (1.36, 1.41, 1.45, 1.47 ... 1.50 every 5 simulated minutes), pH moves only by its slow
+  drift, and the whole dose with its mix wait (3200 simulated seconds) takes 53 real seconds at x60.
 
 ```
 curl -s http://127.0.0.1:8100/state

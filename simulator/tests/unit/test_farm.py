@@ -32,9 +32,9 @@ def farm():
 
 
 def test_every_layout_zone_starts_in_the_demo_starting_state(farm):
-    """simulator.json demoStart over model.initialState (T4-9): Zone A's EC a little low."""
+    """simulator.json demoStart over model.initialState (T4-9, C-3): Zone A 0.2 below target."""
     assert list(farm.zones) == ["Z1", "Z2"]
-    assert farm.zones["Z1"].water().ec_ms_cm == pytest.approx(1.10)
+    assert farm.zones["Z1"].water().ec_ms_cm == pytest.approx(1.30)
     water = farm.zones["Z2"].water()
     assert water.volume_l == pytest.approx(936.0)
     assert water.ec_ms_cm == pytest.approx(1.20)
@@ -95,6 +95,51 @@ def test_an_open_refill_valve_fills_the_tank_and_dilutes(farm):
     after = zone.water()
     assert after.volume_l == pytest.approx(before.volume_l + 30.0)  # 30 L/min in simulator.json
     assert after.ec_ms_cm < before.ec_ms_cm
+
+
+def dose_for(zone, seconds):
+    """Run line A's pump for `seconds`, then stop it (2 mL/s in hardware.json)."""
+    zone.outputs["Z1-DOSE-A"] = "ON"
+    zone.step(seconds, 30.0)
+    zone.outputs["Z1-DOSE-A"] = "OFF"
+
+
+def test_dosed_stock_mixes_in_over_the_time_constant(farm):
+    """simulator.json model.mixing: 600 s. 100 mL of A adds 0.05 to EC once mixed (936 L)."""
+    zone = farm.zones["Z1"]
+    start = zone.water().ec_ms_cm
+    dose_for(zone, 50.0)  # 100 mL left the day-tank at once
+    assert zone.day_tank_l["A"] == pytest.approx(32.0 - 0.1)
+    early = zone.water().ec_ms_cm - start
+    zone.step(600.0, 30.0)  # one time constant
+    one_tau = zone.water().ec_ms_cm - start
+    zone.step(3000.0, 30.0)
+    mixed = zone.water().ec_ms_cm - start
+    assert early < 0.01
+    assert mixed == pytest.approx(100 * 0.47 / 936, rel=0.01)
+    assert one_tau == pytest.approx(mixed * 0.63, rel=0.1)
+
+
+def test_nothing_mixes_while_circulation_is_off(farm):
+    zone = farm.zones["Z1"]
+    start = zone.water().ec_ms_cm
+    dose_for(zone, 50.0)
+    zone.outputs["Z1-CIRC"] = "OFF"
+    zone.step(3600.0, 30.0)
+    still = zone.water().ec_ms_cm
+    zone.outputs["Z1-CIRC"] = "ON"
+    zone.step(3600.0, 30.0)
+    assert still - start < 0.01 < zone.water().ec_ms_cm - start
+
+
+def test_a_time_constant_of_0_mixes_at_once(tmp_path):
+    def instant(simulator):
+        simulator["model"]["mixing"]["timeConstantS"] = 0
+
+    zone = load_farm(edited_pack(tmp_path, "simulator.json", instant)).zones["Z1"]
+    start = zone.water().ec_ms_cm
+    dose_for(zone, 50.0)
+    assert zone.water().ec_ms_cm - start == pytest.approx(100 * 0.47 / 936, rel=0.01)
 
 
 def test_circulation_flow_follows_the_pump_and_the_config(farm):
@@ -179,7 +224,10 @@ def test_run_time_starts_again_at_midnight_on_the_farms_own_clock(farm):
         ("layout.json", lambda d: d.pop("climate"), "climate"),
         ("layout.json", lambda d: d["climate"].update(airSensors=[]), "airSensors"),
         ("layout.json", lambda d: d["zones"][0].pop("id"), "id"),
+        ("simulator.json", lambda d: d["model"].update(mixing={"timeConstantS": -1}),
+         "mixing.timeConstantS"),
         ("simulator.json", lambda d: d["demoStart"].update(weather="SNOW"), "demoStart.weather"),
+        ("simulator.json", lambda d: d["demoStart"].update(speed=5), "demoStart.speed"),
         ("simulator.json", lambda d: d["demoStart"].update(scenario=""), "demoStart.scenario"),
         ("simulator.json", lambda d: d["demoStart"]["zones"]["Z1"].update(ec=1), "zones.Z1"),
         ("simulator.json", lambda d: d["demoStart"]["zones"]["Z1"].update(ecMsCm="low"), "ecMsCm"),
