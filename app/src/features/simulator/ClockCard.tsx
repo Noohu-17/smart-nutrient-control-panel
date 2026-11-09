@@ -1,21 +1,24 @@
-import { useId } from "react";
-import { useSimReset, useSimSpeed } from "../../api/hooks";
+import { useId, useState } from "react";
+import { latestError, useSimReset, useSimSpeed } from "../../api/hooks";
 import type { SimState } from "../../api/types";
 import { can, WHY } from "../../auth/roles";
 import { useSession } from "../../auth/session";
 import { SPEEDS, speedLabel } from "../../config/sim";
 import { LockReason, SimButton } from "./SimButton";
 
-/** Speed (Pause, ×1, ×60, ×288) for Owner, Agronomist and Operator; Reset for the Owner (§11.4). */
+/** Speed (Pause, ×1, ×60, ×288) for Owner, Agronomist and Operator; Reset for the Owner (§11.4),
+    after "Reset the farm to the starting state?". */
 export function ClockCard({ sim }: { sim: SimState }) {
   const { role } = useSession();
   const speed = useSimSpeed();
   const reset = useSimReset();
   const speedReasonId = useId();
   const resetReasonId = useId();
+  const askId = useId();
+  const [asking, setAsking] = useState(false); // Reset asks first: it undoes every drill and hold
   const speedLocked = role === null || !can(role, "sim") ? WHY.sim : undefined;
   const resetLocked = role === null || !can(role, "simReset") ? WHY.simReset : undefined;
-  const error = speed.error ?? reset.error;
+  const error = latestError(speed, reset);
 
   return (
     <section className="zone-card" aria-labelledby="sim-clock-title">
@@ -38,16 +41,29 @@ export function ClockCard({ sim }: { sim: SimState }) {
       </div>
       <LockReason id={speedReasonId} reason={speedLocked} />
 
-      <div className="sim-row">
-        <SimButton
-          reasonId={resetLocked && resetReasonId}
-          disabled={reset.isPending}
-          onClick={() => reset.mutate(undefined)}
-        >
-          Reset
-        </SimButton>
-        <span className="dose-note">Back to the start of {sim.scenario}: drills off, values released.</span>
-      </div>
+      {asking ? (
+        <div className="sim-row" role="group" aria-labelledby={askId}>
+          <b id={askId}>Reset the farm to the starting state?</b>
+          <button
+            type="button"
+            className="btn primary"
+            disabled={reset.isPending}
+            onClick={() => reset.mutate(undefined, { onSettled: () => setAsking(false) })}
+          >
+            {reset.isPending ? "Resetting…" : "Yes, reset"}
+          </button>
+          <button type="button" className="btn" disabled={reset.isPending} onClick={() => setAsking(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="sim-row">
+          <SimButton reasonId={resetLocked && resetReasonId} onClick={() => setAsking(true)}>
+            Reset
+          </SimButton>
+          <span className="dose-note">Back to the start of {sim.scenario}: drills off, values released.</span>
+        </div>
+      )}
       <LockReason id={resetReasonId} reason={resetLocked} />
 
       {error && <p className="banner crit">{error.message}</p>}

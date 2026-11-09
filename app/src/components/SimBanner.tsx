@@ -1,13 +1,14 @@
-import { useFarm, useSimState } from "../api/hooks";
+import { noSimulator, useFarm, useSimState } from "../api/hooks";
 import { speedLabel } from "../config/sim";
 
 /** On every screen of a playground site: "Simulated farm · ×60" and the simulated date and time
-    (contract §11.4). Readings' own times stay real. Nothing on a real farm. */
+    (contract §11.4). Readings' own times stay real. Nothing on a real farm, or when the back end
+    says the site has no simulator (404). */
 export function SimBanner() {
   const farm = useFarm();
   const playground = farm.data?.features.playground === true;
   const sim = useSimState(playground);
-  if (!playground) return null;
+  if (!playground || noSimulator(sim.error)) return null;
 
   const when = sim.data
     ? new Intl.DateTimeFormat("en-GB", {

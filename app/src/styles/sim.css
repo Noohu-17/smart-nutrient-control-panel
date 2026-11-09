@@ -106,3 +106,13 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* E-STOP and power: one block per drill, its title above its explanation */
+.sim-switch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.sim-switch .dose-note {
+  margin: 0;
+}
