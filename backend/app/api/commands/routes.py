@@ -21,7 +21,7 @@ from .. import queries
 from ..pack import read_farm
 from ..routes import EngineDep, SettingsDep, SiteDep, _database, _errors, _not_loaded
 from ..status import is_online
-from . import messages, sent
+from . import messages, sent, stuck
 from .confirm import confirm
 from .messages import Command
 from .publish import NotSent, Publisher, publisher_for
@@ -56,7 +56,8 @@ def get_command(
     cmd_id: Annotated[str, Path(alias="cmdId")], engine: EngineDep, site: SiteDep
 ) -> CommandStatus:
     """A command as its controller last reported it, or DISPATCHED from when the broker has it
-    until the first CMD_STATE arrives. 404 for a command nobody has sent or reported."""
+    until the first CMD_STATE arrives. 404 for a command nobody has sent or reported.
+    UNKNOWN, TIMED_OUT once the farm has left it without replies (stuck.py)."""
     not_found = HTTPException(404, f"There is no command {cmd_id}")
     try:
         key = str(uuid.UUID(cmd_id))  # stored as the model wrote it: lowercase, with hyphens
@@ -70,11 +71,12 @@ def get_command(
                 CommandReport.cmd_id == key,
             )
         )
+        marked = stuck.timed_out(connection, site, key)
         if body is None and sent.dispatched(connection, site, key):
-            return CommandStatus.dispatched(key)
+            return stuck.shown(CommandStatus.dispatched(key), marked)
     if body is None:
         raise not_found
-    return CommandStatus.model_validate(body)
+    return stuck.shown(CommandStatus.model_validate(body), marked)
 
 
 def post_stop(

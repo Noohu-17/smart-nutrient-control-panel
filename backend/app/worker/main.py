@@ -8,6 +8,9 @@ command, when each device was last seen, and any last will.
 A bad message is logged and skipped. If the broker goes away the worker reconnects with a
 growing delay. If the database is down or not migrated yet it keeps the message and tries
 again with the same delay, so messages wait rather than get lost.
+
+Alongside, the stuck-command guard (stuck.py) marks a sent command that the farm has left without
+replies, so it shows UNKNOWN, TIMED_OUT rather than running for ever.
 """
 
 import asyncio
@@ -28,6 +31,7 @@ from ..config import Settings, load_settings
 from ..contract import DeviceStatusLastWill, Envelope, parse_farm_message
 from ..db.engine import create_db_engine
 from .store import mark_offline, reading_rows, store_message
+from .stuck import guard
 
 log = logging.getLogger("worker")
 
@@ -166,6 +170,7 @@ async def run(
     engine = create_db_engine(settings)
     # As in the seed, org_id is the client's folder name until organisations exist (OPEN-11).
     worker = Worker(engine, settings.client_dir.name, site, sleep=sleep)
+    guarding = asyncio.create_task(guard(engine, worker.org_id, site))  # stuck commands (T1-23)
     attempt = 0
     try:
         while True:
@@ -194,6 +199,8 @@ async def run(
                 log.warning("%s not connected (%s); retrying in %.0f s", client_id, err, delay)
                 await sleep(delay)
     finally:
+        guarding.cancel()
+        await asyncio.gather(guarding, return_exceptions=True)  # its own end, never this one's
         engine.dispose()
 
 

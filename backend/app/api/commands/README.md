@@ -11,6 +11,12 @@ Stop, resume, confirming a dose, and following a command (contract §7.2, §7.4,
 
 `GET /api/commands/{cmdId}` reads `command_report`, which the worker fills with each command's newest `CMD_STATE` (an older report never replaces a newer one), and `sent_command`, the commands this API has sent (migration 0004). The answer's shape is in contract §11.2.
 
+## Commands left without replies (`app/worker/stuck.py`)
+
+A command can be left without replies, for example when the simulator restarts mid-dose. So that it never shows as running for ever, the worker's stuck-command guard looks every 10 s for sent commands (the broker took them) that have no final state from the farm and about which nothing has been heard for 30 s: since their `expiresAt`, or since their newest `CMD_STATE` if that came later. A running dose reports at least every 5 s (§14), so it is never caught while it runs.
+
+It marks each one in `sent_command.timed_out_at` (migration 0005) and logs it. `GET /api/commands/{cmdId}` then answers `UNKNOWN` with reason `TIMED_OUT` (§8.4), "Result unknown: farm not responding" in the app, and keeps what the farm last reported (the device, the lines delivered so far). `UNKNOWN` is not final: a newer `CMD_STATE` clears the mark (`last_report_at` notes when, in server time), and the farm's own state shows again; a replayed older one doesn't. A final state always shows, mark or not.
+
 ## Confirming a dose (`confirm.py`)
 
 1. **Checked again.** The review the person saw must have no `BLOCK`, and a new review of the zone as it is now must have none either, since the review may be minutes old. Otherwise the answer is `409` with the first blocking check's ID and message, as in the app's fake (for example `ESTOP`, "E-STOP pressed in Zone 1"), and nothing is sent.

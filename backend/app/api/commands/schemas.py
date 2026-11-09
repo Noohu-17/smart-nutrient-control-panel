@@ -48,8 +48,8 @@ class CommandStatus(ContractModel):
 
     cmd_id: str
     device: str | None  # the controller that reported it; null while DISPATCHED
-    state: CmdState | Literal["DISPATCHED"]
-    reason: str | None  # a reason code (§8.4) when PARTIAL, FAILED, STOPPED or REJECTED
+    state: CmdState | Literal["DISPATCHED", "UNKNOWN"]  # UNKNOWN: left without replies (stuck.py)
+    reason: str | None  # a reason code (§8.4) when PARTIAL, FAILED, STOPPED, REJECTED or UNKNOWN
     lines: list[CommandLine] | None  # DOSE only: requested and delivered mL per line
     before: EcPh | None
     after: EcPh | None

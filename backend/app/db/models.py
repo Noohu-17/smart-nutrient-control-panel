@@ -240,6 +240,10 @@ class SentCommand(Base):
     dispatched_at: Mapped[datetime | None] = mapped_column(Timestamp)  # null until the broker has it
     dose_request_id: Mapped[str | None] = mapped_column(ID)  # a confirmed dose only
     idempotency_key: Mapped[str | None] = mapped_column(String(36))  # a UUID (§11.1)
+    # The stuck-command guard (app/worker/stuck.py), both in server time: when the worker last
+    # stored a newer CMD_STATE for it, and when it marked it UNKNOWN, TIMED_OUT for want of one.
+    last_report_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    timed_out_at: Mapped[datetime | None] = mapped_column(Timestamp)
 
 
 class User(Base):

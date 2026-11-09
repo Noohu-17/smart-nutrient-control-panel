@@ -12,7 +12,7 @@ PostgreSQL with TimescaleDB (the dev stack's `db` service). SQLAlchemy models ar
 | `latest_message` | each device's newest `ZONE_STATE`, `CLIMATE_STATE`, `ZONE_TELEMETRY` and `POWER_STATE`, one row each; replaced only by a newer (`bootId`, `seq`) | the worker |
 | `command_report` | each command's newest `CMD_STATE`, one row per `cmdId`; replaced only by a newer (`bootId`, `seq`) from the same device | the worker |
 | `dose_request` | each reviewed dose request: lines, checks, estimate, `can_confirm` and the limits it was checked against | `POST /api/dose-requests` |
-| `sent_command` | each command the API sends, as sent; for a dose, its dose request and `Idempotency-Key` (one command per dose request), and `dispatched_at` once the broker has it | `POST /api/dose-requests/{id}/confirm`, `/api/stop`, `/api/resume` |
+| `sent_command` | each command the API sends, as sent; for a dose, its dose request and `Idempotency-Key` (one command per dose request), and `dispatched_at` once the broker has it; `last_report_at` and `timed_out_at` for the stuck-command guard | `POST /api/dose-requests/{id}/confirm`, `/api/stop`, `/api/resume`; the worker |
 | `app_user` | people who sign in (`user` is reserved in PostgreSQL) | the sign-in code (later task) |
 
 Every table has `org_id` and `site_id` (OPEN-11). Rows are keyed by the contract's IDs (`siet-ph1`, `Z1`, `Z1-B1`, `ZC1`). Until the organisation layer exists, `org_id` is the client's config-pack folder name (`client_A`).

@@ -741,6 +741,7 @@ Any other transition is a bug. The back end refuses it and logs it. These are no
 | `SENSOR_STALE` | cloud, farm | EC/pH reading too old or faulty to dose on. |
 | `NEEDS_APPROVAL_DECLINED` | cloud | Owner declined, or approval timed out. |
 | `CANCELLED` | cloud | The requester or the Owner cancelled before dispatch. |
+| `TIMED_OUT` | cloud | No reply from the farm: a sent command has no final state, and nothing has been heard about it for 30 s since its `expiresAt`, or since its newest `CMD_STATE` if that came later. It shows as `UNKNOWN` (8.1) until the farm reports again. Not the farm's `TIMEOUT` (`maxDurationS` reached). |
 | `EXPIRED_ON_ARRIVAL` | farm | Arrived after `expiresAt`. |
 | `NO_FLOW` | farm | Pump ran but the flow meter saw nothing. |
 | `FLOW_SHORT` | farm | Delivered below tolerance. |
@@ -997,7 +998,7 @@ Like the zone answer, neither answer carries the message envelope: no `msgId`, `
 |---|---|
 | `cmdId` | The command's ID (7.1). |
 | `device` | The controller whose `CMD_STATE` this is; `null` while `DISPATCHED`. A `STOP` that reaches several controllers (8.3 rule 10) shows the first controller to report it. |
-| `state` | `DISPATCHED` until the first `CMD_STATE`, then that message's `state` (6.6). |
+| `state` | `DISPATCHED` until the first `CMD_STATE`, then that message's `state` (6.6). `UNKNOWN`, with `reason` `TIMED_OUT` (8.4), while the farm has left it without replies; a newer `CMD_STATE` shows the farm's state again. |
 | `reason`, `lines`, `before`, `after`, `startedAt`, `endedAt` | The newest `CMD_STATE`, as sent; all `null` while `DISPATCHED`. |
 
 Like the zone answer, it carries no message envelope.
@@ -1252,6 +1253,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | `STOP` expiry (`ALL_OPERATIONS`, `ZONE`) | 5 minutes from `issuedAt` (7.4) | Cloud sets, ZC enforces |
 | `DISPATCHED` → `UNKNOWN` | At `expiresAt`, if the controller hasn't been heard from since dispatch (8.3) | Cloud |
 | `ACCEPTED` → `UNKNOWN` | 2 minutes with no `CMD_STATE` while the farm is silent | Cloud |
+| No reply → `UNKNOWN`, `TIMED_OUT` | 30 s after `expiresAt`, or after the command's newest `CMD_STATE` if that came later, with no final state; checked every 10 s (8.4) | Cloud (worker) |
 | Progress while dosing | at least every 5 s | ZC |
 | Dose `maxDurationS` | 600 s (default; configured in `limits.json`) | ZC |
 | Mix wait before `after` reading | 300 s (default; configured in `limits.json`) | ZC |
@@ -1313,6 +1315,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, devices and error codes | `GET /devices` fields (11.2), general error codes (11.1) and `upsRuntimeMin` (1), agreed in the T1-12 review. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, climate and power answers | `GET /climate` and `GET /power` answers (11.2), in the style of the zone answer (T1-18). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, command answer | `GET /commands/{cmdId}` answer (11.2), with `DISPATCHED` until the first `CMD_STATE`, agreed in the T1-17 review. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
+| v1.0, stuck commands | `TIMED_OUT` (8.4): a command the farm leaves without replies answers `UNKNOWN` with that reason (11.2), and when (14), from T1-23. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 
 ### v1.0 section review
 

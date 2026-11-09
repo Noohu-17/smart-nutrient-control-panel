@@ -17,6 +17,7 @@ from ..contract import (
     ZoneTelemetry,
 )
 from ..db.models import CommandReport, Device, LatestMessage, Reading
+from . import stuck
 
 # The kinds of message whose newest one per device is kept (models.LatestMessage).
 KEPT_TYPES = frozenset({"ZONE_STATE", "CLIMATE_STATE", "ZONE_TELEMETRY", "POWER_STATE"})
@@ -181,6 +182,8 @@ def store_message(
         new_rows = _insert_rows(connection, rows) if rows else 0
         if isinstance(message, CommandState):
             kept: bool | None = _report_if_newer(connection, message, org_id)
+            if kept:  # a newer report: the command is alive (the stuck-command guard, T1-23)
+                stuck.heard(connection, org_id, message.site, str(message.cmd_id), received_at)
         elif message.type in KEPT_TYPES:
             kept = _keep_if_newer(connection, message, org_id)
         else:

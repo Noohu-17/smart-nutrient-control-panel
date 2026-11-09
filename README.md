@@ -53,6 +53,15 @@ The back end's database tests run only when the dev stack is up (`docker compose
 
    On `localhost`, Caddy uses its own certificate, so add `-k` to curl and accept the browser's warning. Without the login every address answers `401`.
 
+4. Run the demo check, after every deploy and again before the demo. It plays the demo through the API (a dose, Stop and Resume, a blocked dose, a sensor fault) and prints PASS or FAIL for each step, then puts the demo farm back with Reset. The password goes in an environment variable, never on the command line:
+
+   ```
+   $env:DEMO_CHECK_PASSWORD = "<the site password>"          # PowerShell; export DEMO_CHECK_PASSWORD=... in bash
+   python scripts/demo-check.py https://<SITE_ADDRESS> --user <SITE_USER> --speed 60
+   ```
+
+   `--speed 60` makes it take about a minute; Reset puts the start speed back. On `localhost` add `--insecure`, for the same certificate reason as `-k`. Against the dev stack it needs no login: `python scripts/demo-check.py http://localhost:8000 --speed 60`. On a site without the playground it runs only the health and readings checks, so it never doses a real farm.
+
 Stop it with `down` in place of `up -d --build`. Data stays in Docker volumes (database, broker, simulator `.state`, certificates); `down -v` deletes all of it.
 
 Changing `POSTGRES_PASSWORD` later needs an `ALTER USER` in the database too, because the value only takes effect when the database is first created.
