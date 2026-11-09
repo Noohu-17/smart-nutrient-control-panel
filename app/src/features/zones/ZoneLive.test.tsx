@@ -51,31 +51,67 @@ describe("Zone freshness", () => {
   });
 });
 
-describe("Safety banners", () => {
-  it("shows the E-STOP banner on the zone card in the z1-estop scenario", async () => {
+const strip = async () => within(await screen.findByRole("region", { name: "Alerts" }));
+
+describe("Alert strip (T2-20)", () => {
+  it("E-STOP: at the top of the Overview, with a link to the zone, and not again on the card", async () => {
     useScenario("z1-estop");
     renderAt("/");
-    const alert = await (await card("Zone A")).findByRole("alert");
+    const alert = (await strip()).getByRole("alert");
     expect(alert).toHaveTextContent("E-STOP pressed in Zone A.");
     expect(alert).toHaveTextContent("press Resume");
+    expect(within(alert).getByRole("link", { name: "Open Zone A" })).toHaveAttribute("href", "/zone/Z1");
+    expect((await card("Zone A")).queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("shows the E-STOP banner on the Zone page", async () => {
+  it("E-STOP on the Zone page: one alert, with Resume locked until it's released", async () => {
     useScenario("z1-estop");
     renderAt("/zone/Z1");
-    expect(await screen.findByRole("alert")).toHaveTextContent("E-STOP pressed in Zone A.");
+    const alerts = (await strip()).getAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent("E-STOP pressed in Zone A.");
+    expect(within(alerts[0]).getByRole("button", { name: "Resume" })).toBeDisabled();
+    expect(screen.queryByText("Zone A is stopped.")).not.toBeInTheDocument();
   });
 
-  it("shows the Leak banner on the Zone page in the z1-leak scenario", async () => {
-    useScenario("z1-leak");
-    renderAt("/zone/Z1");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Leak sensor wet in Zone A.");
+  it.each([
+    ["z1-leak", "/zone/Z1", "Leak sensor wet in Zone A."],
+    ["z2-sensor-fault", "/", "EC sensor fault in Zone B."],
+    ["z1-ec-stuck", "/zone/Z1", "EC reading is not updating in Zone A."],
+    ["z2-stale", "/", "No fresh readings from Zone B."],
+    ["z2-offline", "/", "Zone B controller is offline."],
+  ])("%s on %s: %s", async (scenario, path, title) => {
+    useScenario(scenario);
+    renderAt(path);
+    expect(await (await strip()).findByText(title)).toBeInTheDocument();
   });
 
-  it("shows no banner on a healthy zone", async () => {
+  it("puts critical first across zones", async () => {
+    server.use(
+      http.get("/api/zones/:zoneId", ({ params }) => {
+        const zone = buildZoneStatus(String(params.zoneId))!;
+        if (params.zoneId === "Z1") {
+          zone.readings.ec = null;
+          zone.quality.ec = "FAULT";
+        }
+        if (params.zoneId === "Z2") zone.leak = true;
+        return HttpResponse.json(zone);
+      }),
+    );
     renderAt("/");
-    const zoneA = await card("Zone A");
-    await zoneA.findByText(/^Updated/);
-    expect(zoneA.queryByRole("alert")).not.toBeInTheDocument();
+    const s = await strip();
+    await s.findByText("EC sensor fault in Zone A.");
+    await s.findByText("Leak sensor wet in Zone B.");
+    expect(s.getAllByRole("alert").map((a) => a.querySelector("b")!.textContent)).toEqual([
+      "Leak sensor wet in Zone B.",
+      "EC sensor fault in Zone A.",
+    ]);
+  });
+
+  it("shows no strip when every zone is healthy", async () => {
+    renderAt("/");
+    await (await card("Zone A")).findByText(/^Updated/);
+    await (await card("Zone B")).findByText(/^Updated/);
+    expect(screen.queryByRole("region", { name: "Alerts" })).not.toBeInTheDocument();
   });
 });

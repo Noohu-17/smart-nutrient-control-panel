@@ -11,26 +11,6 @@ export function ZoneStatusChip({ status }: { status: ZoneStatus }) {
   return <StatusChip tone="ok">{`Updated ${formatAge(status.ageS ?? 0)}`}</StatusChip>;
 }
 
-/** What happened, what the farm did, what to do next (PRD rule 7). */
-export function SafetyBanners({ zoneName, status }: { zoneName: string; status: ZoneStatus }) {
-  const { t } = status;
-  return (
-    <>
-      {t?.estop && (
-        <div className="banner crit" role="alert">
-          <b>E-STOP pressed in {zoneName}.</b> All dosing and refill stopped; circulation keeps running. Check
-          the cabinet, release the E-STOP, then press Resume.
-        </div>
-      )}
-      {t?.leak && (
-        <div className="banner crit" role="alert">
-          <b>Leak sensor wet in {zoneName}.</b> Check the zone for water and fix any leak.
-        </div>
-      )}
-    </>
-  );
-}
-
 /** The zone's reading tiles. Grey when offline or stale; "Loading" until the first answer. */
 export function ZoneReadings({ status }: { status: ZoneStatus }) {
   const { t, loading, offline, stale } = status;

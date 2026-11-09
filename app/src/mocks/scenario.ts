@@ -7,6 +7,7 @@ export const SCENARIOS = {
   "z2-offline": "Zone B controller silent: last values with online false",
   "z2-sensor-fault": "Zone B EC probe faulty: ec is null, quality FAULT",
   "z2-stale": "Zone B last reading is 5 minutes old",
+  "z1-ec-stuck": "Zone A EC probe stuck: same value, quality STALE",
   "z1-estop": "E-STOP pressed on the Zone A dosing cabinet",
   "z1-leak": "Leak sensor wet in Zone A",
   "farm-error": "GET /api/farm fails (500)",

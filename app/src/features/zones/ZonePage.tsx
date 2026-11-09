@@ -3,19 +3,28 @@ import { useFarm } from "../../api/hooks";
 import type { FarmZone } from "../../api/types";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusChip } from "../../components/StatusChip";
+import { AlertStrip } from "../alerts/AlertStrip";
+import { useZoneAlerts } from "../alerts/useZoneAlerts";
 import { DoseCard } from "../dosing/DoseCard";
 import { ZoneActions } from "./ZoneActions";
 import { ResumeZone } from "./ResumeZone";
-import { SafetyBanners, ZoneReadings, ZoneStatusChip } from "./ZoneLive";
+import { ZoneReadings, ZoneStatusChip } from "./ZoneLive";
 import { useZoneStatus } from "./useZoneStatus";
 
-/** Safety banners and live readings for the zone. */
+/** The zone's alerts, Resume in the stopped or E-STOP one, then the live readings. */
 function ZoneLive({ zone }: { zone: FarmZone }) {
   const status = useZoneStatus(zone.id);
+  const alerts = useZoneAlerts([zone]);
   return (
     <>
-      <SafetyBanners zoneName={zone.name} status={status} />
-      <ResumeZone zoneId={zone.id} zoneName={zone.name} status={status} />
+      <AlertStrip
+        alerts={alerts}
+        action={(alert) =>
+          (alert.kind === "stopped" || alert.kind === "estop") && (
+            <ResumeZone zoneId={zone.id} status={status} />
+          )
+        }
+      />
       <section className="zone-card" aria-labelledby="readings-title">
         <header className="zone-card-head">
           <h2 id="readings-title">Readings</h2>

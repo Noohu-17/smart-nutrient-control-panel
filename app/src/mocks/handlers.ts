@@ -38,6 +38,7 @@ import {
   setSpeed,
   SimInputError,
   simState,
+  simulateZone,
 } from "./sim";
 
 /** Error body in the contract §11.1 shape. */
@@ -82,6 +83,7 @@ function zoneStatus(zoneId: string): ZoneStatus {
   const status = buildZoneStatus(zoneId)!;
   status.activeCmdId = activeCommandId(zoneId);
   status.stopped = isZoneStopped(zoneId);
+  simulateZone(status); // drills and held values from the Simulator screen
   if (zoneId === "Z2" && scenario === "z2-offline") {
     // §11.2: an offline zone still answers 200, with its last values marked old
     status.online = false;
@@ -97,6 +99,11 @@ function zoneStatus(zoneId: string): ZoneStatus {
     // the controller still sends heartbeats, but its last reading is past the fresh limit
     status.ts = minutesAgo(5);
     status.quality = ALL_STALE;
+  }
+  if (zoneId === "Z1" && scenario === "z1-ec-stuck") {
+    // the simulator's STUCK_READING drill: the probe repeats one value, marked STALE (§6.1 has no STUCK)
+    status.readings.ec = 1.1;
+    status.quality.ec = "STALE";
   }
   if (zoneId === "Z1" && scenario === "z1-estop") {
     status.estop = true;

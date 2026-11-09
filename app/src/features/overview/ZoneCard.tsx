@@ -2,10 +2,11 @@ import { Link } from "react-router-dom";
 import type { FarmZone } from "../../api/types";
 import { zonePath } from "../../config/readings";
 import { ZoneActions } from "../zones/ZoneActions";
-import { SafetyBanners, ZoneReadings, ZoneStatusChip } from "../zones/ZoneLive";
+import { ZoneReadings, ZoneStatusChip } from "../zones/ZoneLive";
 import { useZoneStatus } from "../zones/useZoneStatus";
 
-/** Overview card for one zone: its latest readings, how fresh they are and any safety banner. */
+/** Overview card for one zone: its latest readings and how fresh they are. Its alerts are in the
+    strip at the top of the Overview. */
 export function ZoneCard({ zone }: { zone: FarmZone }) {
   const status = useZoneStatus(zone.id);
 
@@ -17,7 +18,6 @@ export function ZoneCard({ zone }: { zone: FarmZone }) {
         </h2>
         <ZoneStatusChip status={status} />
       </header>
-      <SafetyBanners zoneName={zone.name} status={status} />
       <ZoneReadings status={status} />
       <ZoneActions />
     </section>
