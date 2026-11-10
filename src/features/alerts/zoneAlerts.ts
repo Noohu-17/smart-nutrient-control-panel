@@ -7,7 +7,7 @@ import { ZONE_READINGS } from "../../config/readings";
 
 export type AlertSeverity = "crit" | "warn";
 
-export type AlertKind = "estop" | "leak" | "offline" | "stopped" | "sensor" | "stale" | "reservoir";
+export type AlertKind = "estop" | "leak" | "offline" | "stopped" | "sensor" | "stale";
 
 export type ZoneAlert = {
   id: string; // `${zoneId}-${kind}`, unique on a page
@@ -18,11 +18,6 @@ export type ZoneAlert = {
   title: string; // what is wrong
   text: string; // what the farm did, and what to do
 };
-
-/** Below this the reservoir is too low to dose. Display only: the controller and the back end
-    refuse the dose themselves. Matches limits.json minReservoirPctToDose (a placeholder, OPEN-5)
-    until the zone limits reach the app. */
-export const RESERVOIR_LOW_PCT = 30;
 
 type Metric = keyof ZoneStatus["quality"];
 
@@ -135,14 +130,6 @@ export function zoneAlerts(
       "The probe may be stuck, so dosing won’t use it. Check the probe, or recalibrate it.",
     );
 
-  const pct = t.readings.reservoirPct;
-  if (pct !== null && t.quality.reservoirPct === "OK" && pct < RESERVOIR_LOW_PCT)
-    add(
-      "reservoir",
-      "warn",
-      `${name} reservoir is low (${pct} %).`,
-      `Below the ${RESERVOIR_LOW_PCT} % needed to dose, so doses are refused. Refill the reservoir.`,
-    );
-
+  // A low reservoir comes from the server's alerts (T1-24), which read the limit from the config pack.
   return bySeverity(alerts);
 }

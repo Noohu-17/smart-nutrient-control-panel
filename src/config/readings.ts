@@ -1,7 +1,7 @@
-import type { ClimateTelemetry, Quality, ZoneStatus } from "../api/types";
+import type { ClimateStatus, Quality, ZoneStatus } from "../api/types";
 
 type ZoneKey = keyof ZoneStatus["quality"];
-type ClimateKey = keyof ClimateTelemetry["quality"];
+type ClimateKey = keyof ClimateStatus["quality"];
 
 export type ReadingSpec<K extends string = string> = {
   key: K;

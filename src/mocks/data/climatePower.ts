@@ -1,7 +1,7 @@
-// src/mocks/data/climatePower.ts · fake CLIMATE_TELEMETRY (contract §6.2) and POWER_STATE (§6.3)
+// src/mocks/data/climatePower.ts · fake GET /api/climate and /api/power answers (contract §11.2)
 // Air drifts a little on every request, like zone telemetry. Sensor positions, equipment IDs and
 // whether a generator or UPS is fitted all come from the layout, never from here.
-import type { ClimateTelemetry, Farm, PowerState } from "../../api/types";
+import type { ClimateStatus, Farm, PowerStatus } from "../../api/types";
 
 type Air = {
   byPos: Record<string, number>;
@@ -21,8 +21,6 @@ const SEED: Air = {
 };
 
 let air: Air | null = null;
-let climateSeq = 9119;
-let powerSeq = 550;
 
 const round = (value: number, decimals: number) => Math.round(value * 10 ** decimals) / 10 ** decimals;
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -49,11 +47,9 @@ function nextAir(positions: string[]): Air {
 /** Forget the live state (used by tests so each one starts from the seed). */
 export function resetClimatePower() {
   air = null;
-  climateSeq = 9119;
-  powerSeq = 550;
 }
 
-export function buildClimateTelemetry(layout: Farm): ClimateTelemetry {
+export function buildClimateStatus(layout: Farm): ClimateStatus {
   const { climate } = layout;
   const now = nextAir(climate.airSensors);
 
@@ -62,7 +58,7 @@ export function buildClimateTelemetry(layout: Farm): ClimateTelemetry {
   const temps = Object.values(airTempByPosC);
   const airTempC = round(temps.reduce((sum, t) => sum + t, 0) / temps.length, 1); // §6.2: the average
 
-  const equipment: ClimateTelemetry["equipment"] = { fanStage: Math.min(2, climate.fans.length) };
+  const equipment: ClimateStatus["equipment"] = { fanStage: Math.min(2, climate.fans.length) };
   climate.fans.forEach((fan, i) => (equipment[fan] = i < 2 ? "ON" : "OFF"));
   for (const pad of climate.padPumps) equipment[pad] = "ON";
   for (const shade of climate.shade) equipment[shade] = "OPEN";
@@ -71,16 +67,11 @@ export function buildClimateTelemetry(layout: Farm): ClimateTelemetry {
     equipment[chiller] = { state: "ON", setpointC: 22.0 };
   for (const fog of climate.foggers) equipment[fog] = "OFF";
 
-  climateSeq += 1;
+  const seen = new Date().toISOString();
   return {
-    v: 1,
-    type: "CLIMATE_TELEMETRY",
-    msgId: crypto.randomUUID(),
-    ts: new Date().toISOString(),
-    site: layout.site,
-    device: climate.controller,
-    bootId: 77,
-    seq: climateSeq,
+    online: true,
+    lastSeen: seen,
+    ts: seen,
     readings: {
       airTempC,
       airTempByPosC,
@@ -92,28 +83,24 @@ export function buildClimateTelemetry(layout: Farm): ClimateTelemetry {
     quality: { airTempC: "OK", airRh: "OK", outsideTempC: "OK", outsideRh: "OK", elecRoomTempC: "OK" },
     mode: "MANUAL",
     manualUntil: null,
+    stopped: false,
     equipment,
-    runTimeTodayMin: { FANS: 312, ...Object.fromEntries(climate.padPumps.map((pad) => [pad, 240])) },
-    setpoints: { airTempMaxC: 30.0, airRhMax: 85, solTempMaxC: 24.0 },
+    latches: [],
   };
 }
 
-/** §6.3: `generator` and `ups` are left out when the layout says the site has none. */
-export function buildPowerState(layout: Farm): PowerState {
-  powerSeq += 1;
-  const state: PowerState = {
-    v: 1,
-    type: "POWER_STATE",
-    msgId: crypto.randomUUID(),
-    ts: new Date().toISOString(),
-    site: layout.site,
-    device: layout.power.monitor,
-    bootId: 3,
-    seq: powerSeq,
+/** §11.2: `generator` and `ups` are left out when the layout says the site has none. */
+export function buildPowerStatus(layout: Farm): PowerStatus {
+  const now = new Date().toISOString();
+  const state: PowerStatus = {
+    online: true,
+    lastSeen: now,
+    ts: now,
     mains: "OK",
     phases: { l1V: 231, l2V: 229, l3V: 233 },
     source: "MAINS",
     ats: "MAINS",
+    quality: {},
   };
   if (layout.power.generator) state.generator = "STOPPED";
   if (layout.power.ups) state.ups = { onBattery: false, batteryPct: 100, runtimeMin: 42 };

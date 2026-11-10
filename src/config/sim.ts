@@ -67,6 +67,13 @@ export function drillTargets(farm: Farm, drill: Pick<FailureDrill, "targetType">
   }
 }
 
+/** Drills that are a switch on the farm, not a broken part: each gets its own press and release
+    buttons, on the "E-STOP and power" card, when scenarios.json lists it. */
+export const SWITCH_DRILLS: Record<string, { on: string; off: string; isOn: string }> = {
+  ESTOP: { on: "Press E-STOP", off: "Release E-STOP", isOn: "E-STOP pressed" },
+  POWER_CUT: { on: "Cut power", off: "Restore power", isOn: "Power off" },
+};
+
 /** Where a value can be held: each zone, then the polyhouse air. */
 export const holdTargets = (farm: Farm) => [...farm.zones.map((z) => z.id), POLYHOUSE];
 

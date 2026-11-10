@@ -8,6 +8,7 @@ PWA for Owner, Agronomist, Viewer and Engineer roles.
 - `GET /api/farm` → `src/mocks/data/layout.json` plus `features` from `src/mocks/data/features.json`, copies of the same files in `config/clients/client_A/` (a test fails if they differ)
 - `GET /api/zones`, `/api/zones/Z1`, `/api/zones/Z2` → the contract §11.2 zone response, as the real back end answers it; readings move a little on every request
 - `/api/sim/…` (contract §11.4, playground only) → a fake simulator in `src/mocks/sim.ts`: `GET state` and `scenario-options` (a copy of `config/clients/client_A/scenarios.json`, checked by a test), `POST speed`, `faults`, `holds`, `holds/release-all`, `reset`, and `DELETE holds/{target}/{metric}`. It keeps the speed, the simulated clock, running drills and held values until the page reloads, and answers 422 to a value `scenarios.json` doesn't allow. A drill or held value doesn't change the fake readings yet
+- `GET /api/devices` → every device in `layout.json`, in device-ID order, with `online` and `lastSeen` (contract §11.2); `?limit=` and `?cursor=` page it as the real back end does. ZC2 is offline with `?mock=z2-offline`
 
 Add `?mock=<name>` to the URL to see other states (kept for the tab; `?mock=normal` to go back):
 `z2-offline`, `z2-sensor-fault`, `z2-stale`, `z1-estop`, `farm-error`, `no-playground`, `slow`. See `src/mocks/scenario.ts`.

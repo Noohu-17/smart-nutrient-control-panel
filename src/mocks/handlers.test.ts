@@ -4,7 +4,7 @@ import configFeatures from "../../config/clients/client_A/features.json";
 import configLayout from "../../config/clients/client_A/layout.json";
 import configLimits from "../../config/clients/client_A/limits.json";
 import configScenarios from "../../config/clients/client_A/scenarios.json";
-import type { ClimateTelemetry, Farm, PowerState, ZoneStatus } from "../api/types";
+import type { ClimateStatus, DeviceList, Farm, PowerStatus, ZoneStatus } from "../api/types";
 import mockFeatures from "./data/features.json";
 import mockLayout from "./data/layout.json";
 import mockLimits from "./data/limits.json";
@@ -122,17 +122,14 @@ describe("fake API (MSW)", () => {
     expect(Math.abs(second.readings.ec! - first.readings.ec!)).toBeLessThan(0.05);
   });
 
-  it("GET /api/climate returns telemetry shaped like contract §6.2, positions from the layout", async () => {
+  it("GET /api/climate answers like contract §11.2, positions from the layout", async () => {
     const res = await get("/climate");
     expect(res.status).toBe(200);
-    const c = (await res.json()) as ClimateTelemetry;
-    expect(c).toMatchObject({
-      v: 1,
-      type: "CLIMATE_TELEMETRY",
-      site: "siet-ph1",
-      device: "CC1",
-      mode: "MANUAL",
-    });
+    const c = (await res.json()) as ClimateStatus;
+    expect(c).toMatchObject({ online: true, mode: "MANUAL", manualUntil: null, stopped: false, latches: [] });
+    // §11.2: the answer carries no message envelope
+    for (const key of ["v", "type", "msgId", "site", "device", "bootId", "seq", "runTimeTodayMin", "setpoints"])
+      expect(c).not.toHaveProperty(key);
     // first answer is the contract example
     expect(c.readings).toEqual({
       airTempC: 31.2,
@@ -149,29 +146,61 @@ describe("fake API (MSW)", () => {
       PAD1: "ON",
       CH1: { state: "ON", setpointC: 22 },
     });
-    expect(c.setpoints).toEqual({ airTempMaxC: 30, airRhMax: 85, solTempMaxC: 24 });
   });
 
-  it("GET /api/power returns the state shaped like contract §6.3", async () => {
+  it("GET /api/power answers like contract §11.2", async () => {
     const res = await get("/power");
     expect(res.status).toBe(200);
-    const p = (await res.json()) as PowerState;
+    const p = (await res.json()) as PowerStatus;
     expect(p).toMatchObject({
-      v: 1,
-      type: "POWER_STATE",
-      device: "PM1",
+      online: true,
       mains: "OK",
       phases: { l1V: 231, l2V: 229, l3V: 233 },
       source: "MAINS",
       generator: "STOPPED",
       ats: "MAINS",
       ups: { onBattery: false, batteryPct: 100, runtimeMin: 42 },
+      quality: {},
     });
+    for (const key of ["v", "type", "msgId", "site", "device", "bootId", "seq"]) expect(p).not.toHaveProperty(key);
   });
 
   it("GET /api/zones/Z9 is a 404 with the contract error body", async () => {
     const res = await get("/zones/Z9");
     expect(res.status).toBe(404);
     expect(await res.json()).toEqual({ error: { code: "NOT_FOUND", message: "There is no zone Z9" } });
+  });
+  it("GET /api/devices lists every layout device in device-ID order, in the contract §11.2 shape", async () => {
+    const res = await get("/devices");
+    expect(res.status).toBe(200);
+    const page = (await res.json()) as DeviceList;
+    expect(page.nextCursor).toBeNull();
+    expect(page.items.map((d) => d.deviceId)).toEqual(["CC1", "GW1", "PM1", "ZC1", "ZC2"]);
+    expect(page.items.map((d) => d.deviceId).sort()).toEqual(configLayout.devices.map((d) => d.id).sort());
+    for (const d of page.items) {
+      expect(Object.keys(d).sort()).toEqual(["deviceId", "kind", "lastSeen", "online", "zone"]);
+      expect(new Date(d.lastSeen!).toISOString()).toBe(d.lastSeen);
+    }
+    expect(page.items.find((d) => d.deviceId === "ZC2")).toMatchObject({
+      kind: "ZONE_CONTROLLER",
+      zone: "Z2",
+      online: true,
+    });
+    expect(page.items.find((d) => d.deviceId === "CC1")?.zone).toBeNull();
+  });
+
+  it("GET /api/devices pages with ?limit= and ?cursor=", async () => {
+    const first = (await (await get("/devices?limit=2")).json()) as DeviceList;
+    expect(first).toMatchObject({ nextCursor: "GW1" });
+    expect(first.items.map((d) => d.deviceId)).toEqual(["CC1", "GW1"]);
+    const last = (await (await get("/devices?limit=3&cursor=GW1")).json()) as DeviceList;
+    expect(last.items.map((d) => d.deviceId)).toEqual(["PM1", "ZC1", "ZC2"]);
+    expect(last.nextCursor).toBeNull();
+  });
+
+  it("GET /api/devices?limit=0 is a 422 with the contract error body", async () => {
+    const res = await get("/devices?limit=0");
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
   });
 });

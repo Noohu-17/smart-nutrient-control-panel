@@ -15,5 +15,6 @@ export const navMonitor = (zones: FarmZone[]): NavItem[] => [
 export const navSystem = (playground = false): NavItem[] => [
   { to: "/alerts", label: "Alerts", icon: "bell" },
   { to: "/history", label: "History", icon: "clock" },
+  { to: "/devices", label: "Devices", icon: "chip" },
   ...(playground ? [{ to: "/simulator", label: "Simulator", icon: "sliders" as const }] : []),
 ];

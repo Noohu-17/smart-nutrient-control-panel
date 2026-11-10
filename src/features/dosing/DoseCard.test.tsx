@@ -107,6 +107,21 @@ describe("Manual dose and review", () => {
     expect(screen.getByRole("checkbox", { name: /and the warnings above/ })).toBeInTheDocument();
   });
 
+  it("sends only the lines with an amount, so the farm never gets a 0 mL line", async () => {
+    const sent: unknown[] = [];
+    server.use(
+      http.post("/api/dose-requests", async ({ request }) => {
+        sent.push(await request.clone().json());
+        return undefined; // on to the fake API
+      }),
+    );
+    const { user } = await enter({ "Stock A": "120", Acid: "0" });
+    await user.click(screen.getByRole("button", { name: "Review dose" }));
+
+    expect(await screen.findByRole("heading", { name: "Review safety checks" })).toBeInTheDocument();
+    expect(sent).toEqual([{ zone: "Z1", lines: [{ line: "A", ml: 120 }] }]);
+  });
+
   it("goes back to the amounts with Edit quantities", async () => {
     const { user } = await enter({ "Stock A": "120" });
     await user.click(screen.getByRole("button", { name: "Review dose" }));

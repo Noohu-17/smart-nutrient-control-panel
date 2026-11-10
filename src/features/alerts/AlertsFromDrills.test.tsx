@@ -43,24 +43,22 @@ describe("alerts from the Simulator screen (fake API)", () => {
   );
 
   it(
-    "a held low reservoir: alert on the zone page until Release",
+    "pH sensor offline: alert on the zone page until Fix",
     async () => {
       const user = userEvent.setup();
       renderAt("/simulator", { role: "Operator" });
-      await screen.findByRole("heading", { name: "Held values" });
-      const held = card("Held values");
-      await user.selectOptions(held.getByLabelText("Where"), "Zone B");
-      await user.selectOptions(held.getByLabelText("Reading"), "Reservoir level");
-      await user.type(held.getByLabelText("Value"), "20");
-      await user.click(held.getByRole("button", { name: "Hold" }));
-      await held.findByRole("list", { name: "Values held now" });
+      await screen.findByRole("heading", { name: "Failure drills" });
+      const drills = card("Failure drills");
+      await user.selectOptions(drills.getByLabelText("Sensor offline: where"), "Zone B · pH");
+      await user.click(drills.getByRole("button", { name: "Trigger Sensor offline" }));
+      await screen.findByRole("list", { name: "Running drills" });
 
       await goTo(user, "Zone B", "Zone B");
-      expect(await screen.findByText("Zone B reservoir is low (20 %).", undefined)).toBeInTheDocument();
+      expect(await screen.findByText("pH sensor fault in Zone B.", undefined)).toBeInTheDocument();
 
       await goTo(user, "Simulator", "Simulator");
-      await user.click(await screen.findByRole("button", { name: "Release Zone B · Reservoir level" }));
-      await card("Held values").findByText("No values are being held.", undefined);
+      await user.click(await screen.findByRole("button", { name: "Fix Sensor offline on Zone B · pH" }));
+      await card("Failure drills").findByText("No failure drills are running.", undefined);
 
       await goTo(user, "Zone B", "Zone B");
       await expect.poll(strip, CLEARS).toBeNull();

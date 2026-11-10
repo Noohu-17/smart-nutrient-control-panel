@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ZoneStatus } from "../../api/types";
 import { buildZoneStatus } from "../../mocks/data/telemetry";
-import { bySeverity, RESERVOIR_LOW_PCT, zoneAlerts } from "./zoneAlerts";
+import { bySeverity, zoneAlerts } from "./zoneAlerts";
 
 const ZONE = { id: "Z1", name: "Zone A" };
 
@@ -74,29 +74,6 @@ describe("zoneAlerts", () => {
     expect(all.text).toMatch(/^The last one was at .+\. The controller is still connected/);
   });
 
-  it(`reservoir below ${RESERVOIR_LOW_PCT} %, but not at it or from a bad level sensor`, () => {
-    const [low] = zoneAlerts(
-      ZONE,
-      zone((t) => (t.readings.reservoirPct = 22)),
-    );
-    expect(low).toMatchObject({
-      kind: "reservoir",
-      severity: "warn",
-      title: "Zone A reservoir is low (22 %).",
-    });
-    expect(low.text).toContain("Refill the reservoir.");
-
-    expect(kinds(zone((t) => (t.readings.reservoirPct = RESERVOIR_LOW_PCT)))).toEqual([]);
-    expect(
-      kinds(
-        zone((t) => {
-          t.readings.reservoirPct = 5;
-          t.quality.reservoirPct = "OUT_OF_RANGE";
-        }),
-      ),
-    ).toEqual([]);
-  });
-
   it("offline controller: one critical alert, not one per old reading", () => {
     const alerts = zoneAlerts(
       ZONE,
@@ -124,11 +101,12 @@ describe("zoneAlerts", () => {
       kinds(
         zone((t) => {
           t.stopped = true;
-          t.readings.reservoirPct = 10;
+          t.readings.ec = null;
+          t.quality.ec = "FAULT";
           t.leak = true;
         }),
       ),
-    ).toEqual(["leak", "stopped", "reservoir"]);
+    ).toEqual(["leak", "stopped", "sensor"]);
 
     const zoneB = zoneAlerts({ id: "Z2", name: "Zone B" }, { ...zone(), zone: "Z2", estop: true });
     const zoneA = zoneAlerts(

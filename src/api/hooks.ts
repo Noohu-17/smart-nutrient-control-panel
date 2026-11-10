@@ -1,15 +1,17 @@
 // src/api/hooks.ts · TanStack Query hooks. Screens call these, never fetch.
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteJson, getJson, postJson } from "./client";
+import { ApiError, deleteJson, getJson, postJson } from "./client";
 import { isFinalCommand, isMixing } from "../config/dosing";
 import type {
-  ClimateTelemetry,
+  ClimateStatus,
   Command,
+  Device,
+  DeviceList,
   DoseConfirmed,
   DoseRequest,
   DoseRequestBody,
   Farm,
-  PowerState,
+  PowerStatus,
   ScenarioOptions,
   SimFaultBody,
   SimHold,
@@ -68,7 +70,7 @@ export function useZones(zoneIds: string[]) {
 export function useClimate() {
   return useQuery({
     queryKey: ["climate"],
-    queryFn: () => getJson<ClimateTelemetry>("/climate"),
+    queryFn: () => getJson<ClimateStatus>("/climate"),
     refetchInterval: ONE_MINUTE,
   });
 }
@@ -77,7 +79,7 @@ export function useClimate() {
 export function usePower() {
   return useQuery({
     queryKey: ["power"],
-    queryFn: () => getJson<PowerState>("/power"),
+    queryFn: () => getJson<PowerStatus>("/power"),
     refetchInterval: ONE_MINUTE,
   });
 }
@@ -101,13 +103,16 @@ export function useConfirmDose() {
 
 const SIM_STATE = ["sim", "state"] as const;
 
+/** 404 from /api/sim: the site has no playground (T1-20), so there is nothing to ask again. */
+export const noSimulator = (error: unknown) => error instanceof ApiError && error.status === 404;
+
 /** GET /api/sim/state · speed, simulated clock, running drills, held values. `enabled` is false
     on a real farm, which has no simulator to ask. */
 export function useSimState(enabled = true) {
   return useQuery({
     queryKey: SIM_STATE,
     queryFn: () => getJson<SimState>("/sim/state"),
-    refetchInterval: 30_000,
+    refetchInterval: (query) => (noSimulator(query.state.error) ? false : 30_000),
     enabled,
   });
 }
@@ -122,14 +127,28 @@ export function useScenarioOptions(enabled = true) {
   });
 }
 
+/** What the dashboard shows of the farm: asked again after a simulator action. */
+const FARM_READINGS = [["zone"], ["climate"], ["power"]] as const;
+
 /** A simulator action. §11.4 doesn't fix what these answer, so ask for the sim state again
-    afterwards; the screen and the banner then show the change. */
+    afterwards, and for the farm's readings too: a drill, hold or reset changes what the zone
+    cards, climate and power show. The screen, the banner and the dashboard then show the change. */
 function useSimAction<V>(send: (vars: V) => Promise<unknown>) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: send,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: SIM_STATE }),
+    onSuccess: () =>
+      Promise.all(
+        [SIM_STATE, ...FARM_READINGS].map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+      ),
   });
+}
+
+/** The refusal of a card's last simulator action, so an older one can't hide a newer one. Its
+    message is the server's (§11.1), shown as it came. */
+export function latestError(...actions: { error: Error | null; submittedAt: number }[]) {
+  const last = actions.reduce((a, b) => (b.submittedAt > a.submittedAt ? b : a));
+  return last.error;
 }
 
 export const useSimSpeed = () => useSimAction((x: SimSpeed) => postJson("/sim/speed", { x }));
@@ -189,4 +208,22 @@ export function useResumeZone() {
     mutationFn: (zone: string) => postJson<{ cmdId: string; state: string }>("/resume", { zone }),
     onSuccess: (_answer, zone) => queryClient.invalidateQueries({ queryKey: ["zone", zone] }),
   });
+}
+
+/** GET /api/devices · every device with online and last seen. Follows nextCursor until the
+    last page (§11.1), so the screen always has the whole list. */
+async function allDevices(): Promise<Device[]> {
+  const devices: Device[] = [];
+  let cursor: string | null = null;
+  do {
+    const query: string = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+    const page: DeviceList = await getJson<DeviceList>(`/devices${query}`);
+    devices.push(...page.items);
+    cursor = page.nextCursor;
+  } while (cursor);
+  return devices;
+}
+
+export function useDevices() {
+  return useQuery({ queryKey: ["devices"], queryFn: allDevices, refetchInterval: ONE_MINUTE });
 }

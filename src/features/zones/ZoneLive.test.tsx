@@ -79,7 +79,6 @@ describe("Alert strip (T2-20)", () => {
     ["z2-sensor-fault", "/", "EC sensor fault in Zone B."],
     ["z1-ec-stuck", "/zone/Z1", "EC reading is not updating in Zone A."],
     ["z2-stale", "/", "No fresh readings from Zone B."],
-    ["z2-reservoir-low", "/zone/Z2", "Zone B reservoir is low (22 %)."],
     ["z2-offline", "/", "Zone B controller is offline."],
   ])("%s on %s: %s", async (scenario, path, title) => {
     useScenario(scenario);
@@ -91,18 +90,21 @@ describe("Alert strip (T2-20)", () => {
     server.use(
       http.get("/api/zones/:zoneId", ({ params }) => {
         const zone = buildZoneStatus(String(params.zoneId))!;
-        if (params.zoneId === "Z1") zone.readings.reservoirPct = 10;
+        if (params.zoneId === "Z1") {
+          zone.readings.ec = null;
+          zone.quality.ec = "FAULT";
+        }
         if (params.zoneId === "Z2") zone.leak = true;
         return HttpResponse.json(zone);
       }),
     );
     renderAt("/");
     const s = await strip();
-    await s.findByText("Zone A reservoir is low (10 %).");
+    await s.findByText("EC sensor fault in Zone A.");
     await s.findByText("Leak sensor wet in Zone B.");
     expect(s.getAllByRole("alert").map((a) => a.querySelector("b")!.textContent)).toEqual([
       "Leak sensor wet in Zone B.",
-      "Zone A reservoir is low (10 %).",
+      "EC sensor fault in Zone A.",
     ]);
   });
 

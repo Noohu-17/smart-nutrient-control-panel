@@ -3,10 +3,13 @@
 import { delay, http, HttpResponse } from "msw";
 import type {
   ApiErrorBody,
+  Device,
+  DeviceList,
   DoseConfirmed,
   DoseRequest,
   DoseRequestBody,
   Farm,
+  PowerStatus,
   SimFaultBody,
   SimHold,
   ZoneStatus,
@@ -21,7 +24,7 @@ import {
   stopZoneCommands,
   type CommandEnding,
 } from "./commands";
-import { buildClimateTelemetry, buildPowerState } from "./data/climatePower";
+import { buildClimateStatus, buildPowerStatus } from "./data/climatePower";
 import { zoneDosing } from "./data/dosing";
 import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
@@ -99,10 +102,6 @@ function zoneStatus(zoneId: string): ZoneStatus {
     status.ts = minutesAgo(5);
     status.quality = ALL_STALE;
   }
-  if (zoneId === "Z2" && scenario === "z2-reservoir-low") {
-    status.readings.reservoirPct = 22;
-    status.readings.reservoirL = Math.round(0.22 * findZone(zoneId)!.reservoir.usableL);
-  }
   if (zoneId === "Z1" && scenario === "z1-ec-stuck") {
     // the simulator's STUCK_READING drill: the probe repeats one value, marked STALE (§6.1 has no STUCK)
     status.readings.ec = 1.1;
@@ -134,6 +133,33 @@ async function simAction(act: () => void) {
 const doseRequests = new Map<string, DoseRequest>();
 const confirmed = new Map<string, DoseConfirmed>();
 
+/** Every device in the layout, in order of device ID (§11.2). ZC2 is the silent one in z2-offline. */
+function devices(): Device[] {
+  const now = new Date().toISOString();
+  return (farmLayout.devices ?? [])
+    .map((d) => {
+      const silent = d.id === "ZC2" && currentScenario() === "z2-offline";
+      return {
+        deviceId: d.id,
+        kind: d.kind,
+        zone: d.zone ?? null,
+        online: !silent,
+        lastSeen: silent ? minutesAgo(4) : now,
+      };
+    })
+    .sort((a, b) => a.deviceId.localeCompare(b.deviceId));
+}
+
+/** One page of the device list: ?limit= (1–200, default 200) and ?cursor= (the last ID of the page before). */
+function devicePage(url: URL): DeviceList | null {
+  const limit = Number(url.searchParams.get("limit") ?? 200);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) return null;
+  const cursor = url.searchParams.get("cursor");
+  const rest = devices().filter((d) => cursor === null || d.deviceId > cursor);
+  const items = rest.slice(0, limit);
+  return { items, nextCursor: rest.length > limit ? items[items.length - 1].deviceId : null };
+}
+
 export const handlers = [
   // GET /api/health · uptime check (contract §11.2, public)
   http.get("/api/health", () =>
@@ -152,16 +178,39 @@ export const handlers = [
     return HttpResponse.json(scenarioLayout());
   }),
 
-  // GET /api/climate · latest climate telemetry from CC1 (contract §6.2)
+  // GET /api/climate · CC1's latest readings and state (contract §11.2)
   http.get("/api/climate", async () => {
     await networkDelay();
-    return HttpResponse.json(buildClimateTelemetry(scenarioLayout()));
+    const climate = buildClimateStatus(scenarioLayout());
+    if (currentScenario() === "climate-offline") {
+      climate.online = false;
+      for (const key of Object.keys(climate.quality) as (keyof typeof climate.quality)[])
+        climate.quality[key] = "STALE"; // §11.2: OK becomes STALE once the controller is offline
+    }
+    return HttpResponse.json(climate);
   }),
 
-  // GET /api/power · latest power state from PM1 (contract §6.3)
+  // GET /api/power · PM1's latest POWER_STATE (contract §11.2)
   http.get("/api/power", async () => {
     await networkDelay();
-    const power = buildPowerState(scenarioLayout());
+    const layout = scenarioLayout();
+    if (currentScenario() === "power-never") {
+      // §11.2: a monitor that has never reported; generator and ups only when the layout has them
+      const never: PowerStatus = {
+        online: false,
+        lastSeen: null,
+        ts: null,
+        mains: null,
+        phases: { l1V: null, l2V: null, l3V: null },
+        source: null,
+        ats: null,
+        quality: {},
+      };
+      if (layout.power.generator) never.generator = null;
+      if (layout.power.ups) never.ups = null;
+      return HttpResponse.json(never);
+    }
+    const power = buildPowerStatus(layout);
     if (currentScenario() === "mains-lost") {
       power.mains = "LOST";
       power.phases = { l1V: null, l2V: null, l3V: null }; // §6.3: a lost phase is null, never 0
@@ -299,5 +348,13 @@ export const handlers = [
       return apiError(409, "ESTOP", "The E-STOP is still pressed. Release it first");
     resumeZone(body.zone);
     return HttpResponse.json({ cmdId: crypto.randomUUID(), state: "DISPATCHED" }, { status: 202 });
+  }),
+
+  // GET /api/devices · every device, online and last seen, a page at a time (contract §11.1, §11.2)
+  http.get("/api/devices", async ({ request }) => {
+    await networkDelay();
+    const page = devicePage(new URL(request.url));
+    if (!page) return apiError(422, "VALIDATION_ERROR", "limit must be a whole number from 1 to 200");
+    return HttpResponse.json(page);
   }),
 ];

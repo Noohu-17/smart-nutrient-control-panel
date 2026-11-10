@@ -63,7 +63,16 @@ describe("Roles", () => {
     const nav = within(screen.getByRole("navigation", { name: "Main" }));
     await nav.findByRole("link", { name: "Zone B" }); // zone links come from /api/farm
     const links = nav.getAllByRole("link").map((a) => a.textContent!);
-    expect(links).toEqual(["Overview", "Zone A", "Zone B", "Climate", "Alerts", "History", "Simulator"]);
+    expect(links).toEqual([
+      "Overview",
+      "Zone A",
+      "Zone B",
+      "Climate",
+      "Alerts",
+      "History",
+      "Devices",
+      "Simulator",
+    ]);
 
     for (const name of links) {
       await userEvent.click(nav.getByRole("link", { name }));

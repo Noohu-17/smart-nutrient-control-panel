@@ -25,6 +25,7 @@ describe("App shell", () => {
     ["/climate", "Climate"],
     ["/alerts", "Alerts"],
     ["/history", "History"],
+    ["/devices", "Devices"],
     ["/nowhere", "Page not found"],
   ])("routes %s to %s", async (path, heading) => {
     renderAt(path);

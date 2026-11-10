@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { useSimHold, useSimRelease, useSimReleaseAll } from "../../api/hooks";
+import { latestError, useSimHold, useSimRelease, useSimReleaseAll } from "../../api/hooks";
 import type { Farm, ScenarioOptions, SimState } from "../../api/types";
 import { can, WHY } from "../../auth/roles";
 import { useSession } from "../../auth/session";
@@ -36,7 +36,7 @@ export function HeldValues({
   const number = Number(value);
   const valid = value.trim() !== "" && range !== undefined && number >= range.min && number <= range.max;
   const unit = metricUnit(metric);
-  const error = hold.error ?? release.error ?? releaseAll.error;
+  const error = latestError(hold, release, releaseAll);
 
   function pickTarget(next: string) {
     setTarget(next);

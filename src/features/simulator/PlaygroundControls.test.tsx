@@ -7,7 +7,8 @@ import configScenarios from "../../../config/clients/client_A/scenarios.json";
 import type { Role } from "../../auth/roles";
 import { farmLayout } from "../../mocks/data/layout";
 import { server } from "../../mocks/node";
-import { scenarioOptions } from "../../mocks/sim";
+import { SWITCH_DRILLS } from "../../config/sim";
+import { scenarioOptions, simState } from "../../mocks/sim";
 import { renderAt } from "../../test/render";
 
 async function open({ role = "Operator" as Role } = {}) {
@@ -39,9 +40,12 @@ describe("Simulator screen: playground controls", () => {
   it("lists every failure drill from scenario-options, with its explanation", async () => {
     await open();
     const drills = within(screen.getByRole("list", { name: "Drills you can trigger" }));
+    const switches = card("E-STOP and power");
     for (const drill of configScenarios.failureDrills) {
-      expect(drills.getByText(drill.title)).toBeInTheDocument();
-      expect(drills.getByText(drill.explanation)).toBeInTheDocument();
+      // the E-STOP and the power cut have their own card, not a Trigger row
+      const where = drill.kind in SWITCH_DRILLS ? switches : drills;
+      expect(where.getAllByText(drill.title).length).toBeGreaterThan(0);
+      expect(where.getByText(drill.explanation)).toBeInTheDocument();
     }
   });
 
@@ -144,8 +148,113 @@ describe("Simulator screen: playground controls", () => {
     await screen.findByRole("list", { name: "Running drills" });
 
     await user.click(card("Clock").getByRole("button", { name: "Reset" }));
+    const ask = within(card("Clock").getByRole("group", { name: "Reset the farm to the starting state?" }));
+    await user.click(ask.getByRole("button", { name: "Yes, reset" }));
     expect(await card("Failure drills").findByText("No failure drills are running.")).toBeInTheDocument();
     expect(card("Clock").getByRole("button", { name: "×60" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("asks before Reset, and Cancel sends nothing", async () => {
+    let resets = 0;
+    server.use(
+      http.post("/api/sim/reset", () => {
+        resets += 1;
+        return HttpResponse.json(simState());
+      }),
+    );
+    const user = await open({ role: "Owner" });
+    await user.click(card("Clock").getByRole("button", { name: "Reset" }));
+    expect(card("Clock").getByText("Reset the farm to the starting state?")).toBeInTheDocument();
+    await user.click(card("Clock").getByRole("button", { name: "Cancel" }));
+    expect(card("Clock").queryByText("Reset the farm to the starting state?")).not.toBeInTheDocument();
+    expect(card("Clock").getByRole("button", { name: "Reset" })).toBeEnabled();
+    expect(resets).toBe(0);
+  });
+
+  it("presses and releases the E-STOP on one zone", async () => {
+    const user = await open();
+    const estop = within(screen.getByRole("list", { name: "E-STOP pressed" }));
+    await user.click(estop.getByRole("button", { name: "Press E-STOP on Zone B" }));
+
+    expect(await estop.findByRole("button", { name: "Release E-STOP on Zone B" })).toBeInTheDocument();
+    expect(estop.getByText("E-STOP pressed")).toBeInTheDocument();
+    expect(estop.getByRole("button", { name: "Press E-STOP on Zone A" })).toBeInTheDocument();
+    // its own card, so it isn't listed again under Failure drills
+    expect(card("Failure drills").getByText("No failure drills are running.")).toBeInTheDocument();
+
+    await user.click(estop.getByRole("button", { name: "Release E-STOP on Zone B" }));
+    expect(await estop.findByRole("button", { name: "Press E-STOP on Zone B" })).toBeInTheDocument();
+    expect(estop.queryByText("E-STOP pressed")).not.toBeInTheDocument();
+  });
+
+  it("offers a power cut per device when scenarios.json lists it", async () => {
+    const user = await open();
+    const power = within(screen.getByRole("list", { name: "Power cut" }));
+    await user.click(power.getByRole("button", { name: "Cut power on ZC1" }));
+    expect(await power.findByRole("button", { name: "Restore power on ZC1" })).toBeInTheDocument();
+  });
+
+  it("has no E-STOP and power card when scenarios.json lists neither", async () => {
+    server.use(
+      http.get("/api/sim/scenario-options", () =>
+        HttpResponse.json({
+          ...scenarioOptions,
+          failureDrills: scenarioOptions.failureDrills.filter((d) => !(d.kind in SWITCH_DRILLS)),
+        }),
+      ),
+    );
+    await open();
+    expect(screen.queryByRole("heading", { name: "E-STOP and power" })).not.toBeInTheDocument();
+  });
+
+  it("shows the server's message when the simulator refuses an action", async () => {
+    // what the real back end passes on from the simulator (T1-20, §11.1)
+    const refuse = (message: string) =>
+      HttpResponse.json({ error: { code: "VALIDATION_ERROR", message } }, { status: 422 });
+    server.use(
+      http.post("/api/sim/faults", () => refuse("Power cut isn't built in the simulator yet")),
+      http.post("/api/sim/speed", () => refuse("Speed must be one of 0, 1, 60, 288")),
+      http.post("/api/sim/holds", () => refuse("ph must be a number from 4 to 9")),
+      http.post("/api/sim/reset", () =>
+        HttpResponse.json(
+          { error: { code: "SERVICE_UNAVAILABLE", message: "The simulator is not available right now" } },
+          { status: 503 },
+        ),
+      ),
+    );
+    const user = await open({ role: "Owner" });
+
+    const switches = card("E-STOP and power");
+    await user.click(switches.getByRole("button", { name: "Cut power on ZC1" }));
+    expect(await switches.findByText("Power cut isn't built in the simulator yet")).toBeInTheDocument();
+    expect(switches.getByRole("button", { name: "Cut power on ZC1" })).toBeEnabled();
+
+    await user.click(card("Clock").getByRole("button", { name: "×288" }));
+    expect(await card("Clock").findByText("Speed must be one of 0, 1, 60, 288")).toBeInTheDocument();
+    expect(card("Clock").getByRole("button", { name: "×60" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(card("Clock").getByRole("button", { name: "Reset" }));
+    await user.click(card("Clock").getByRole("button", { name: "Yes, reset" }));
+    expect(await card("Clock").findByText("The simulator is not available right now")).toBeInTheDocument();
+
+    const held = card("Held values");
+    await user.selectOptions(held.getByLabelText("Reading"), "pH");
+    await user.type(held.getByLabelText("Value"), "7");
+    await user.click(held.getByRole("button", { name: "Hold" }));
+    expect(await held.findByText("ph must be a number from 4 to 9")).toBeInTheDocument();
+  });
+
+  it("hides the screen and the banner when the back end has no simulator (404)", async () => {
+    const none = () =>
+      HttpResponse.json(
+        { error: { code: "NOT_FOUND", message: "This site has no simulator" } },
+        { status: 404 },
+      );
+    server.use(http.get("/api/sim/state", none), http.get("/api/sim/scenario-options", none));
+    renderAt("/simulator");
+    expect(await screen.findByRole("heading", { name: "Simulator not available" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Clock" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Simulated farm")).not.toBeInTheDocument();
   });
 
   it("locks Reset for everyone but the Owner, with the reason", async () => {

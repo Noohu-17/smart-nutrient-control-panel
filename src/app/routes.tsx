@@ -3,6 +3,7 @@ import { NotFound } from "../components/NotFound";
 import { Alerts } from "../features/alerts/Alerts";
 import { SignIn } from "../features/auth/SignIn";
 import { Climate } from "../features/climate/Climate";
+import { Devices } from "../features/devices/Devices";
 import { History } from "../features/history/History";
 import { Overview } from "../features/overview/Overview";
 import { SimulatorPage } from "../features/simulator/SimulatorPage";
@@ -20,6 +21,7 @@ export const routes: RouteObject[] = [
       { path: "climate", element: <Climate /> },
       { path: "alerts", element: <Alerts /> },
       { path: "history", element: <History /> },
+      { path: "devices", element: <Devices /> },
       { path: "simulator", element: <SimulatorPage /> },
       { path: "*", element: <NotFound /> },
     ],

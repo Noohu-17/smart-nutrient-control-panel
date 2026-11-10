@@ -4,11 +4,12 @@ import type { FailureDrill, Farm, SimState } from "../../api/types";
 import { can, WHY } from "../../auth/roles";
 import { useSession } from "../../auth/session";
 import { StatusChip } from "../../components/StatusChip";
-import { drillTargets, targetLabel } from "../../config/sim";
+import { drillTargets, SWITCH_DRILLS, targetLabel } from "../../config/sim";
 import { LockReason, SimButton } from "./SimButton";
 
 /** Failure drills from scenarios.json (§11.4.3): Trigger breaks a part, Fix repairs it.
-    Running drills are listed first and marked in the catalogue. */
+    Running drills are listed first and marked in the catalogue. The E-STOP and the power cut
+    have their own card (SwitchDrills), so they are left out here. */
 export function FailureDrills({ farm, sim, drills }: { farm: Farm; sim: SimState; drills: FailureDrill[] }) {
   const { role } = useSession();
   const fault = useSimFault();
@@ -16,6 +17,7 @@ export function FailureDrills({ farm, sim, drills }: { farm: Farm; sim: SimState
   const locked = role === null || !can(role, "sim") ? WHY.sim : undefined;
   const title = (kind: string) => drills.find((d) => d.kind === kind)?.title ?? kind;
   const fixText = (kind: string) => drills.find((d) => d.kind === kind)?.fix;
+  const running = sim.faults.filter((f) => !(f.kind in SWITCH_DRILLS));
 
   return (
     <section className="zone-card" aria-labelledby="failure-drills-title">
@@ -24,11 +26,11 @@ export function FailureDrills({ farm, sim, drills }: { farm: Farm; sim: SimState
       </header>
       <LockReason id={reasonId} reason={locked} />
 
-      {sim.faults.length === 0 ? (
+      {running.length === 0 ? (
         <p className="empty-note">No failure drills are running.</p>
       ) : (
         <ul className="sim-list" aria-label="Running drills">
-          {sim.faults.map((f) => (
+          {running.map((f) => (
             <li key={`${f.kind}/${f.target}`}>
               <div>
                 <b>
