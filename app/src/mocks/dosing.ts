@@ -13,6 +13,20 @@ const round = (n: number, dp: number) => Math.round(n * 10 ** dp) / 10 ** dp;
 
 export class DoseInputError extends Error {}
 
+// What a reading's quality (§6.1) means, in the words the server's review uses.
+const QUALITY_TEXT: Record<string, string> = {
+  FAULT: "sensor fault",
+  OUT_OF_RANGE: "outside the sensor's range",
+  UNCALIBRATED: "sensor needs calibrating",
+  STALE: "not updating",
+};
+
+function unusableWhy(quality: string | undefined, value: number | null | undefined) {
+  if (quality && QUALITY_TEXT[quality]) return QUALITY_TEXT[quality];
+  if (quality === undefined) return value == null ? "no reading" : "it came without a quality mark";
+  return value == null ? "no value" : `marked ${quality}`;
+}
+
 /** Whole, non-negative mL on lines the zone has, and at least one above zero (§1: volumes are whole mL). */
 export function validateLines(zone: FarmZone, lines: DoseLineAmount[]) {
   for (const l of lines) {
@@ -157,7 +171,7 @@ export function runDoseChecks(
     fresh,
     `EC/pH ${ageS} s old`,
     unreliable.length
-      ? `${unreliable.map((k) => (k === "ec" ? "EC" : "pH")).join(" and ")} reading not usable (${unreliable.map((k) => t.quality[k] ?? "missing").join(", ")})`
+      ? unreliable.map((k) => `${k === "ec" ? "EC" : "pH"} reading not usable: ${unusableWhy(t.quality[k], r[k])}`).join("; ")
       : ageS === null
         ? "No EC/pH reading yet"
         : `EC/pH ${ageS} s old, more than ${FRESH_READING_S} s`,

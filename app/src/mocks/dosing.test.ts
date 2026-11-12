@@ -32,4 +32,9 @@ describe("fake dose checks: unknown means blocked (§8.3)", () => {
   it("does not trust EC or pH without a quality", () => {
     expect(checkResult("FRESH_READINGS", { quality: {} }).result).toBe("BLOCK");
   });
+
+  it("says why a reading can't be used in plain words, not a code", () => {
+    const check = checkResult("FRESH_READINGS", { quality: { ec: "OK", ph: "FAULT" } });
+    expect(check.message).toBe("pH reading not usable: sensor fault");
+  });
 });

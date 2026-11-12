@@ -1,5 +1,7 @@
 import { screen, within } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
+import { server } from "../mocks/node";
 import { renderAt } from "../test/render";
 
 describe("App shell", () => {
@@ -7,10 +9,26 @@ describe("App shell", () => {
     renderAt("/");
     const banner = screen.getByRole("banner");
     expect(await within(banner).findByText("SIET Polyhouse 1")).toBeInTheDocument();
-    expect(banner).toHaveTextContent("Not connected");
+    expect(await within(banner).findByText("Connected")).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Tabs" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
+  });
+
+  it("says Server problem when the server answers 503 DEGRADED", async () => {
+    server.use(
+      http.get("/api/health", () =>
+        HttpResponse.json({ status: "DEGRADED", database: "DOWN", broker: "UP" }, { status: 503 }),
+      ),
+    );
+    renderAt("/");
+    expect(await within(screen.getByRole("banner")).findByText("Server problem")).toBeInTheDocument();
+  });
+
+  it("says Not connected when the server can't be reached", async () => {
+    server.use(http.get("/api/health", () => HttpResponse.error()));
+    renderAt("/");
+    expect(await within(screen.getByRole("banner")).findByText("Not connected")).toBeInTheDocument();
   });
 
   it("lists the zones from the farm in the sidebar", async () => {

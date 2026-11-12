@@ -240,10 +240,21 @@ def test_a_stale_reading_blocks(api, worker):
     assert body["canConfirm"] is False
 
 
-@pytest.mark.parametrize("quality", ["FAULT", "OUT_OF_RANGE", "UNCALIBRATED"])
-def test_a_ph_reading_that_isnt_ok_blocks(api, worker, quality):
+@pytest.mark.parametrize(
+    ("quality", "why"),
+    [("FAULT", "sensor fault"), ("OUT_OF_RANGE", "outside the sensor's range"),
+     ("UNCALIBRATED", "sensor needs calibrating")],
+)
+def test_a_ph_reading_that_isnt_ok_blocks_in_plain_words(api, worker, quality, why):
     ready_zone(worker, quality={"ph": quality}, readings={"ph": None} if quality == "FAULT" else None)
-    assert check(review(api), "FRESH_READINGS") == ("BLOCK", f"pH reading not usable ({quality})")
+    assert check(review(api), "FRESH_READINGS") == ("BLOCK", f"pH reading not usable: {why}")
+
+
+def test_a_reading_that_stopped_changing_is_not_updating_not_offline(api, worker):
+    ready_zone(worker, quality={"ph": "STALE"})  # what the controller sends for a stuck probe
+    body = review(api)
+    assert check(body, "DEVICES_ONLINE")[0] == "PASS"
+    assert check(body, "FRESH_READINGS") == ("BLOCK", "pH reading is not updating")
 
 
 def test_an_unknown_state_blocks(api, worker):
@@ -263,7 +274,7 @@ def test_a_zone_that_has_never_reported_blocks_on_everything_it_cant_know(api):
         assert results[check_id] == "BLOCK", check_id
     assert check(body, "DEVICES_ONLINE") == ("BLOCK", "ZC1 has never reported")
     assert check(body, "PROJECTED_EC_PH") == ("BLOCK", "Cannot project EC and pH without both readings")
-    assert check(body, "FRESH_READINGS") == ("BLOCK", "EC and pH reading not usable (missing, missing)")
+    assert check(body, "FRESH_READINGS") == ("BLOCK", "No EC or pH reading yet")
     assert body["projected"] == {"ec": None, "ph": None}
 
 
@@ -344,7 +355,9 @@ def test_a_reading_with_no_quality_isnt_dosed_on(api, worker):
     quality = {k: v for k, v in QUALITY.items() if k != "ph"}
     handle(worker, zone_telemetry(ts=now_ts(5), readings=READINGS, quality=quality), "farm/siet-ph1/zone/Z1/telemetry")
     handle(worker, zone_state(ts=now_ts(1), seq=50, outputs=OUTPUTS))
-    assert check(review(api), "FRESH_READINGS") == ("BLOCK", "pH reading not usable (missing)")
+    assert check(review(api), "FRESH_READINGS") == (
+        "BLOCK", "pH reading not usable: it came without a quality mark"
+    )
 
 
 def test_a_zone_with_no_recipe_applied_warns(tmp_path, migrated_db):

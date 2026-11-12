@@ -53,6 +53,18 @@
   background: var(--dot-off);
 }
 
+.live-chip[data-tone="ok"] i {
+  background: var(--dot-ok);
+}
+
+.live-chip[data-tone="warn"] i {
+  background: var(--dot-warn);
+}
+
+.live-chip[data-tone="crit"] i {
+  background: var(--dot-crit);
+}
+
 /* ---------- shell */
 .shell {
   display: flex;

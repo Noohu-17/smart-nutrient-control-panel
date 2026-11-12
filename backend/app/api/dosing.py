@@ -39,6 +39,22 @@ class Review:
         return not any(check.result == "BLOCK" for check in self.checks)
 
 
+# What a reading's quality (§6.1) means, for the review's message.
+QUALITY_TEXT = {
+    "FAULT": "sensor fault",
+    "OUT_OF_RANGE": "outside the sensor's range",
+    "UNCALIBRATED": "sensor needs calibrating",
+}
+
+
+def _unusable_why(quality: str, value: float | None) -> str:
+    if quality in QUALITY_TEXT:
+        return QUALITY_TEXT[quality]
+    if quality == "missing":
+        return "it came without a quality mark" if value is not None else "no reading"
+    return "no value" if value is None else f"marked {quality}"
+
+
 def validate_lines(zone: FarmZone, lines: Sequence[DoseLineAmount]) -> None:
     """Whole, non-negative mL on lines the zone has, each once, and at least one above zero (§1)."""
     seen: set[str] = set()
@@ -214,21 +230,27 @@ def review(
     # mark for old or offline readings, so it is about freshness; any other quality, or none at
     # all, is not usable, as in the fake.
     fresh_s = round(FRESH_FOR.total_seconds())
+    names = {"ec": "EC", "ph": "pH"}
     quality = {key: status.quality.get(key, "missing") for key in ("ec", "ph")}
     unusable = [
         key
         for key in ("ec", "ph")
         if quality[key] not in ("OK", "STALE") or getattr(readings, key) is None
     ]
-    if unusable:
-        failed = (
-            f"{' and '.join('EC' if key == 'ec' else 'pH' for key in unusable)} reading not usable "
-            f"({', '.join(status.quality.get(key, 'missing') for key in unusable)})"
+    stuck = [names[key] for key in ("ec", "ph") if quality[key] == "STALE"]
+    if unusable and all(quality[key] == "missing" and getattr(readings, key) is None for key in unusable):
+        failed = f"No {' or '.join(names[key] for key in unusable)} reading yet"
+    elif unusable:
+        failed = "; ".join(
+            f"{names[key]} reading not usable: {_unusable_why(quality[key], getattr(readings, key))}"
+            for key in unusable
         )
     elif age_s is None:
         failed = "No EC/pH reading yet"
     elif age_s > fresh_s:
         failed = f"EC/pH {age_s} s old, more than {fresh_s} s"
+    elif status.online and stuck:  # the controller marks a reading that stopped changing STALE
+        failed = f"{' and '.join(stuck)} {'reading is' if len(stuck) == 1 else 'readings are'} not updating"
     else:
         failed = f"EC/pH {age_s} s old, but {zone.controller} is offline"
     fresh = not unusable and age_s is not None and age_s <= fresh_s and "STALE" not in quality.values()
