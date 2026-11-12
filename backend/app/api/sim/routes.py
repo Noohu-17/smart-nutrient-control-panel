@@ -6,7 +6,8 @@ outside the server can reach, on the same path without /api/sim (GET /api/sim/st
 read from the config pack's scenarios.json, the file the simulator checks against (§11.4.1). They
 exist only on sites whose features.json has "playground": true: elsewhere every one answers 404.
 Each call is logged on the api.sim logger, with its body and the simulator's answer. Roles (§11.4)
-wait for sign-in.
+wait for sign-in. A reset the simulator accepted is also recorded in the database, so the 24-hour
+totals start again (§11.4, T1-25).
 
 Plain functions, so FastAPI runs them in its thread pool while they wait for the simulator.
 """
@@ -15,16 +16,21 @@ import json
 import logging
 import re
 import time
+from datetime import UTC, datetime
 from functools import cache
 from typing import Annotated, Any
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Request
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy import Engine
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 
+from ...db.models import PlaygroundReset
 from ...errors import ApiError, _error
-from ..pack import PackError, _read_json, _without_meta, read_farm
-from ..routes import SettingsDep, _errors
+from ..pack import PackError, SiteRef, _read_json, _without_meta, read_farm
+from ..routes import EngineDep, SettingsDep, SiteDep, _errors
 from .client import BadAnswer, HttpSimulator, SimAnswer, Simulator, SimulatorDown, SimulatorTimedOut
 from .schemas import FaultBody, HoldBody, SimId, SpeedBody
 
@@ -150,9 +156,33 @@ def post_speed(body: SpeedBody, simulator: SimulatorDep) -> Response:
     return _forward(simulator, "POST", "/speed", _body(body))
 
 
-def post_reset(simulator: SimulatorDep) -> Response:
-    """Back to the start of the current scenario: all drills off, levels and readings reset."""
-    return _forward(simulator, "POST", "/reset")
+def record_reset(engine: Engine, site: SiteRef, at: datetime) -> None:
+    """Keep when the farm was reset, so the dose review's 24-hour totals start again (§11.4).
+
+    The reset has already happened on the simulator, so a database that can't take it doesn't undo
+    it: the line says what that means instead.
+    """
+    statement = insert(PlaygroundReset).values(org_id=site.org_id, site_id=site.site_id, reset_at=at)
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                statement.on_conflict_do_update(index_elements=["org_id", "site_id"], set_={"reset_at": at})
+            )
+    except SQLAlchemyError as exc:
+        first = str(getattr(exc, "orig", exc)).partition("\n")[0]
+        log.error("reset not recorded, so the 24 h totals still count doses from before it: %s", first)
+        return
+    log.info("reset recorded: the 24 h totals start again from %s", at.isoformat())
+
+
+def post_reset(simulator: SimulatorDep, engine: EngineDep, site: SiteDep) -> Response:
+    """Back to the start of the current scenario: all drills off, levels and readings reset, and
+    the 24-hour totals start again."""
+    answer = _forward(simulator, "POST", "/reset")
+    if 200 <= answer.status_code < 300:
+        # After the answer: a dose the reset stopped is reported before it, so it doesn't count.
+        record_reset(engine, site, datetime.now(UTC))
+    return answer
 
 
 def post_fault(body: FaultBody, simulator: SimulatorDep) -> Response:

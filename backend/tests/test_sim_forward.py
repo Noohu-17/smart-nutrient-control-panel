@@ -4,7 +4,9 @@ The simulator here is a fake: a small HTTP server on 127.0.0.1 that answers the 
 bodies the way the app's fake does (app/src/mocks/sim.ts), checks speeds against simulator.json and
 drills and ranges against scenarios.json, and records every call it gets. Its paths are those
 T4-9 gives the simulator: the /api/sim path without /api/sim, so GET /state for GET /api/sim/state. So each test goes over
-real HTTP, through the same client the API uses with the real simulator. No database is needed.
+real HTTP, through the same client the API uses with the real simulator. No database is needed:
+the reset's record (T1-25) goes to a database that can't be reached, and test_playground_reset
+checks it with a real one.
 """
 
 import dataclasses
@@ -20,9 +22,10 @@ from pathlib import Path
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
 from test_read_api import FEATURES, write_pack
 
-from app.api.routes import get_settings
+from app.api.routes import get_engine, get_settings
 from app.api.sim import add_sim_api
 from app.api.sim.client import HttpSimulator
 from app.api.sim.routes import ROUTES, get_simulator
@@ -168,9 +171,14 @@ def write_sim_pack(folder: Path, features: dict = FEATURES) -> Path:
     return folder
 
 
+# Nothing listens on port 1, so recording a reset fails at once, as with the database down.
+NO_DATABASE = create_engine("postgresql+psycopg://nobody@127.0.0.1:1/none", connect_args={"connect_timeout": 1})
+
+
 def client(pack: Path, url: str | None) -> TestClient:
     settings = dataclasses.replace(load_settings(), client_dir=pack, sim_control_url=url)
     app.dependency_overrides[get_settings] = lambda: settings
+    app.dependency_overrides[get_engine] = lambda: NO_DATABASE
     return TestClient(app, raise_server_exceptions=False)
 
 

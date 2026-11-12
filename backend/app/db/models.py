@@ -1,5 +1,5 @@
 """Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message, command
-report, dose request, sent command and user.
+report, dose request, sent command, playground reset and user.
 
 Every table has org_id and site_id (OPEN-11), so more organisations and sites can share
 the database later. Rows are keyed by the contract's own IDs (§2.1, §2.2): siet-ph1, Z1,
@@ -244,6 +244,21 @@ class SentCommand(Base):
     # stored a newer CMD_STATE for it, and when it marked it UNKNOWN, TIMED_OUT for want of one.
     last_report_at: Mapped[datetime | None] = mapped_column(Timestamp)
     timed_out_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class PlaygroundReset(Base):
+    """When the playground's farm was last reset (POST /api/sim/reset, contract §11.4): one row per site.
+
+    A reset clears the 24-hour totals (§11.4). The simulator's controllers forget theirs, so the
+    dose review counts only commands reported after reset_at (real time, as CMD_STATE ts is).
+    """
+
+    __tablename__ = "playground_reset"
+    __table_args__ = (_site_fk(),)
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    reset_at: Mapped[datetime] = mapped_column(Timestamp)
 
 
 class User(Base):
