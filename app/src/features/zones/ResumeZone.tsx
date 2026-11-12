@@ -1,8 +1,11 @@
+import { useEffect, useState } from "react";
 import { useResumeZone } from "../../api/hooks";
 import { can, WHY } from "../../auth/roles";
 import { useSession } from "../../auth/session";
 import { LockedButton } from "../../components/LockedButton";
 import type { ZoneStatus } from "./useZoneStatus";
+
+const RESUME_WAIT_MS = 10_000;
 
 /** Resume, inside the zone's stopped or E-STOP alert. A stopped zone stays stopped until a person
     has checked it and presses Resume (§6.8, §7.8). Owner, Agronomist and Operator may resume; a
@@ -10,6 +13,13 @@ import type { ZoneStatus } from "./useZoneStatus";
 export function ResumeZone({ zoneId, status }: { zoneId: string; status: ZoneStatus }) {
   const { role } = useSession();
   const resume = useResumeZone();
+  // Sent and accepted: the zone reports itself running a moment later. Wait up to 10 s for it.
+  const [waiting, setWaiting] = useState(false);
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = setTimeout(() => setWaiting(false), RESUME_WAIT_MS);
+    return () => clearTimeout(timer);
+  }, [waiting]);
   const { t } = status;
   if (t?.stopped !== true) return null;
 
@@ -22,11 +32,13 @@ export function ResumeZone({ zoneId, status }: { zoneId: string; status: ZoneSta
         ? "The controller is offline"
         : resume.isPending
           ? "Sending…"
-          : undefined;
+          : waiting
+            ? "Resume sent, waiting for the zone…"
+            : undefined;
   return (
     <>
       <div className="dose-actions">
-        <LockedButton reason={reason} onClick={() => resume.mutate(zoneId)}>
+        <LockedButton reason={reason} onClick={() => resume.mutate(zoneId, { onSuccess: () => setWaiting(true) })}>
           Resume
         </LockedButton>
       </div>

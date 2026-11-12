@@ -31,15 +31,20 @@ export function HeldValues({
   const [metric, setMetric] = useState(metrics[0]?.metric ?? "");
   const [value, setValue] = useState("");
   const [gradual, setGradual] = useState(true);
+  // After Hold the entry stays, so it can be nudged (15 -> 10 -> 5), and a line confirms it.
+  const [done, setDone] = useState("");
 
   const range = metrics.find((m) => m.metric === metric)?.range;
   const number = Number(value);
   const valid = value.trim() !== "" && range !== undefined && number >= range.min && number <= range.max;
   const unit = metricUnit(metric);
   const error = latestError(hold, release, releaseAll);
+  // Holding a reading that is already held replaces its value (the simulator keeps one per reading).
+  const alreadyHeld = sim.holds.some((h) => h.target === target && h.metric === metric);
 
   function pickTarget(next: string) {
     setTarget(next);
+    setDone("");
     const nextMetrics = holdMetrics(farm, holdable, next);
     if (!nextMetrics.some((m) => m.metric === metric)) setMetric(nextMetrics[0]?.metric ?? "");
   }
@@ -95,7 +100,8 @@ export function HeldValues({
         onSubmit={(e) => {
           e.preventDefault();
           if (!valid || locked) return;
-          hold.mutate({ target, metric, value: number, gradual }, { onSuccess: () => setValue("") });
+          const held = `Held: ${targetLabel(farm, target)} · ${metricLabel(metric)} at ${number}${unit ? ` ${unit}` : ""}.`;
+          hold.mutate({ target, metric, value: number, gradual }, { onSuccess: () => setDone(held) });
         }}
       >
         <label htmlFor={`${ids}-target`}>Where</label>
@@ -119,7 +125,10 @@ export function HeldValues({
           className="sim-select"
           value={metric}
           disabled={Boolean(locked)}
-          onChange={(e) => setMetric(e.target.value)}
+          onChange={(e) => {
+            setMetric(e.target.value);
+            setDone("");
+          }}
         >
           {metrics.map((m) => (
             <option key={m.metric} value={m.metric}>
@@ -141,7 +150,10 @@ export function HeldValues({
             disabled={Boolean(locked)}
             aria-invalid={value !== "" && !valid}
             aria-describedby={`${ids}-range`}
-            onChange={(e) => setValue(e.target.value)}
+            onChange={(e) => {
+              setValue(e.target.value);
+              setDone("");
+            }}
           />
           {unit && <small>{unit}</small>}
         </span>
@@ -166,10 +178,13 @@ export function HeldValues({
             </SimButton>
           ) : (
             <button type="submit" className="btn primary" disabled={!valid || hold.isPending}>
-              {hold.isPending ? "Holding…" : "Hold"}
+              {hold.isPending ? "Holding…" : alreadyHeld ? "Update hold" : "Hold"}
             </button>
           )}
         </div>
+        <p role="status" className="dose-note sim-wide">
+          {done}
+        </p>
       </form>
 
       {error && <p className="banner crit">{error.message}</p>}

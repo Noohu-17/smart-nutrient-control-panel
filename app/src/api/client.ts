@@ -17,6 +17,16 @@ export class ApiError extends Error {
   }
 }
 
+// The role picked at sign-in, sent as X-Demo-Role on every write so the back end can record who did
+// what. Demo sites only: real accounts come later and replace it.
+let demoRole: string | null = null;
+
+export function setDemoRole(role: string | null) {
+  demoRole = role;
+}
+
+const writeHeaders = (): Record<string, string> => (demoRole ? { "X-Demo-Role": demoRole } : {});
+
 const isJson = (response: Response) => (response.headers.get("content-type") ?? "").includes("json");
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
@@ -61,8 +71,8 @@ export const getJson = <T>(path: string) => send<T>(path);
 export const postJson = <T>(path: string, body?: unknown, headers: Record<string, string> = {}) =>
   send<T>(path, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
+    headers: { "Content-Type": "application/json", ...writeHeaders(), ...headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-export const deleteJson = <T>(path: string) => send<T>(path, { method: "DELETE" });
+export const deleteJson = <T>(path: string) => send<T>(path, { method: "DELETE", headers: writeHeaders() });

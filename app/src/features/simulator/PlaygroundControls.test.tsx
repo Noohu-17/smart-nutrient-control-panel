@@ -26,10 +26,12 @@ describe("Simulator screen: playground controls", () => {
     const user = await open();
     const clock = card("Clock");
     expect(clock.getByRole("button", { name: "×60" })).toHaveAttribute("aria-pressed", "true");
-    expect(banner()).toHaveTextContent(/^Simulated farm · ×60 · /);
+    expect(banner()).toHaveTextContent(
+      /^Simulated farm · Farm clock: .+ · Running 60× faster \(1 real minute = 1 farm hour\)$/,
+    );
 
     await user.click(clock.getByRole("button", { name: "×288" }));
-    expect(await within(banner()).findByText(/×288/)).toBeInTheDocument();
+    expect(await within(banner()).findByText(/Running 288× faster/)).toBeInTheDocument();
     expect(clock.getByRole("button", { name: "×288" })).toHaveAttribute("aria-pressed", "true");
 
     await user.click(clock.getByRole("button", { name: "Pause" }));
@@ -108,6 +110,15 @@ describe("Simulator screen: playground controls", () => {
     const list = within(await held.findByRole("list", { name: "Values held now" }));
     expect(list.getByText("Zone A · pH")).toBeInTheDocument();
     expect(list.getByText("Held at 7.2")).toBeInTheDocument();
+    // The entry stays and a line confirms it; holding the same reading again updates it.
+    expect(held.getByLabelText("Value")).toHaveValue(7.2);
+    expect(held.getByRole("status")).toHaveTextContent("Held: Zone A · pH at 7.2.");
+    await user.clear(held.getByLabelText("Value"));
+    expect(held.getByRole("status")).toHaveTextContent("");
+    await user.type(held.getByLabelText("Value"), "6.5");
+    await user.click(held.getByRole("button", { name: "Update hold" }));
+    expect(await list.findByText("Held at 6.5")).toBeInTheDocument();
+    expect(list.queryByText("Held at 7.2")).not.toBeInTheDocument();
 
     await user.click(list.getByRole("button", { name: "Release Zone A · pH" }));
     expect(await held.findByText("No values are being held.")).toBeInTheDocument();
@@ -133,6 +144,7 @@ describe("Simulator screen: playground controls", () => {
     const held = card("Held values");
     for (const value of ["2.5", "3"]) {
       await user.selectOptions(held.getByLabelText("Reading"), value === "3" ? "EC" : "Solution temp");
+      await user.clear(held.getByLabelText("Value"));
       await user.type(held.getByLabelText("Value"), value);
       await user.click(held.getByRole("button", { name: "Hold" }));
       await held.findByText(`Held at ${value}`, { exact: false });
@@ -284,7 +296,7 @@ describe("Simulator screen: playground controls", () => {
   it("puts the Simulated farm banner on every screen of a playground site", async () => {
     renderAt("/");
     expect(await screen.findByText("Simulated farm")).toBeInTheDocument();
-    await within(banner()).findByText(/×60/);
+    await within(banner()).findByText(/Running 60× faster/);
   });
 
   it("has no Simulated farm banner on a real farm", async () => {

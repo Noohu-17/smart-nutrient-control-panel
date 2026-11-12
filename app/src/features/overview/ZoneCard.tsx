@@ -19,7 +19,7 @@ export function ZoneCard({ zone }: { zone: FarmZone }) {
         <ZoneStatusChip status={status} />
       </header>
       <ZoneReadings status={status} />
-      <ZoneActions />
+      <ZoneActions zoneId={zone.id} />
     </section>
   );
 }

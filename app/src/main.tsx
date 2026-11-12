@@ -6,6 +6,12 @@ import { USE_MOCKS } from "./api/client";
 import { makeQueryClient } from "./app/queryClient";
 import { routes } from "./app/routes";
 import { SessionProvider } from "./auth/SessionProvider";
+// Figtree comes with the app (npm @fontsource/figtree), so it looks the same with no internet
+import "@fontsource/figtree/400.css";
+import "@fontsource/figtree/500.css";
+import "@fontsource/figtree/600.css";
+import "@fontsource/figtree/700.css";
+import "@fontsource/figtree/800.css";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/layout.css";

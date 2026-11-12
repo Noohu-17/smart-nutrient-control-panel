@@ -4,7 +4,7 @@ import { useSession } from "../auth/session";
 import { LockedButton } from "./LockedButton";
 
 /** An action the role may or may not use. Locked with the §13 reason when it can't. Without an
-    `onClick` the action is built in a later task, so for now a click only says so. */
+    `onClick` the action isn't available yet, and a click says so. */
 export function RoleButton({
   perm,
   children,
@@ -24,7 +24,7 @@ export function RoleButton({
       </LockedButton>
       {clicked && (
         <span className="lbtn-reason" role="status">
-          Coming in a later task
+          Not available yet
         </span>
       )}
     </span>

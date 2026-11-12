@@ -55,7 +55,7 @@ describe("Roles", () => {
     expect(await screen.findByRole("button", { name: "Acknowledge all" })).toBeDisabled();
     await signInAs("Operator");
     await userEvent.click(button("Acknowledge all"));
-    expect(screen.getByRole("status")).toHaveTextContent("Coming in a later task");
+    expect(screen.getByRole("status")).toHaveTextContent("Not available yet");
   });
 
   it("opens every screen in the navigation", async () => {

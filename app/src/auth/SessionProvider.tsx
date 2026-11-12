@@ -1,4 +1,5 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { setDemoRole } from "../api/client";
 import { isDemoMode } from "../config/demo";
 import { ROLES, type Role } from "./roles";
 import { SessionContext } from "./session";
@@ -35,6 +36,8 @@ export function SessionProvider({
 }) {
   const fromTest = initialRole !== undefined;
   const [role, setRole] = useState<Role | null>(() => (fromTest ? initialRole : savedRole()));
+  // every write carries the role, so the back end can record who did what (demo sites only)
+  useEffect(() => setDemoRole(role), [role]);
 
   const session = useMemo(() => {
     const change = (next: Role | null) => {

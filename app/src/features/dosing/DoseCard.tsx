@@ -6,6 +6,7 @@ import { useSession } from "../../auth/session";
 import { LockedButton } from "../../components/LockedButton";
 import { StatusChip } from "../../components/StatusChip";
 import { checkTitle, lineName, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
+import { DOSE_CARD } from "../zones/doseCard";
 import { CommandStatus } from "./CommandStatus";
 
 type Amounts = Record<string, string>;
@@ -63,7 +64,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
   }
 
   return (
-    <section className="zone-card" id="dose-card" aria-labelledby="dose-title">
+    <section className="zone-card" id={DOSE_CARD} aria-labelledby="dose-title">
       <header className="zone-card-head">
         <h2 id="dose-title">{cmdId ? "Dose status" : dr ? "Review safety checks" : "Manual dose"}</h2>
       </header>

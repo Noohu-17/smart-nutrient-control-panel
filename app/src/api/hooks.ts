@@ -19,6 +19,10 @@ import type {
 } from "./types";
 
 const ONE_MINUTE = 60_000;
+// A playground site refreshes every 5 s, so a change made on the Simulator screen shows on the
+// dashboard within 10 s (one simulator reading plus one refresh). A real farm reports about once a
+// minute, so it keeps the slower refresh.
+const PLAYGROUND_POLL_MS = 5_000;
 const COMMAND_POLL_MS = 1000;
 const MIXING_POLL_MS = 2000;
 // How long to keep waiting for `after` once the lines have finished. The mix wait itself is the
@@ -46,39 +50,49 @@ export function useFarm() {
   });
 }
 
-/** One zone's latest telemetry. Readings arrive about once a minute. */
-function zoneQueryOptions(zoneId: string) {
+/** How often to ask again: every 5 s on a playground site, otherwise `slow`. */
+function usePollMs(slow: number) {
+  const farm = useFarm();
+  return farm.data?.features.playground ? PLAYGROUND_POLL_MS : slow;
+}
+
+/** One zone's latest telemetry. A real farm's readings arrive about once a minute. */
+function zoneQueryOptions(zoneId: string, pollMs: number) {
   return {
     queryKey: ["zone", zoneId] as const,
     queryFn: () => getJson<ZoneStatus>(`/zones/${zoneId}`),
-    refetchInterval: ONE_MINUTE,
+    refetchInterval: pollMs,
   };
 }
 
 export function useZone(zoneId: string | undefined) {
-  return useQuery({ ...zoneQueryOptions(zoneId ?? ""), enabled: Boolean(zoneId) });
+  const pollMs = usePollMs(ONE_MINUTE);
+  return useQuery({ ...zoneQueryOptions(zoneId ?? "", pollMs), enabled: Boolean(zoneId) });
 }
 
 /** Telemetry for several zones at once (the Overview). Same cache keys as useZone. */
 export function useZones(zoneIds: string[]) {
-  return useQueries({ queries: zoneIds.map(zoneQueryOptions) });
+  const pollMs = usePollMs(ONE_MINUTE);
+  return useQueries({ queries: zoneIds.map((zoneId) => zoneQueryOptions(zoneId, pollMs)) });
 }
 
 /** GET /api/climate · air inside and outside, electrical room, climate equipment. Every minute. */
 export function useClimate() {
+  const pollMs = usePollMs(ONE_MINUTE);
   return useQuery({
     queryKey: ["climate"],
     queryFn: () => getJson<ClimateStatus>("/climate"),
-    refetchInterval: ONE_MINUTE,
+    refetchInterval: pollMs,
   });
 }
 
 /** GET /api/power · mains, generator and UPS. Sent every minute and on every change. */
 export function usePower() {
+  const pollMs = usePollMs(ONE_MINUTE);
   return useQuery({
     queryKey: ["power"],
     queryFn: () => getJson<PowerStatus>("/power"),
-    refetchInterval: ONE_MINUTE,
+    refetchInterval: pollMs,
   });
 }
 
@@ -110,7 +124,7 @@ export function useSimState(enabled = true) {
   return useQuery({
     queryKey: SIM_STATE,
     queryFn: () => getJson<SimState>("/sim/state"),
-    refetchInterval: (query) => (noSimulator(query.state.error) ? false : 30_000),
+    refetchInterval: (query) => (noSimulator(query.state.error) ? false : PLAYGROUND_POLL_MS),
     enabled,
   });
 }
@@ -182,6 +196,15 @@ export function useCommand(cmdId: string) {
   });
 }
 
+// The controller reports the new zone state a moment after the server accepts Stop or Resume.
+const ZONE_FOLLOW_UP_MS = [2_000, 5_000];
+
+function refreshZoneSoon(queryClient: ReturnType<typeof useQueryClient>, zone: string) {
+  void queryClient.invalidateQueries({ queryKey: ["zone", zone] });
+  for (const ms of ZONE_FOLLOW_UP_MS)
+    setTimeout(() => void queryClient.invalidateQueries({ queryKey: ["zone", zone] }), ms);
+}
+
 /** Stop dosing and refill in a zone (§7.4). Never checked, never confirmed, never retried. */
 export function useStopZone() {
   const queryClient = useQueryClient();
@@ -194,7 +217,7 @@ export function useStopZone() {
       ),
     onSuccess: (_answer, zone) => {
       void queryClient.invalidateQueries({ queryKey: ["command"] });
-      void queryClient.invalidateQueries({ queryKey: ["zone", zone] });
+      refreshZoneSoon(queryClient, zone);
     },
   });
 }
@@ -204,6 +227,6 @@ export function useResumeZone() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (zone: string) => postJson<{ cmdId: string; state: string }>("/resume", { zone }),
-    onSuccess: (_answer, zone) => queryClient.invalidateQueries({ queryKey: ["zone", zone] }),
+    onSuccess: (_answer, zone) => refreshZoneSoon(queryClient, zone),
   });
 }

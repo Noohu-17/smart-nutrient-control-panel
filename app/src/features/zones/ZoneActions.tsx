@@ -1,12 +1,16 @@
+import { useNavigate } from "react-router-dom";
 import { RoleButton } from "../../components/RoleButton";
+import { zonePath } from "../../config/readings";
+import { DOSE_CARD, goToDoseCard } from "./doseCard";
 
-const goToDoseCard = () => document.getElementById("dose-card")?.scrollIntoView({ block: "start" });
-
-/** The zone's actions, locked per role (contract §13). The zone page adds the less common ones. */
-export function ZoneActions({ full = false }: { full?: boolean }) {
+/** The zone's actions, locked per role (contract §13). The zone page adds the less common ones.
+    On the Overview, Dose opens the zone page at its dose panel. */
+export function ZoneActions({ zoneId, full = false }: { zoneId: string; full?: boolean }) {
+  const navigate = useNavigate();
+  const dose = full ? goToDoseCard : () => navigate(`${zonePath(zoneId)}#${DOSE_CARD}`);
   return (
     <div className="actions">
-      <RoleButton perm="operate" onClick={full ? goToDoseCard : undefined}>
+      <RoleButton perm="operate" onClick={dose}>
         Dose
       </RoleButton>
       <RoleButton perm="operate">Refill</RoleButton>

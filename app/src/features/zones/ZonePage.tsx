@@ -1,4 +1,5 @@
-import { Link, useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { useFarm } from "../../api/hooks";
 import type { FarmZone } from "../../api/types";
 import { EmptyState } from "../../components/EmptyState";
@@ -6,6 +7,7 @@ import { StatusChip } from "../../components/StatusChip";
 import { AlertStrip } from "../alerts/AlertStrip";
 import { useZoneAlerts } from "../alerts/useZoneAlerts";
 import { DoseCard } from "../dosing/DoseCard";
+import { DOSE_CARD, goToDoseCard } from "./doseCard";
 import { ZoneActions } from "./ZoneActions";
 import { ResumeZone } from "./ResumeZone";
 import { ZoneReadings, ZoneStatusChip } from "./ZoneLive";
@@ -31,7 +33,7 @@ function ZoneLive({ zone }: { zone: FarmZone }) {
           <ZoneStatusChip status={status} />
         </header>
         <ZoneReadings status={status} />
-        <ZoneActions full />
+        <ZoneActions zoneId={zone.id} full />
       </section>
     </>
   );
@@ -42,6 +44,11 @@ export function ZonePage() {
   const { zoneId } = useParams();
   const farm = useFarm();
   const zone = farm.data?.zones.find((z) => z.id === zoneId);
+  const { hash } = useLocation();
+  // Dose on an Overview card opens this page at the dose panel, once the zone has loaded
+  useEffect(() => {
+    if (zone && hash === `#${DOSE_CARD}`) goToDoseCard();
+  }, [zone, hash]);
 
   return (
     <>
