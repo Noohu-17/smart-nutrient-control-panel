@@ -5,6 +5,7 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 
+from .api.alerts import add_alert_api
 from .api.commands import add_command_api
 from .api.dose_requests import add_dose_api
 from .api.routes import add_read_api
@@ -26,6 +27,7 @@ add_read_api(app)
 add_dose_api(app)
 add_command_api(app)
 add_sim_api(app)
+add_alert_api(app)
 
 
 @app.get("/api/health")

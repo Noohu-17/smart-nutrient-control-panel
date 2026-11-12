@@ -3,12 +3,12 @@
   "_meta": {
     "client": "client_A",
     "placeholder": true,
-    "note": "Placeholder values until the farm team and agronomy agree alert thresholds, delays and escalation. Do not use for a real farm. Phase A alerts are in the app only."
+    "note": "Placeholder values until the farm team and agronomy agree alert thresholds, delays and escalation. Do not use for a real farm. Phase A alerts are in the app only. ecMaxMsCm (T1-24) is a placeholder set to limits.json ecCeiling. RESERVOIR_LOW and DAYTANK_LOW delayS are 0 so the playground shows them within a reading (board demo); a real farm will want a delay against flapping."
   },
   "delivery": ["IN_APP"],
   "zones": {
-    "Z1": { "alarms": { "solTempMaxC": 26.0, "circFlowMinLpm": 15.0 } },
-    "Z2": { "alarms": { "solTempMaxC": 26.0, "circFlowMinLpm": 15.0 } }
+    "Z1": { "alarms": { "ecMaxMsCm": 2.4, "solTempMaxC": 26.0, "circFlowMinLpm": 15.0 } },
+    "Z2": { "alarms": { "ecMaxMsCm": 2.4, "solTempMaxC": 26.0, "circFlowMinLpm": 15.0 } }
   },
   "events": {
     "ESTOP_PRESSED": { "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 5 },
@@ -20,8 +20,8 @@
     "CIRC_FLOW_RESTORED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
     "SENSOR_FAULT": { "delayS": 60, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 30 },
     "SENSOR_RECOVERED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
-    "RESERVOIR_LOW": { "thresholdPct": 40, "delayS": 120, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": 60 },
-    "DAYTANK_LOW": { "thresholdPct": 20, "delayS": 120, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": 60 },
+    "RESERVOIR_LOW": { "thresholdPct": 40, "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": 60 },
+    "DAYTANK_LOW": { "thresholdPct": 20, "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": 60 },
     "PUMP_FAULT": { "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 10 },
     "CHILLER_FAULT": { "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 15 },
     "CLIMATE_MODE_REVERTED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },

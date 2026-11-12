@@ -250,6 +250,28 @@ class DoseReview(ContractModel):
 # --- GET /api/devices (§11.2; the fields follow device_state, §12) ------------------------
 
 
+class AlertInfo(ContractModel):
+    """An alert (§11.2): the §12 alert fields, and when it was raised, cleared and acknowledged."""
+
+    id: str
+    kind: str
+    severity: str
+    status: str  # OPEN, ACKNOWLEDGED (seen, condition still on) or CLEARED (condition over)
+    zone: str | None
+    message: str
+    system_action: str
+    next_step: str
+    raised_at: ApiTime
+    sim_ts: ApiTime | None
+    cleared_at: ApiTime | None
+    acknowledged_at: ApiTime | None
+    acknowledged_by: str | None
+
+
+class AlertList(ContractModel):
+    items: list[AlertInfo]
+
+
 class DeviceInfo(ContractModel):
     device_id: str
     kind: str

@@ -8,11 +8,13 @@ from typing import Any
 from sqlalchemy import ColumnElement, Connection, Engine, and_, func, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert
 
+from .. import alerts
 from ..contract import (
     ClimateTelemetry,
     CommandState,
     DeviceStatus,
     Envelope,
+    Event,
     PowerState,
     ZoneTelemetry,
 )
@@ -170,13 +172,15 @@ def store_message(
     org_id: str,
     rows: list[dict[str, Any]],
     received_at: datetime,
+    rules: alerts.AlertRules | None = None,
 ) -> Stored:
     """Everything one checked message changes, in one transaction.
 
     Its readings, the latest message of its kind (KEPT_TYPES) or its command's latest report
     (CMD_STATE), and its device's last_seen, which never moves back. A DEVICE_STATUS saying
     offline counts as a last will. Anything else new from the device clears its last will; a
-    replay doesn't.
+    replay doesn't. With `rules`, a new event and the newest zone telemetry also raise or clear
+    alerts (app/alerts.py), in the same transaction.
     """
     with engine.begin() as connection:
         new_rows = _insert_rows(connection, rows) if rows else 0
@@ -199,6 +203,8 @@ def store_message(
         connection.execute(
             update(Device).where(*_the_device(org_id, message.site, message.device)).values(seen)
         )
+        if rules is not None and (isinstance(message, Event) or kept is True):
+            alerts.on_message(connection, org_id, message, rules, received_at)
     return stored
 
 

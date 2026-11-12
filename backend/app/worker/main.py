@@ -3,7 +3,8 @@
 Subscribes to everything the client's site sends (contract §4), checks each message against
 the contract models and stores it: its values in the reading table, the latest ZONE_STATE,
 CLIMATE_STATE, ZONE_TELEMETRY and POWER_STATE of each device, the latest CMD_STATE of each
-command, when each device was last seen, and any last will.
+command, when each device was last seen, and any last will. Events and new zone readings also
+raise and clear alerts (app/alerts.py, T1-24).
 
 A bad message is logged and skipped. If the broker goes away the worker reconnects with a
 growing delay. If the database is down or not migrated yet it keeps the message and tries
@@ -27,6 +28,7 @@ from pydantic import ValidationError
 from sqlalchemy import Engine
 from sqlalchemy.exc import InterfaceError, OperationalError, ProgrammingError
 
+from ..alerts import AlertRules
 from ..config import Settings, load_settings
 from ..contract import DeviceStatusLastWill, Envelope, parse_farm_message
 from ..db.engine import create_db_engine
@@ -92,9 +94,11 @@ class Worker:
         site: str,
         *,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        rules: AlertRules | None = None,
     ):
         self.engine, self.org_id, self.site = engine, org_id, site
         self._sleep = sleep
+        self.rules = rules  # alerts.json limits; without them no alerts are raised
 
     async def handle(self, topic: str, payload: bytes) -> None:
         try:
@@ -127,7 +131,9 @@ class Worker:
             stored = await self._write(
                 topic,
                 f"{message.type} from {message.device}",
-                lambda: store_message(self.engine, message, self.org_id, rows, received_at),
+                lambda: store_message(
+                    self.engine, message, self.org_id, rows, received_at, self.rules
+                ),
             )
             if stored is not None and stored.replay:
                 log.info(
@@ -169,7 +175,8 @@ async def run(
     topic = f"farm/{site}/#"  # CLOUD-* may subscribe to this and not to farm/# (contract §4)
     engine = create_db_engine(settings)
     # As in the seed, org_id is the client's folder name until organisations exist (OPEN-11).
-    worker = Worker(engine, settings.client_dir.name, site, sleep=sleep)
+    rules = AlertRules.from_pack(settings.client_dir)
+    worker = Worker(engine, settings.client_dir.name, site, sleep=sleep, rules=rules)
     guarding = asyncio.create_task(guard(engine, worker.org_id, site))  # stuck commands (T1-23)
     attempt = 0
     try:

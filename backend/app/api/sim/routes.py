@@ -27,6 +27,7 @@ from sqlalchemy import Engine
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
+from ... import alerts
 from ...db.models import PlaygroundReset
 from ...errors import ApiError, _error
 from ..pack import PackError, SiteRef, _read_json, _without_meta, read_farm
@@ -157,7 +158,8 @@ def post_speed(body: SpeedBody, simulator: SimulatorDep) -> Response:
 
 
 def record_reset(engine: Engine, site: SiteRef, at: datetime) -> None:
-    """Keep when the farm was reset, so the dose review's 24-hour totals start again (§11.4).
+    """Keep when the farm was reset, so the dose review's 24-hour totals start again (§11.4), and
+    clear every alert (T1-24).
 
     The reset has already happened on the simulator, so a database that can't take it doesn't undo
     it: the line says what that means instead.
@@ -168,6 +170,7 @@ def record_reset(engine: Engine, site: SiteRef, at: datetime) -> None:
             connection.execute(
                 statement.on_conflict_do_update(index_elements=["org_id", "site_id"], set_={"reset_at": at})
             )
+            alerts.clear_all(connection, site.org_id, site.site_id, at)  # T1-24
     except SQLAlchemyError as exc:
         first = str(getattr(exc, "orig", exc)).partition("\n")[0]
         log.error("reset not recorded, so the 24 h totals still count doses from before it: %s", first)

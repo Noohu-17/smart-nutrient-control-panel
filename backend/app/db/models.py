@@ -1,5 +1,5 @@
 """Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message, command
-report, dose request, sent command, playground reset and user.
+report, dose request, sent command, playground reset, alert and user.
 
 Every table has org_id and site_id (OPEN-11), so more organisations and sites can share
 the database later. Rows are keyed by the contract's own IDs (§2.1, §2.2): siet-ph1, Z1,
@@ -259,6 +259,36 @@ class PlaygroundReset(Base):
     org_id: Mapped[str] = mapped_column(ID, primary_key=True)
     site_id: Mapped[str] = mapped_column(ID, primary_key=True)
     reset_at: Mapped[datetime] = mapped_column(Timestamp)
+
+
+class Alert(Base):
+    """An alert the back end raised (app/alerts.py, contract §11.2): from a rule on the readings or
+    from an EVENT (§6.5). `key` names the condition, so it is raised once while it lasts.
+
+    All times are server time. first_seen_at is when the condition began; raised_at is null while
+    it waits out its delay (alerts.json delayS), and such an alert is never listed. cleared_at is
+    when the condition ended; acked_at and acked_by record who saw it.
+    """
+
+    __tablename__ = "alert"
+    __table_args__ = (_site_fk(),)
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    alert_id: Mapped[str] = mapped_column(ID, primary_key=True)  # a UUID
+    key: Mapped[str] = mapped_column(String(160), index=True)  # e.g. DAYTANK_LOW:Z1:A
+    kind: Mapped[str] = mapped_column(String(32))  # EC_HIGH, ESTOP_PRESSED …
+    severity: Mapped[str] = mapped_column(String(16))  # CRITICAL, WARNING, INFO
+    zone_id: Mapped[str | None] = mapped_column(ID)
+    message: Mapped[str] = mapped_column(Text)
+    system_action: Mapped[str] = mapped_column(Text)
+    next_step: Mapped[str] = mapped_column(Text)
+    first_seen_at: Mapped[datetime] = mapped_column(Timestamp)
+    raised_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    sim_ts: Mapped[datetime | None] = mapped_column(Timestamp)  # the farm clock, playground only
+    cleared_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    acked_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    acked_by: Mapped[str | None] = mapped_column(String(32))  # the role, until sign-in exists
 
 
 class User(Base):

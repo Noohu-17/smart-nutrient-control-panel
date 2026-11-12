@@ -1003,6 +1003,23 @@ Like the zone answer, neither answer carries the message envelope: no `msgId`, `
 
 Like the zone answer, it carries no message envelope.
 
+**Alerts: `GET /alerts` and `POST /alerts/{alertId}/ack`.** The back end raises an alert from two sources. **Readings:** a zone's newest telemetry against `alerts.json`: `EC_HIGH` (EC above `zones.{zone}.alarms.ecMaxMsCm`), `SOL_TEMP_HIGH` (above `solTempMaxC`), `CIRC_NO_FLOW` (below `circFlowMinLpm`), `RESERVOIR_LOW` and `DAYTANK_LOW` (below `events.{kind}.thresholdPct`). Only a reading with quality `OK` counts. The alert is raised once the condition has lasted that kind's `delayS` (real time, 11.4) and cleared when a reading is back within the limit. **Events (6.5):** a `CRITICAL` or `WARNING` event raises an alert with its own `message`, `systemAction` and `nextStep`; its pair clears it (`ESTOP_RELEASED` clears `ESTOP_PRESSED`, and likewise `LEAK_CLEARED`, `CIRC_FLOW_RESTORED`, `SENSOR_RECOVERED`; `MODE_CHANGED` back to `REMOTE` clears `MODE_CHANGED`). One alert per condition (kind, zone, and line, metric or equipment) while it lasts. On a playground site, `POST /sim/reset` clears every alert and the list shows only alerts raised after the last reset.
+
+`GET /alerts` takes `status` (`OPEN`, `ACKNOWLEDGED`, `CLEARED`), `severity` and `zone`, and answers the newest 200, newest first:
+
+```json
+{ "items": [ {
+  "id": "3c2e…", "kind": "EC_HIGH", "severity": "WARNING", "status": "OPEN", "zone": "Z1",
+  "message": "EC in Zone A is 2.6 mS/cm, above the 2.4 alarm limit",
+  "systemAction": "No automatic action: the farm keeps running as it was",
+  "nextStep": "Don't add nutrients; dilute with fresh water and check the EC probe",
+  "raisedAt": "2026-11-12T05:10:04.000Z", "simTs": "2026-11-12T19:30:00.000Z",
+  "clearedAt": null, "acknowledgedAt": null, "acknowledgedBy": null
+} ] }
+```
+
+`status` is `CLEARED` once the condition is over, else `ACKNOWLEDGED` once someone has acknowledged it, else `OPEN`. `POST /alerts/{alertId}/ack` records who saw it and answers the alert; it doesn't clear it, and acknowledging again changes nothing. A Viewer gets 403 `FORBIDDEN` (13).
+
 ### 11.3 Dose request: example
 
 Request:
