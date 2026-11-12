@@ -2,9 +2,12 @@
 import { describe, expect, it } from "vitest";
 import configFeatures from "../../../config/clients/client_A/features.json";
 import configLayout from "../../../config/clients/client_A/layout.json";
+import configAlerts from "../../../config/clients/client_A/alerts.json";
 import configLimits from "../../../config/clients/client_A/limits.json";
 import configScenarios from "../../../config/clients/client_A/scenarios.json";
 import type { ClimateStatus, Farm, PowerStatus, ZoneStatus } from "../api/types";
+import { hold } from "./sim";
+import mockAlerts from "./data/alerts.json";
 import mockFeatures from "./data/features.json";
 import mockLayout from "./data/layout.json";
 import mockLimits from "./data/limits.json";
@@ -67,6 +70,21 @@ describe("fake API (MSW)", () => {
     const farm = (await (await get("/farm")).json()) as Farm;
     expect(farm.features).toEqual(configFeatures);
     expect(mockFeatures).toEqual(configFeatures);
+  });
+
+  it("the mock alerts.json is an exact copy of config/clients/client_A/alerts.json", () => {
+    expect(mockAlerts).toEqual(configAlerts);
+  });
+
+  it("GET /api/alerts raises EC_HIGH while EC is held above the limit, and a Viewer can't acknowledge it", async () => {
+    hold({ target: "Z1", metric: "ec", value: 2.8, gradual: false });
+    await get("/zones/Z1"); // the app sees the zone first, as it does on screen
+    const { items } = (await (await get("/alerts")).json()) as { items: { id: string; kind: string }[] };
+    expect(items.map((a) => a.kind)).toEqual(["EC_HIGH"]);
+    const ack = (role: string) =>
+      fetch(`/api/alerts/${items[0].id}/ack`, { method: "POST", headers: { "X-Demo-Role": role } });
+    expect((await ack("Viewer")).status).toBe(403);
+    expect(((await (await ack("Owner")).json()) as { status: string }).status).toBe("ACKNOWLEDGED");
   });
 
   it("the mock limits are an exact copy of config/clients/client_A/limits.json", () => {

@@ -227,5 +227,22 @@ export type Command = {
   endedAt: string | null;
 };
 
+/* ---------- alerts (contract §11.2, T1-24) ---------- */
+export type ServerAlert = {
+  id: string;
+  kind: string; // EC_HIGH, RESERVOIR_LOW, ESTOP_PRESSED …
+  severity: "CRITICAL" | "WARNING" | "INFO";
+  status: "OPEN" | "ACKNOWLEDGED" | "CLEARED"; // CLEARED: the condition is over
+  zone: string | null; // null for the climate controller's
+  message: string; // what happened
+  systemAction: string; // what the farm did
+  nextStep: string; // what a person should do
+  raisedAt: string;
+  simTs: string | null; // the farm clock, playground sites only
+  clearedAt: string | null;
+  acknowledgedAt: string | null;
+  acknowledgedBy: string | null;
+};
+
 /* ---------- errors (contract §11.1) ---------- */
 export type ApiErrorBody = { error: { code: string; message: string; details?: unknown } };

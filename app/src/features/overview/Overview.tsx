@@ -12,8 +12,10 @@ import { ZoneCard } from "./ZoneCard";
 function FarmAlerts({ zones }: { zones: FarmZone[] }) {
   return (
     <AlertStrip
-      alerts={useZoneAlerts(zones)}
-      action={(alert) => <Link to={zonePath(alert.zoneId)}>Open {alert.zoneName}</Link>}
+      alerts={useZoneAlerts(zones, { site: true })}
+      action={(alert) =>
+        alert.zoneId ? <Link to={zonePath(alert.zoneId)}>Open {alert.zoneName}</Link> : <Link to="/alerts">Alerts</Link>
+      }
     />
   );
 }

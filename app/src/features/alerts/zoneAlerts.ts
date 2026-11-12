@@ -7,7 +7,7 @@ import { ZONE_READINGS } from "../../config/readings";
 
 export type AlertSeverity = "crit" | "warn";
 
-export type AlertKind = "estop" | "leak" | "offline" | "stopped" | "sensor" | "stale";
+export type AlertKind = "estop" | "leak" | "offline" | "stopped" | "sensor" | "stale" | "server";
 
 export type ZoneAlert = {
   id: string; // `${zoneId}-${kind}`, unique on a page

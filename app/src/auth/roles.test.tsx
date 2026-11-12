@@ -54,8 +54,7 @@ describe("Roles", () => {
     renderAt("/alerts", { role: "Viewer" });
     expect(await screen.findByRole("button", { name: "Acknowledge all" })).toBeDisabled();
     await signInAs("Operator");
-    await userEvent.click(button("Acknowledge all"));
-    expect(screen.getByRole("status")).toHaveTextContent("Not available yet");
+    expect(button("Acknowledge all")).toBeEnabled();
   });
 
   it("opens every screen in the navigation", async () => {

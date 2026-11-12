@@ -11,6 +11,7 @@ import type {
   Farm,
   PowerStatus,
   ScenarioOptions,
+  ServerAlert,
   SimFaultBody,
   SimHold,
   SimSpeed,
@@ -54,6 +55,25 @@ export function useFarm() {
 function usePollMs(slow: number) {
   const farm = useFarm();
   return farm.data?.features.playground ? PLAYGROUND_POLL_MS : slow;
+}
+
+/** GET /api/alerts · the server's alerts, newest first (T1-24). As often as the zones. */
+export function useAlerts() {
+  const pollMs = usePollMs(ONE_MINUTE);
+  return useQuery({
+    queryKey: ["alerts"],
+    queryFn: () => getJson<{ items: ServerAlert[] }>("/alerts").then((answer) => answer.items),
+    refetchInterval: pollMs,
+  });
+}
+
+/** POST /api/alerts/{id}/ack · record that someone has seen it; it stays until its condition ends. */
+export function useAckAlert() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (alertId: string) => postJson<ServerAlert>(`/alerts/${encodeURIComponent(alertId)}/ack`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+  });
 }
 
 /** One zone's latest telemetry. A real farm's readings arrive about once a minute. */

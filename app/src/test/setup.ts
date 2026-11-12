@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
+import { resetAlerts } from "../mocks/alerts";
 import { resetCommands } from "../mocks/commands";
 import { resetClimatePower } from "../mocks/data/climatePower";
 import { resetTelemetry } from "../mocks/data/telemetry";
@@ -29,6 +30,7 @@ afterEach(() => {
   resetClimatePower();
   resetSim();
   resetCommands();
+  resetAlerts();
 });
 
 afterAll(() => server.close());

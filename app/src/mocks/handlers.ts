@@ -22,6 +22,7 @@ import {
   stopZoneCommands,
   type CommandEnding,
 } from "./commands";
+import { acknowledge, currentAlerts, rememberZone } from "./alerts";
 import { buildClimateStatus, buildPowerStatus } from "./data/climatePower";
 import { zoneDosing } from "./data/dosing";
 import { farmLayout } from "./data/layout";
@@ -110,6 +111,7 @@ function zoneStatus(zoneId: string): ZoneStatus {
     status.stopped = true; // an E-STOP stops the zone until a person resumes it (§6.8)
   }
   if (zoneId === "Z1" && scenario === "z1-leak") status.leak = true;
+  rememberZone(status);
   return status;
 }
 
@@ -319,5 +321,20 @@ export const handlers = [
       return apiError(409, "ESTOP", "The E-STOP is still pressed. Release it first");
     resumeZone(body.zone);
     return HttpResponse.json({ cmdId: crypto.randomUUID(), state: "DISPATCHED" }, { status: 202 });
+  }),
+
+  // GET /api/alerts · alerts from the fake readings and alerts.json (contract §11.2, T1-24)
+  http.get("/api/alerts", async () => {
+    await networkDelay();
+    return HttpResponse.json({ items: currentAlerts(zoneStatus) });
+  }),
+
+  // POST /api/alerts/{id}/ack · everyone but a Viewer (§13)
+  http.post("/api/alerts/:alertId/ack", async ({ params, request }) => {
+    await networkDelay();
+    const answer = acknowledge(zoneStatus, String(params.alertId), request.headers.get("X-Demo-Role"));
+    if (answer === "viewer") return apiError(403, "FORBIDDEN", "Viewers can’t acknowledge alerts");
+    if (answer === null) return apiError(404, "NOT_FOUND", `There is no alert ${params.alertId}`);
+    return HttpResponse.json(answer);
   }),
 ];
