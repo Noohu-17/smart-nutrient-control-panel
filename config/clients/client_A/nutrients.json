@@ -1,0 +1,22 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "What each dose line's stock does to the nutrient solution, so the dose review can estimate EC and pH after a dose (contract 11.3). ecChangePerMlPerL: the EC rise in mS/cm from 1 mL of stock in 1 L of solution; phChangePerMlPerL: the pH change from the same (negative lowers pH). For a tank, divide by its litres: 120 mL of A into 936 L adds 120 x 0.47 / 936 = 0.06. Every dose line in layout.json needs an entry. These are the app's estimate; simulator.json keeps its own model of the farm.",
+    "placeholderKeys": ["doseLines"],
+    "sources": {
+      "doseLines.A.ecChangePerMlPerL": "CONTRACT-EXAMPLE: the same as simulator.json (ecPerGramPerL 1.0 x nutrientGPerMl 0.47), calibrated to contract 6.6's example dose. Needs a jar test of the real stock.",
+      "doseLines.B.ecChangePerMlPerL": "CONTRACT-EXAMPLE: as doseLines.A.ecChangePerMlPerL.",
+      "doseLines.A.phChangePerMlPerL": "PLACEHOLDER: stock A treated as pH-neutral.",
+      "doseLines.B.phChangePerMlPerL": "PLACEHOLDER: stock B treated as pH-neutral.",
+      "doseLines.ACID.ecChangePerMlPerL": "PLACEHOLDER: the acid's own EC contribution is ignored.",
+      "doseLines.ACID.phChangePerMlPerL": "CONTRACT-EXAMPLE: contract 6.6, 30 mL of acid takes 936 L from pH 6.21 to 6.02 (-0.0059 per mL per 1000 L, so -5.9 per mL per L). Needs a titration of the SIET water with the real acid."
+    }
+  },
+  "doseLines": {
+    "A":    { "ecChangePerMlPerL": 0.47, "phChangePerMlPerL": 0.0 },
+    "B":    { "ecChangePerMlPerL": 0.47, "phChangePerMlPerL": 0.0 },
+    "ACID": { "ecChangePerMlPerL": 0.0,  "phChangePerMlPerL": -5.9 }
+  }
+}

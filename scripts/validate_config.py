@@ -26,7 +26,7 @@ DEFAULT_CLIENTS_DIR = REPO_ROOT / "config" / "clients"
 # Contract 2.5: every client pack has these files.
 PACK_FILES = [
     "layout.json", "limits.json", "recipes.json", "alerts.json", "climate.json",
-    "features.json", "users.json", "simulator.json", "hardware.json",
+    "features.json", "users.json", "simulator.json", "hardware.json", "nutrients.json",
     "io_map.json", "scenarios.json",
 ]
 
@@ -204,6 +204,23 @@ def check_zone_recipes(rel, recipes, zones, errors):
             errors.append(f"{rel}: zone {zone_id}: no recipe for crop {crop!r} at stage {stage!r}")
 
 
+def check_nutrients(rel, nutrients, dose_lines_by_zone, errors):
+    """Every dose line in the layout needs its stock's EC and pH change per mL in each litre."""
+    lines = nutrients.get("doseLines")
+    if not isinstance(lines, dict):
+        errors.append(f'{rel}: "doseLines" must be an object keyed by dose line')
+        return
+    used = sorted({line for zone_lines in dose_lines_by_zone.values() for line in zone_lines})
+    missing = [line for line in used if line not in lines]
+    if missing:
+        errors.append(f"{rel}: no entry for dose lines {missing} used in the layout")
+    for line, entry in lines.items():
+        for key in ("ecChangePerMlPerL", "phChangePerMlPerL"):
+            value = entry.get(key) if isinstance(entry, dict) else None
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                errors.append(f"{rel}: doseLines.{line}.{key} must be a number")
+
+
 def validate_client(client_dir, errors):
     """Validate one client folder. Returns the number of JSON files read."""
     client = client_dir.name
@@ -231,6 +248,8 @@ def validate_client(client_dir, errors):
             check_placeholder_meta(rel, data, errors)
         if name in ZONE_KEYED_FILES and dose_lines_by_zone and isinstance(data, dict):
             check_zone_keys(rel, name, data, dose_lines_by_zone, errors)
+        if name == "nutrients.json" and dose_lines_by_zone and isinstance(data, dict):
+            check_nutrients(rel, data, dose_lines_by_zone, errors)
 
     return len(files)
 

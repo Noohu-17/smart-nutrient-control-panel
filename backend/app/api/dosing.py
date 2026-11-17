@@ -20,7 +20,6 @@ from .status import FRESH_FOR, OFFLINE_AFTER
 
 Result = Literal["PASS", "WARN", "BLOCK"]
 
-ACID_LINE = "ACID"  # §2.3: the line that lowers pH; the others add nutrient
 BUSY_EQUIPMENT = ("-DOSE", "-REFILL")  # Z1-DOSE-A, Z1-REFILL (§2.3)
 
 

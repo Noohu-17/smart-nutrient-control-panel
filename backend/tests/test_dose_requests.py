@@ -31,7 +31,7 @@ from app.worker.main import Worker
 ORG = "client_A"
 SITE = LAYOUT["site"]
 CLIENT_A = Path(__file__).resolve().parents[2] / "config" / "clients" / "client_A"
-DOSING_FILES = ("limits.json", "recipes.json", "hardware.json", "simulator.json", "alerts.json")
+DOSING_FILES = ("limits.json", "recipes.json", "hardware.json", "nutrients.json", "alerts.json")
 CHECK_IDS = [
     "STATE_KNOWN", "DEVICES_ONLINE", "ESTOP", "ZONE_REMOTE", "NO_CONFLICT", "LIMIT_DOSE",
     "LIMIT_24H", "DAYTANK", "RESERVOIR", "PROJECTED_EC_PH", "FRESH_READINGS",
@@ -159,12 +159,24 @@ def test_the_messages_read_as_the_apps_fake(api, worker):
 def test_the_projection_and_estimate_come_from_the_config_pack(api, worker):
     ready_zone(worker)
     body = review(api)
-    # simulator.json: 240 mL of A and B at 0.47 g/mL into 936 L adds 0.12; 30 mL of acid takes 0.19 off pH
+    # nutrients.json: 240 mL of A and B at 0.47 per mL per L into 936 L adds 0.12; 30 mL of acid takes 0.19 off pH
     assert body["projected"] == {"ec": 1.74, "ph": 5.9}
     # recipes.json: Z1 is LETTUCE GROWING, EC 1.2–1.8 and pH 5.6–6.2
     assert check(body, "PROJECTED_EC_PH") == ("PASS", "Projected EC 1.74, pH 5.9 (target 1.2–1.8, 5.6–6.2)")
     # hardware.json: every pump at 2 mL/s, so 270 mL takes 2.25 min; limits.json: 3000 s mix wait
     assert body["estimate"] == {"durationMin": 53, "totalMl": 270}
+
+
+def test_the_projection_follows_each_lines_stock_in_nutrients_json(tmp_path, migrated_db):
+    pack = write_dosing_pack(tmp_path / ORG)
+    nutrients = json.loads((pack / "nutrients.json").read_text(encoding="utf-8"))
+    nutrients["doseLines"]["A"]["ecChangePerMlPerL"] = 0.94  # a stock twice as strong
+    nutrients["doseLines"]["ACID"]["phChangePerMlPerL"] = 0.0  # a line that leaves pH alone
+    (pack / "nutrients.json").write_text(json.dumps(nutrients), encoding="utf-8")
+    seed(migrated_db, pack)
+    ready_zone(Worker(migrated_db, ORG, SITE))
+    # 120 mL x 0.94 + 120 mL x 0.47 into 936 L adds 0.18 to EC 1.62; pH stays at 6.04
+    assert review(api_client(pack, migrated_db))["projected"] == {"ec": 1.8, "ph": 6.0}
 
 
 def test_the_answer_has_the_fields_of_the_contract_example(api, worker):

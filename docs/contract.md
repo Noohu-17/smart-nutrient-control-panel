@@ -189,6 +189,7 @@ config/clients/client_A/          ← first demo pack (SIET Polyhouse 1 values)
 ├── layout.json        zones, benches, channels, nursery, equipment, sensors (2.4)
 ├── limits.json        per-dose and 24 h limits, EC ceiling, pH bounds, minimum reservoir
 ├── recipes.json       crops, stages, EC/pH targets, dose per run, source
+├── nutrients.json     what each dose line's stock does: EC and pH change per mL in each litre (the dose review's estimate, 11.3)
 ├── alerts.json        alert thresholds, delays, who is told, escalation times
 ├── climate.json       fan stages, chiller setpoint range (e.g. 18–28 °C), manual-mode durations
 ├── features.json      feature switches (below)
@@ -1333,6 +1334,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, climate and power answers | `GET /climate` and `GET /power` answers (11.2), in the style of the zone answer (T1-18). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, command answer | `GET /commands/{cmdId}` answer (11.2), with `DISPATCHED` until the first `CMD_STATE`, agreed in the T1-17 review. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, stuck commands | `TIMED_OUT` (8.4): a command the farm leaves without replies answers `UNKNOWN` with that reason (11.2), and when (14), from T1-23. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
+| v1.0, nutrients.json | `nutrients.json` added to the config pack (2.5): what each dose line's stock does to EC and pH, read by the dose review (11.3) instead of the simulator's model, so a real farm's lines (N, P, K or any other) need no code (T1-30). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 
 ### v1.0 section review
 

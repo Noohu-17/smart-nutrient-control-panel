@@ -79,7 +79,7 @@ class ZoneDosing:
     target: Target | None  # None: no recipe applied to the zone
     pump_ml_per_min: dict[str, float]  # hardware.json pumps.doseLines.*.flowMlPerS, per minute
     day_tank_warn_pct: float  # alerts.json events.DAYTANK_LOW.thresholdPct
-    ec_per_ml_per_l: dict[str, float]  # EC added per mL in each litre: simulator.json's stock model
+    ec_per_ml_per_l: dict[str, float]  # EC added per mL in each litre: nutrients.json
     ph_per_ml_per_l: dict[str, float]  # pH change per mL in each litre: the same
     playground: bool  # features.json: 24 h totals follow simulated time (§11.4)
 
@@ -102,22 +102,17 @@ def read_dosing(client_dir: Path, zone_id: str) -> ZoneDosing | None:
             return None
         recipes = _read_json(client_dir / "recipes.json")
         pumps = _read_json(client_dir / "hardware.json")["pumps"]["doseLines"]
-        model = _read_json(client_dir / "simulator.json")["model"]
+        stock = _read_json(client_dir / "nutrients.json")["doseLines"]
         alerts = _read_json(client_dir / "alerts.json")
         features = _read_json(client_dir / "features.json")
-        stock = model["doseLines"]
         return ZoneDosing(
             limits=zone["limits"],
             mix_wait_s=zone["dose"]["mixWaitS"],
             target=_target(recipes, zone_id),
             pump_ml_per_min={line: pump["flowMlPerS"] * 60 for line, pump in pumps.items()},
             day_tank_warn_pct=alerts["events"]["DAYTANK_LOW"]["thresholdPct"],
-            ec_per_ml_per_l={
-                line: model["ecPerGramPerL"] * entry["nutrientGPerMl"] for line, entry in stock.items()
-            },
-            ph_per_ml_per_l={
-                line: entry["phChangePerMlPer1000L"] * 1000 for line, entry in stock.items()
-            },
+            ec_per_ml_per_l={line: entry["ecChangePerMlPerL"] for line, entry in stock.items()},
+            ph_per_ml_per_l={line: entry["phChangePerMlPerL"] for line, entry in stock.items()},
             playground=bool(features.get("playground")),
         )
     except (OSError, KeyError, TypeError, ValueError, StopIteration) as exc:
