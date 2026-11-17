@@ -54,6 +54,7 @@ describe("Overview", () => {
     const ec = zoneB.getByRole("group", { name: "EC" });
     expect(ec).toHaveTextContent("--");
     expect(ec).toHaveTextContent("Sensor fault");
+    expect(ec).toHaveClass("reading-crit");
   });
 
   it("looks Offline, with its last values greyed, when the controller has gone silent", async () => {

@@ -28,10 +28,25 @@ describe("ReadingCard", () => {
     expect(card()).toHaveTextContent("No fresh sample");
   });
 
-  it('shows "--" with the reason when the sensor sends null', () => {
-    render(<ReadingCard spec={EC} value={null} quality="FAULT" />);
-    expect(card()).toHaveClass("reading-off");
+  it('is red for a sensor fault, with "--" and the reason when the sensor sends null', () => {
+    const { rerender } = render(<ReadingCard spec={EC} value={null} quality="FAULT" />);
+    expect(card()).toHaveClass("reading-crit");
     expect(card()).toHaveTextContent("--");
     expect(card()).toHaveTextContent("Sensor fault");
+
+    rerender(<ReadingCard spec={EC} value={1.62} quality="FAULT" target={target} />);
+    expect(card()).toHaveClass("reading-crit");
+    expect(card()).toHaveTextContent("Sensor fault");
+  });
+
+  it("stays grey for a fault on an offline controller: the reading is old, not the fault", () => {
+    render(<ReadingCard spec={EC} value={1.62} quality="FAULT" stale />);
+    expect(card()).toHaveClass("reading-off");
+  });
+
+  it("stays grey with no reading and no fault", () => {
+    render(<ReadingCard spec={EC} value={null} quality="OK" />);
+    expect(card()).toHaveClass("reading-off");
+    expect(card()).toHaveTextContent("No data");
   });
 });

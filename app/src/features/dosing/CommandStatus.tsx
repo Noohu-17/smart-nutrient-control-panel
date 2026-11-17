@@ -45,8 +45,8 @@ function Result({ command }: { command: Command }) {
     return (
       <div className="banner info" role="status">
         <b>Every line delivered. The reservoir is mixing before it is re-measured.</b> Before: EC{" "}
-        {shown(command.before?.ec)} · pH {shown(command.before?.ph)}. The new values appear here when
-        mixing ends.
+        {shown(command.before?.ec)} · pH {shown(command.before?.ph)}. Mixing continues; the new EC and pH
+        will appear here. You can leave this page meanwhile: nothing is lost.
       </div>
     );
   if (command.state === "COMPLETED")
@@ -163,7 +163,7 @@ export function CommandStatus({
             Stop dose
           </button>
         )}
-        {isFinalCommand(command.state) && (
+        {isFinalCommand(command.state) && !mixing && (
           <button type="button" className="btn primary" onClick={onClose}>
             {view.closeWith}
           </button>

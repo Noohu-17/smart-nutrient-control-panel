@@ -116,6 +116,13 @@
 .reading-warn .reading-status {
   color: var(--status-warning-fg);
 }
+.reading-crit {
+  border-left-color: var(--dot-crit);
+  background: var(--status-critical-bg);
+}
+.reading-crit .reading-status {
+  color: var(--status-critical-fg);
+}
 .reading-off {
   border-left-color: var(--disabled-border);
   background: var(--disabled-bg);

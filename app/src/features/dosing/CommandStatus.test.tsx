@@ -97,7 +97,7 @@ describe("Command status", () => {
     const lines = within(screen.getByRole("list", { name: "Dose lines" }));
     expect(lines.getAllByText("120 / 120 mL")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Stop dose" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Done" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "New dose" })).toBeEnabled();
   });
 
   it("shows a failed dose as a device error, in plain words", async () => {
@@ -124,7 +124,7 @@ describe("Command status", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Nothing is confirmed.");
     expect(screen.queryByText("Completed")).not.toBeInTheDocument();
     expect(screen.queryByText("Done")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Done" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New dose" })).not.toBeInTheDocument();
     expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
     expect(document.querySelector(".cmd-lines .chip-ok")).toBeNull();
     expect(screen.getByRole("button", { name: "Stop dose" })).toBeEnabled();
@@ -154,7 +154,12 @@ describe("Command status", () => {
     await startDose();
     expect(await screen.findByText("Mixing")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Before: EC 1.5 · pH 6.1");
+    expect(screen.getByRole("status")).toHaveTextContent("the new EC and pH will appear here");
     expect(screen.queryByText("Completed")).not.toBeInTheDocument();
+    // nothing left for the grower to do while it mixes, so no button to close it, and no Stop
+    expect(screen.queryByRole("button", { name: "New dose" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Done" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop dose" })).not.toBeInTheDocument();
   });
 });
 

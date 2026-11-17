@@ -2,16 +2,21 @@ import type { Quality } from "../api/types";
 import { formatReading, QUALITY_TEXT, type ReadingSpec } from "../config/readings";
 
 export type Range = { min: number; max: number };
-export type ReadingTone = "ok" | "warn" | "off";
+export type ReadingTone = "ok" | "warn" | "crit" | "off";
 
-/** Grey when there is nothing trustworthy to show, amber outside the target band, green otherwise. */
+/**
+ * Grey for an old or offline reading (or none yet), red for a sensor fault, amber outside the target
+ * band, green otherwise. A fault is a problem on the farm to act on, not just missing data.
+ */
 function readingTone(
   value: number | null | undefined,
   quality: Quality | undefined,
   target: Range | undefined,
   stale: boolean,
 ): ReadingTone {
-  if (stale || value === null || value === undefined) return "off";
+  if (stale) return "off";
+  if (quality === "FAULT") return "crit";
+  if (value === null || value === undefined) return "off";
   if (quality && quality !== "OK") return quality === "OUT_OF_RANGE" ? "warn" : "off";
   if (target && (value < target.min || value > target.max)) return "warn";
   return "ok";

@@ -38,7 +38,7 @@ export const COMMAND_VIEW: Record<CommandState, CommandView> = {
   DISPATCHED: { label: "Sent — waiting for the farm", word: "Sent", tone: "neutral" },
   ACCEPTED: { label: "Accepted on site", word: "Accepted", tone: "neutral" },
   EXECUTING: { label: "Running", word: "Running", tone: "neutral" },
-  COMPLETED: { label: "Dose finished", word: "Completed", tone: "ok", closeWith: "Done" },
+  COMPLETED: { label: "Dose finished", word: "Completed", tone: "ok", closeWith: "New dose" },
   PARTIAL: { label: "Partial dose", word: "Partial", tone: "warn", closeWith: "Acknowledge" },
   FAILED: { label: "Dose failed", word: "Device error", tone: "crit", closeWith: "Acknowledge" },
   STOPPED: { label: "Dose stopped", word: "Stopped", tone: "warn", closeWith: "Acknowledge" },
@@ -59,12 +59,14 @@ export const isFinalCommand = (state: CommandState) => COMMAND_VIEW[state].close
 export const isMixing = (command: Command) =>
   (command.state === "COMPLETED" || command.state === "PARTIAL") && command.after === null;
 
-/** Shown instead of "Dose finished" while the mix wait runs. */
+/**
+ * Shown instead of "Dose finished" while the mix wait runs. No button to close it: there is nothing
+ * left for the grower to do, and the after values arrive on their own (demo feedback, T2-28).
+ */
 export const MIXING_VIEW: CommandView = {
   label: "Lines finished — mixing, then re-measuring",
   word: "Mixing",
   tone: "neutral",
-  closeWith: "Done",
 };
 
 /** Stopping is always allowed (PRD rule 1), including while the result is unknown. */
