@@ -410,6 +410,52 @@ def test_a_real_farm_counts_on_real_time(tmp_path, migrated_db):
     assert check(review(api_client(pack, migrated_db)), "LIMIT_24H")[0] == "BLOCK"
 
 
+# --- GET /api/zones/{zoneId}/dose-limits (T1-37) -----------------------------------------
+
+
+def limits(api, zone="Z1"):
+    response = api.get(f"/api/zones/{zone}/dose-limits")
+    assert response.status_code == 200, response.text
+    return {line["line"]: line for line in response.json()["lines"]}
+
+
+def test_dose_limits_come_from_the_config_pack_with_nothing_dosed_yet(api, worker):
+    ready_zone(worker)
+    # limits.json: Z1 allows 300 mL per dose and 1500 mL a day of A and B, 100 and 400 of acid
+    assert limits(api) == {
+        "A": {"line": "A", "maxPerDoseMl": 300, "max24hMl": 1500, "dosed24hMl": 0, "left24hMl": 1500},
+        "B": {"line": "B", "maxPerDoseMl": 300, "max24hMl": 1500, "dosed24hMl": 0, "left24hMl": 1500},
+        "ACID": {"line": "ACID", "maxPerDoseMl": 100, "max24hMl": 400, "dosed24hMl": 0, "left24hMl": 400},
+    }
+
+
+def test_dose_limits_count_the_last_24_hours_as_the_review_does(api, worker):
+    ready_zone(worker)
+    handle(worker, cmd_state({"A": 900, "B": 100}, sim_ts=sim_ago(23)), "farm/siet-ph1/zone/Z1/cmd/state")
+    handle(worker, cmd_state({"A": 800}, sim_ts=sim_ago(25), seq=101), "farm/siet-ph1/zone/Z1/cmd/state")
+    lines = limits(api)
+    assert (lines["A"]["dosed24hMl"], lines["A"]["left24hMl"]) == (900, 600)
+    assert (lines["B"]["dosed24hMl"], lines["B"]["left24hMl"]) == (100, 1400)
+    # one mL more than what is left is what the review blocks
+    over = {"zone": "Z1", "lines": [{"line": "A", "ml": 601}]}
+    assert check(review(api, over), "LIMIT_24H")[0] == "BLOCK"
+
+
+def test_dose_limits_never_go_below_zero(api, worker):
+    ready_zone(worker)
+    handle(worker, cmd_state({"A": 1600}, sim_ts=sim_ago(1)), "farm/siet-ph1/zone/Z1/cmd/state")
+    assert limits(api)["A"]["left24hMl"] == 0
+
+
+@pytest.mark.parametrize("zone", ["Z9", "zone1"])
+def test_dose_limits_of_an_unknown_zone_are_404(api, zone):
+    assert_error(api.get(f"/api/zones/{zone}/dose-limits"), 404, "NOT_FOUND")
+
+
+def test_dose_limits_before_the_farm_is_seeded_are_503(migrated_db, pack):
+    assert_error(api_client(pack, migrated_db).get("/api/zones/Z1/dose-limits"), 503, "SERVICE_UNAVAILABLE")
+
+
 def test_a_command_counts_once_by_its_newest_report(api, worker, seeded):
     ready_zone(worker)
     cmd_id = str(uuid.uuid4())

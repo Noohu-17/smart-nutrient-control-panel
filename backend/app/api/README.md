@@ -11,6 +11,7 @@ The routes in `routes.py`, as listed in `docs/contract.md` §11.2. The full sche
 | `GET /api/power` | The power monitor's latest `POWER_STATE`; `200` even when it is offline | The config pack and the database |
 | `GET /api/devices` | `{ "items": [ … ], "nextCursor": … }`, with `?limit=` (max 200) and `?cursor=` | The database |
 | `POST /api/dose-requests` | The §11.3 review of a dose: every check, `projected`, `estimate`, `canConfirm`; `201` whatever the checks say. Saved for the confirm step; nothing goes to the farm | The config pack and the database |
+| `GET /api/zones/{zoneId}/dose-limits` | Per line: `maxPerDoseMl`, `max24hMl`, `dosed24hMl` (last 24 h, counted as `LIMIT_24H` counts) and `left24hMl`, for the dose form while typing (T1-37) | The config pack and the database |
 
 Every query is scoped by `org_id` and `site_id` (OPEN-11). They come from the config pack: `org_id` is the client's folder name, as in the seed.
 

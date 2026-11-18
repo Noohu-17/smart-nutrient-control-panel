@@ -8,7 +8,7 @@ dose lines or equipment IDs are plain dicts, because those keys come from the cl
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import UUID4, ConfigDict, PlainSerializer, StrictBool, WithJsonSchema
+from pydantic import UUID4, ConfigDict, Field, PlainSerializer, StrictBool, WithJsonSchema
 
 from ..contract import ContractModel
 from ..contract.envelope import Count, Number
@@ -245,6 +245,25 @@ class DoseReview(ContractModel):
     checks: list[DoseCheck]
     estimate: DoseEstimate
     can_confirm: bool
+
+
+# --- GET /api/zones/{zoneId}/dose-limits (§11.2) ------------------------------------------
+
+
+class DoseLineLimit(ContractModel):
+    """One line's limits and how much of its 24 h limit is left, so the app can warn while typing."""
+
+    line: str
+    max_per_dose_ml: float
+    # named here: the camelCase generator would make "max24HMl" of these
+    max24h_ml: float = Field(alias="max24hMl")
+    dosed24h_ml: float = Field(alias="dosed24hMl")
+    left24h_ml: float = Field(alias="left24hMl")
+
+
+class DoseLimits(ContractModel):
+    zone: str
+    lines: list[DoseLineLimit]
 
 
 # --- GET /api/devices (§11.2; the fields follow device_state, §12) ------------------------
