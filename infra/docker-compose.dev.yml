@@ -17,9 +17,12 @@
 # --profile sim; never both at once, or two copies of each device share one MQTT client ID.
 # Either way its playground control API (contract 11.4) is on http://127.0.0.1:8100.
 #
+# Zones on the prototype rig: --profile rig runs the zone controller service (T1-32), and
+# --profile fake-rig a stand-in for the rig; stop the simulator first (simulator/sim/rig/README.md).
+#
 # Defaults can be overridden with environment variables or an infra/.env file:
 #   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT, API_PORT,
-#   SIM_CONTROL_PORT, SIM_SPEED,
+#   SIM_CONTROL_PORT, SIM_SPEED, RIG_TELEMETRY_TOPIC, RIG_COMMAND_TOPIC,
 #   CLIENT (the config pack under config/clients/ that the api reads; default client_A)
 
 name: sna-dev
@@ -131,6 +134,47 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # The zone controller service (T1-32), only with --profile rig: the zones io_map.json puts on
+  # the prototype rig (link SF_GATEWAY), run by sim/controller on the rig's sf/* messages. The
+  # app sees them as any zone controller. Never beside the simulator for the same zones: both
+  # would be ZC1. The rig's topic bases (m/<workspace>/c/<channel>) come from the gateway's
+  # secrets: set them in infra/.env, never in git. Run it with CLIENT set to a pack that puts a
+  # zone on the rig (client_B, T1-31); with none (client_A) it says so once and stops.
+  zone-controller:
+    build: ../simulator
+    profiles: [rig]
+    command: ["python", "-m", "sim.rig"]
+    stop_signal: SIGINT  # a clean stop: ZC1 publishes its own offline status
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      SIM_CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      RIG_TELEMETRY_TOPIC: ${RIG_TELEMETRY_TOPIC:-m/dev/c/telemetry}
+      RIG_COMMAND_TOPIC: ${RIG_COMMAND_TOPIC:-m/dev/c/relay-cmd}
+    volumes:
+      - ../config:/config:ro
+      - rig-state:/app/.state  # nvs and bootIds survive a restart (contract 5, 8.3)
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    restart: on-failure  # a crash restarts it; "no zone on the rig" is a clean exit and stays down
+
+  # A stand-in for the rig's gateway (sim/rig/fake.py), only with --profile fake-rig.
+  fake-rig:
+    build: ../simulator
+    profiles: [fake-rig]
+    command: ["python", "-m", "sim.rig.fake", "--interval", "10"]
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      RIG_TELEMETRY_TOPIC: ${RIG_TELEMETRY_TOPIC:-m/dev/c/telemetry}
+      RIG_COMMAND_TOPIC: ${RIG_COMMAND_TOPIC:-m/dev/c/relay-cmd}
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   db-data:
   sim-state:
+  rig-state:

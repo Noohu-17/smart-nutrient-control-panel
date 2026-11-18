@@ -251,7 +251,74 @@ def validate_client(client_dir, errors):
         if name == "nutrients.json" and dose_lines_by_zone and isinstance(data, dict):
             check_nutrients(rel, data, dose_lines_by_zone, errors)
 
+    io_map = loaded.get("io_map.json")
+    if isinstance(io_map, dict) and isinstance(layout, dict):
+        check_rig_controllers(display(client_dir / "io_map.json"), io_map, layout,
+                              loaded.get("hardware.json"), errors, loaded.get("limits.json"))
+
     return len(files)
+
+
+RIG_RELAYS = ("relay1", "relay2", "relay3")  # the rig's dosing pumps (relay4 is its inlet)
+RIG_MAX_DOSE_S = 600  # the rig runs one timed dose for at most this long (sf/cmd/1)
+
+
+def check_rig_controllers(rel, io_map, layout, hardware, errors, limits=None):
+    """A controller run by the zone controller service on the prototype rig (T1-32,
+    simulator/sim/rig): `"link": "SF_GATEWAY"` in io_map.json controllers. A line's largest
+    dose (limits.json maxPerDoseMl) must fit in one rig dose at its pump's flow."""
+    controllers = io_map.get("controllers")
+    if not isinstance(controllers, dict):
+        errors.append(f"{rel}: controllers must be an object")
+        return
+    zones = {z.get("controller"): z for z in layout.get("zones", []) if isinstance(z, dict)}
+    flows = ((hardware or {}).get("pumps") or {}).get("doseLines") or {}
+    for device, entry in controllers.items():
+        if not isinstance(entry, dict) or entry.get("link") != "SF_GATEWAY":
+            continue
+        where = f"{rel}: controllers.{device}"
+        zone = zones.get(device)
+        if zone is None:
+            errors.append(f"{where}: no layout.json zone has controller {device}")
+            continue
+        if not isinstance(entry.get("gateway"), str) or not entry["gateway"]:
+            errors.append(f"{where}.gateway must be the gateway's client ID")
+        if entry.get("rigZone") not in (1, 2) or isinstance(entry.get("rigZone"), bool):
+            errors.append(f"{where}.rigZone must be 1 or 2")
+        lines, pumps = list(zone.get("doseLines") or []), entry.get("pumps")
+        if not isinstance(pumps, dict) or sorted(pumps) != sorted(lines):
+            errors.append(f"{where}.pumps must map each dose line {lines} to a relay")
+        elif (any(r not in RIG_RELAYS for r in pumps.values())
+              or len(set(pumps.values())) != len(pumps)):
+            errors.append(f"{where}.pumps: each line needs its own relay of {list(RIG_RELAYS)}")
+        largest = _max_per_dose(limits, zone.get("id"))
+        for line in lines:
+            flow = (flows.get(line) or {}).get("flowMlPerS")
+            if not _positive_number(flow):
+                errors.append(f"{where}: hardware.json pumps.doseLines.{line}.flowMlPerS "
+                              "must be a number > 0 (a dose runs mL / flow seconds)")
+                continue
+            most = largest.get(line) if isinstance(largest, dict) else None
+            if _positive_number(most) and most / flow > RIG_MAX_DOSE_S:
+                errors.append(f"{where}: line {line}'s largest dose, {most:g} mL at {flow:g} "
+                              f"mL/s, is {most / flow:g} s of pumping; the rig runs a dose for "
+                              f"at most {RIG_MAX_DOSE_S} s (limits.json maxPerDoseMl)")
+        if not _positive_number(entry.get("tdsPpmPerMsCm")):
+            errors.append(f"{where}.tdsPpmPerMsCm must be a number > 0")
+        if not isinstance(entry.get("dayTankLevelSensors"), bool):
+            errors.append(f"{where}.dayTankLevelSensors must be true or false")
+
+
+def _max_per_dose(limits, zone_id):
+    """limits.json zones.<zone>.limits.maxPerDoseMl, or None if the file doesn't say."""
+    node = limits
+    for key in ("zones", zone_id, "limits", "maxPerDoseMl"):
+        node = node.get(key) if isinstance(node, dict) else None
+    return node if isinstance(node, dict) else None
+
+
+def _positive_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
 
 
 def main(argv):

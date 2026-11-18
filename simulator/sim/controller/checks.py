@@ -37,6 +37,10 @@ class Facts:
     day_tanks_ml: Mapping[str, float | None]  # None: its level sensor can't be trusted
     dosed_24h_ml: Mapping[str, int]
     device_limits: Mapping[str, Any]
+    # Lines whose day-tank has no level sensor at all, by config: nothing to check, so a person
+    # watches those drums (the prototype rig, T1-32). Empty: every day-tank is checked.
+    unmonitored_tanks: Collection[str] = ()
+    refill_available: bool = True  # False: the zone fills itself (the rig's auto-fill), FEATURE_OFF
 
 
 # --- the rules, one by one ------------------------------------------------------------
@@ -111,12 +115,15 @@ def check_24h(
 
 
 def check_day_tanks(
-    requests: Mapping[str, int], tanks_ml: Mapping[str, float | None]
+    requests: Mapping[str, int],
+    tanks_ml: Mapping[str, float | None],
+    unmonitored: Collection[str] = (),
 ) -> str | None:
-    """Enough concentrate for every line. A level that can't be trusted isn't enough."""
+    """Enough concentrate for every line. A level that can't be trusted isn't enough; a day-tank
+    the config says has no level sensor isn't checked here."""
     for line, ml in requests.items():
         held = tanks_ml.get(line)
-        if ml > 0 and (held is None or ml > held):
+        if ml > 0 and line not in unmonitored and (held is None or ml > held):
             return "DAYTANK_LOW"
     return None
 
@@ -186,7 +193,7 @@ def refusal(
     if kind == "DOSE":
         return _dose_refusal(cmd, facts)
     if kind == "REFILL":
-        return _start_refusal(facts)
+        return ("FEATURE_OFF" if not facts.refill_available else None) or _start_refusal(facts)
     if kind == "RESUME":  # contract 7.8
         return check_estop(facts.estop) or check_latches(facts.latches)
     return None  # STOP is always allowed (contract 7.4), and a person may clear a repaired fault
@@ -210,7 +217,7 @@ def _dose_refusal(cmd: Mapping[str, Any], facts: Facts) -> str | None:
         or check_ec_ph(facts.ec, facts.ph)
         or check_per_dose(requests, limits)
         or check_24h(requests, limits, facts.dosed_24h_ml)
-        or check_day_tanks(requests, facts.day_tanks_ml)
+        or check_day_tanks(requests, facts.day_tanks_ml, facts.unmonitored_tanks)
         or check_reservoir(facts.reservoir_pct, limits)
     )
 

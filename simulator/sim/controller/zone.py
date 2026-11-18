@@ -7,6 +7,10 @@ never waits.
 A dose runs its lines one at a time, each until its flow meter has counted the request, then waits
 mixWaitS on the controller's clock (simulated time in the simulator) before reading `after`. A
 refill runs until the reservoir reaches its target. Both stop at maxDurationS.
+
+On a HAL whose pumps run by time (hal.TimedPumps, the prototype rig), each line asks for its mL at
+once and ends when the hardware reports the pump has stopped. A stop waits for that report, so
+the mL it gives are measured, and mL reported after a line ended still count in the 24 h totals.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ NVS_JOURNAL, NVS_RECENT = "journal", "recentCmds"
 NVS_DOSED, NVS_LATCHES = "doseHistory", "latches"
 PROGRESS_MS = 5000  # contract 6.6, 14: EXECUTING at least every 5 s while a line runs
 JOURNAL_MS = 5000  # the measured mL go to nvs this often on the controller's own clock
+STOP_WAIT_MS = 30_000  # a timed pump's report of what it ran, after a stop (the rig's own timeout)
 # Contract 14's defaults, for when neither the DOSE nor limits.json "dose" gives one.
 DOSE_DEFAULTS = {"maxDurationS": 600, "mixWaitS": 300, "tolerancePct": 5}
 RUNNING = ("ACCEPTED", "EXECUTING")
@@ -61,6 +66,8 @@ class Operation:
     mix_until_ms: int | None = None
     progress_utc_ms: int = 0  # real time: progress is for the people watching
     journal_ms: int = 0  # the controller's clock: a reboot loses at most JOURNAL_MS of pumping
+    # (state, reason, until ms): a timed pump stopping. State None: PARTIAL or FAILED by what ran.
+    ending: tuple[str | None, str, int] | None = None
 
 
 class ZoneController:
@@ -81,10 +88,17 @@ class ZoneController:
         latches: Iterable[str] = (),
         dose_history: Iterable[Iterable[Any]] = (),
         recent: Iterable[Mapping[str, Any]] = (),
+        unmonitored_tanks: Iterable[str] = (),
+        refill_available: bool = True,
     ):
+        """unmonitored_tanks: lines whose day-tank has no level sensor; refill_available: False
+        for a zone that fills itself, so REFILL is refused FEATURE_OFF (both checks.Facts)."""
         self.hal, self.zone_id, self._report = hal, zone_id, report
         self.dose_lines = tuple(dose_lines)
         self.config, self.day_tank_usable_l = config, day_tank_usable_l
+        self.unmonitored_tanks = frozenset(unmonitored_tanks)
+        self.refill_available = refill_available
+        self._timed = bool(getattr(hal, "timed_pumps", False))  # hal.TimedPumps
         self.device_id, self.zone_name = device_id, zone_name or zone_id
         self.stopped = stopped
         self.latches = set(latches)
@@ -181,7 +195,10 @@ class ZoneController:
         operation.deadline_ms = self.hal.now_ms() + operation.max_run_ms
         operation.progress_utc_ms = self.hal.utc_ms()
         self._write_journal(operation)
-        self._switch(output, True)
+        if operation.kind == "DOSE":
+            self._pump_on(operation)
+        else:
+            self._switch(output, True)
         self._send_operation_state(operation)
         self._report_state_if_changed()
 
@@ -199,14 +216,28 @@ class ZoneController:
         self._report_state_if_changed()
         self._send_cmd_state(cmd["cmdId"], "COMPLETED")
 
-    def _end_operation(self, state: str, reason: str) -> None:
-        """Dosing and refill off, the measured amounts reported. Circulation keeps running."""
+    def _end_operation(self, state: str | None, reason: str) -> None:
+        """Dosing and refill off, the measured amounts reported. Circulation keeps running.
+
+        A pump that runs by time reports what it delivered once it has stopped, so the end
+        waits for that report (step(), up to STOP_WAIT_MS) and the mL it gives are measured.
+        """
         operation = self._operation
         for output in self._outputs:
             if output != CIRC_PUMP:
                 self._switch(output, False)
         if operation is None:
             return
+        if operation.ending is not None:  # already ending: the first reason to end it stands
+            state, reason, _ = operation.ending
+            if self._timed_pump_running(operation):
+                return
+        elif operation.state in RUNNING and self._timed_pump_running(operation):
+            operation.ending = (state, reason, self.hal.now_ms() + STOP_WAIT_MS)
+            return
+        self._close(operation, state, reason)
+
+    def _close(self, operation: Operation, state: str | None, reason: str) -> None:
         self._operation = None
         if operation.state not in RUNNING:
             return  # in its mix wait: the final state stands and `after` stays null (6.6)
@@ -215,6 +246,9 @@ class ZoneController:
                 self._end_line(operation, line)
             elif line["state"] == "PENDING":
                 line["state"] = "SKIPPED"
+        if state is None:  # after a reboot: PARTIAL if anything was delivered (8.3 rule 6)
+            delivered = any(line["deliveredMl"] > 0 for line in operation.lines)
+            state = "PARTIAL" if delivered else "FAILED"
         if operation.kind == "REFILL":
             operation.detail = {**(operation.detail or {}), "toPct": self._reservoir_pct()}
         operation.state, operation.reason, operation.line = state, reason, None
@@ -227,20 +261,46 @@ class ZoneController:
     def _start_line(self, operation: Operation, line: dict[str, Any]) -> None:
         line["state"] = "RUNNING"
         operation.line = line["line"]
-        self.hal.take_flow_ml(f"FLOW_{line['line']}")  # the meter starts from zero
+        self._count_late(line["line"])  # the meter starts from zero
         operation.measured_ml[line["line"]] = 0.0
+
+    def _pump_on(self, operation: Operation) -> None:
+        """The running line's pump on: until its meter has counted the request, or, for a pump
+        that runs by time, asked for the line's mL at once (hal.TimedPumps)."""
+        line = next(item for item in operation.lines if item["state"] == "RUNNING")
+        output = f"PUMP_{line['line']}"
+        if not self._timed:
+            self._switch(output, True)
+            return
+        self._outputs[output] = True
+        remaining = line["requestedMl"] - operation.measured_ml.get(line["line"], 0.0)
+        self.hal.run_pump_for(output, remaining, f"{operation.cmd_id}/{line['line']}")
+
+    def _timed_pump_running(self, operation: Operation) -> bool:
+        return self._timed and any(
+            line["state"] == "RUNNING" and self.hal.pump_running(f"PUMP_{line['line']}")
+            for line in operation.lines
+        )
+
+    def _count_late(self, line: str) -> None:
+        """mL a timed pump reported after its line ended (a lost or late report) still count in
+        the 24 h totals (9 rule 8). A flow meter counts nothing with its pump off."""
+        ml = self.hal.take_flow_ml(f"FLOW_{line}")
+        if self._timed and round(ml) > 0:
+            self.record_delivered(line, round(ml))
 
     def _run_dose(self, operation: Operation, now_ms: int) -> None:
         line = next(item for item in operation.lines if item["state"] == "RUNNING")
         self._measure(operation, line)
-        if operation.measured_ml[line["line"]] >= line["requestedMl"]:
+        stopped_by_itself = self._timed and not self.hal.pump_running(f"PUMP_{line['line']}")
+        if operation.measured_ml[line["line"]] >= line["requestedMl"] or stopped_by_itself:
             self._end_line(operation, line)
             following = next((item for item in operation.lines if item["state"] == "PENDING"), None)
             if following is None:
                 self._finish(operation, now_ms)
                 return
             self._start_line(operation, following)  # one at a time, in `order` (7.2)
-            self._switch(f"PUMP_{following['line']}", True)
+            self._pump_on(operation)
             self._report_progress(operation)
         elif now_ms >= operation.deadline_ms:
             self._end_line(operation, line)
@@ -335,13 +395,27 @@ class ZoneController:
         self._notice_panel()
         operation = self._operation
         if operation is not None:
-            if operation.kind == "REFILL":
+            if operation.ending is not None:
+                state, reason, until = operation.ending
+                if not self._timed_pump_running(operation) or now_ms >= until:
+                    self._close(operation, state, reason)
+            elif operation.kind == "REFILL":
                 self._run_refill(operation, now_ms)
             elif operation.state == "EXECUTING":
                 self._run_dose(operation, now_ms)
             elif operation.mix_until_ms is not None and now_ms >= operation.mix_until_ms:
                 self._after_mixing(operation)
+        if self._timed:
+            self._count_late_on_idle_lines()
         self._report_state_if_changed()
+
+    def _count_late_on_idle_lines(self) -> None:
+        operation, running = self._operation, set()
+        if operation is not None:
+            running = {line["line"] for line in operation.lines if line["state"] == "RUNNING"}
+        for line in self.dose_lines:
+            if line not in running:
+                self._count_late(line)
 
     def _notice_panel(self) -> None:
         """The E-STOP and the key switch, each acted on once when it changes."""
@@ -425,14 +499,19 @@ class ZoneController:
         self._report_state_if_changed()
 
     def restart(self, reason: str) -> None:
-        """After a reboot or power cut: outputs safe, stopped, nothing replayed (8.3 rule 6)."""
+        """After a reboot or power cut: outputs safe, stopped, nothing replayed (8.3 rule 6).
+
+        A timed pump that kept running through it (the rig's actuator box finishes a dose on its
+        own) has just been switched off, and the interrupted command waits for its report, as a
+        stop does, so REBOOT_MID_DOSE carries the mL it measured."""
         for output in self._outputs:
             self._outputs[output] = output == CIRC_PUMP
             self.hal.set_output(output, self._outputs[output])  # the panel starts it, not a command
         self.stopped = True
         self._operation = None
         self._load_saved()
-        self._close_interrupted_command()
+        if not self._wait_for_interrupted_pump():
+            self._close_interrupted_command()
         self._send_event(
             "REBOOTED",
             "WARNING",
@@ -459,6 +538,31 @@ class ZoneController:
         self._history = []
         self.hal.nvs_write(NVS_DOSED, {"items": []})
         self._report_state_if_changed()
+
+    def _wait_for_interrupted_pump(self) -> bool:
+        """A journalled dose whose timed pump is still running stays open, never resumed, and
+        closes REBOOT_MID_DOSE once the pump has reported (step(), up to STOP_WAIT_MS). It
+        holds the zone meanwhile, so a dose after an early RESUME is refused BUSY."""
+        journal = self.hal.nvs_read(NVS_JOURNAL) or {}
+        lines = journal.get("lines") or []
+        running = [line for line in lines if line.get("state") == "RUNNING"]
+        if not self._timed or journal.get("kind") != "DOSE" or not any(
+            self.hal.pump_running(f"PUMP_{line['line']}") for line in running
+        ):
+            return False
+        operation = Operation(
+            journal["cmdId"],
+            "DOSE",
+            state="EXECUTING",
+            lines=lines,
+            before=journal.get("before"),
+            started_at=journal.get("startedAt"),
+            measured_ml={line["line"]: float(line["deliveredMl"]) for line in lines},
+            tolerance_pct=journal.get("tolerancePct", DOSE_DEFAULTS["tolerancePct"]),
+            ending=(None, "REBOOT_MID_DOSE", self.hal.now_ms() + STOP_WAIT_MS),
+        )
+        self._operation = operation
+        return True
 
     def _close_interrupted_command(self) -> None:
         """A journalled command is reported with what was delivered, and never resumed."""
@@ -511,6 +615,8 @@ class ZoneController:
             day_tanks_ml={line: self._day_tank_ml(line) for line in self.dose_lines},
             dosed_24h_ml=checks.dosed_in_last_24h(self._history, hal.now_ms()),
             device_limits=self.config.get("limits") or {},
+            unmonitored_tanks=self.unmonitored_tanks,
+            refill_available=self.refill_available,
         )
 
     def _day_tank_ml(self, line: str) -> float | None:
@@ -539,6 +645,7 @@ class ZoneController:
                 "lines": [dict(line) for line in operation.lines],
                 "before": operation.before,
                 "startedAt": operation.started_at,
+                "tolerancePct": operation.tolerance_pct,
             },
         )
 

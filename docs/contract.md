@@ -196,7 +196,7 @@ config/clients/client_A/          ← first demo pack (SIET Polyhouse 1 values)
 ├── users.json         demo users and roles (no real passwords in git)
 ├── simulator.json     drift rates, plant uptake, equipment effects, speed options, minimum real time between readings (11.4)
 ├── hardware.json      simulated component behaviour: sensor accuracy and response, pump rates, valve and fan delays (placeholders until parts are bought)
-├── io_map.json        logical names (PUMP_A, FLOAT_HIGH …) to controller I/O channels (placeholders until the panel I/O list exists)
+├── io_map.json        logical names (PUMP_A, FLOAT_HIGH …) to controller I/O channels (placeholders until the panel I/O list exists); a controller with "link": "SF_GATEWAY" is run on the prototype rig by the zone controller service (simulator/sim/rig/README.md)
 └── scenarios.json     “Set up your farm” presets and allowed ranges: layout options, regions, seasons,
                        weather patterns, crops and growth stages, starting water state, power and
                        internet reliability; the failure-drill catalogue (11.4.3); the values a user may
@@ -1337,6 +1337,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, stuck commands | `TIMED_OUT` (8.4): a command the farm leaves without replies answers `UNKNOWN` with that reason (11.2), and when (14), from T1-23. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, nutrients.json | `nutrients.json` added to the config pack (2.5): what each dose line's stock does to EC and pH, read by the dose review (11.3) instead of the simulator's model, so a real farm's lines (N, P, K or any other) need no code (T1-30). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, dose limits | `GET /zones/{zoneId}/dose-limits` (11.2): the limits and what is left of the 24 h limit, per line, for the dose form (T1-37). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
+| v1.0, rig zones | `io_map.json` (2.5): a zone controller with `"link": "SF_GATEWAY"` runs on the prototype rig through the zone controller service, which speaks this contract for it: the same messages and rules as any zone controller (T1-32). The rig's own sf messages stay outside this contract. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 
 ### v1.0 section review
 

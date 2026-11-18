@@ -454,3 +454,16 @@ def test_stop_is_refused_only_when_it_has_expired():
 def test_clear_fault_goes_through_under_estop():
     clear = other("CLEAR_FAULT", fault="LEAK")
     assert refusal(clear, ZONE, LINES, facts(**ALL_FAILING)) is None
+
+
+def test_a_day_tank_with_no_level_sensor_by_config_is_left_to_a_person():
+    """T1-32: the rig's drums have no sensors (unmonitored_tanks); a fitted one still counts."""
+    assert checks.check_day_tanks({"A": 50}, {}, unmonitored={"A"}) is None
+    assert checks.check_day_tanks({"A": 50}, {"A": None}, unmonitored={"B"}) == "DAYTANK_LOW"
+    assert refusal(dose(lines=[{"line": "A", "ml": 50}], order=["A"]), ZONE, LINES,
+                   facts(day_tanks_ml={}, unmonitored_tanks={"A"})) is None
+
+
+def test_a_zone_that_fills_itself_refuses_refill_with_feature_off():
+    assert refusal(refill(), ZONE, LINES, facts(refill_available=False)) == "FEATURE_OFF"
+    assert refusal(refill(), ZONE, LINES, facts()) is None

@@ -235,6 +235,13 @@ curl -s -X POST http://127.0.0.1:8100/holds -d '{"target": "Z1", "metric": "rese
 curl -s -X POST http://127.0.0.1:8100/reset
 ```
 
+## Zones on the prototype rig (T1-32)
+
+`python -m sim.rig` is the zone controller service: the same zone controller, for the zones
+`io_map.json` puts on the prototype rig, on a HAL that speaks the rig's own sf messages. It is not
+the simulator and never runs beside it for the same zones. What it does and how it maps the rig
+to the contract: `sim/rig/README.md`. `python -m sim.rig.fake` stands in for the rig.
+
 ## Tests
 
 ```

@@ -39,3 +39,23 @@ class HAL(Protocol):
         ...
 
     def nvs_write(self, key: str, value: dict) -> None: ...
+
+
+class TimedPumps(Protocol):
+    """A HAL whose dosing pumps run by time, with no flow meter: the prototype rig (T1-32).
+
+    It sets `timed_pumps = True`. The controller then asks for a line's mL at once instead of
+    switching its pump on, and the hardware runs it for mL / its pump rate and stops by itself.
+    take_flow_ml() counts what a pump delivered once the hardware reports how long it ran, and
+    set_output(pump, False) stops a pump early.
+    """
+
+    timed_pumps: bool
+
+    def run_pump_for(self, output_id: str, ml: float, run_id: str) -> None:
+        """Run PUMP_<line> for `ml`. run_id names this run (cmdId/line): never run it twice."""
+        ...
+
+    def pump_running(self, output_id: str) -> bool:
+        """Whether the pump is still running, or asked to and not yet reported back."""
+        ...

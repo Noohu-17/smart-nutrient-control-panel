@@ -28,6 +28,8 @@ These are choices the contract leaves open:
 
 - **`CIRC_PROTECTED` first.** §9 rule 1 doesn't list it. It comes first, as a command aimed at circulation would otherwise be refused as invalid.
 - **Nothing known means refused.** A level sensor that isn't `OK` gives `DAYTANK_LOW` or `RESERVOIR_LOW`, and a line or minimum with no limit in either source gives `LIMIT_DOSE`, `LIMIT_24H` or `RESERVOIR_LOW`, because none of these can be shown safe. Only EC and pH have `SENSOR_STALE` (§8.4).
+- **A day-tank with no level sensor at all** is the one exception, and only by config: `unmonitored_tanks` (the prototype rig's drums, `io_map.json` `dayTankLevelSensors: false`) are not checked, so a person watches them. A fitted sensor that isn't `OK` is still `DAYTANK_LOW`.
+- **A zone that fills itself** (`refill_available` false: the rig's auto-fill) refuses `REFILL` with `FEATURE_OFF`, right after the expiry check.
 - **Freshness comes through the status.** The sensor layer marks an EC or pH older than 120 s (§14) as `STALE`, and the check reads that status.
 - **A dose of nothing is invalid.** A `DOSE` whose lines are all 0 mL is an `INVALID_COMMAND`.
 - **Clearing a fault that isn't latched** answers `COMPLETED`: there is nothing left to clear.
@@ -60,6 +62,8 @@ A `REFILL` `START` opens the valve and closes it when the reservoir reaches `tar
 
 **Only measured mL count.** The 24 h totals and every `deliveredMl` come from the flow meters, never from the request.
 
+**Timed pumps (the prototype rig, T1-32).** A HAL with `timed_pumps` has no flow meter: its pumps run by time. The controller asks it for a line's mL at once (`run_pump_for`), and the hardware runs the pump for mL ÷ its flow and stops by itself. The line ends when the hardware says the pump has stopped (`pump_running` false); its meter (`take_flow_ml`) then counts what really ran, from the hardware's report of how long. A `STOP`, E-STOP or key-switch change switches the pump off and waits up to 30 s for that report before the final `STOPPED`, so its mL are measured. mL reported after a line ended still go into the 24 h totals.
+
 **Not built yet:** `REFILL` `PAUSE`, `RESUME` and `STOP`, which are refused with `INVALID_COMMAND`; `NO_FLOW`, which needs a "pump on, no flow" time in `hardware.json`. Until then a pump that delivers nothing ends at `maxDurationS`.
 
 `STOP`, `RESUME` and `CLEAR_FAULT` have no run phase: `ACCEPTED`, act, `COMPLETED`. A `ZONE` stop for another zone gets no answer at all.
@@ -71,7 +75,7 @@ A `REFILL` `START` opens the valve and closes it when the reservoir reaches `tar
 1. All outputs off, and circulation on. The controller starts circulation itself; no command can.
 2. `stopped` is true until a person sends `RESUME`.
 3. The `cmdId` memory, latches and 24 h totals come back from `nvs`.
-4. A command still in the journal is reported `PARTIAL` if anything was delivered, otherwise `FAILED`, with `REBOOT_MID_DOSE`. It is never resumed. The line that was running when it stopped adds its journalled mL to the 24 h totals (lines that had ended were counted as they ended), so a reboot can't hide a delivery from the daily limit.
+4. A command still in the journal is reported `PARTIAL` if anything was delivered, otherwise `FAILED`, with `REBOOT_MID_DOSE`. It is never resumed. The line that was running when it stopped adds its journalled mL to the 24 h totals (lines that had ended were counted as they ended), so a reboot can't hide a delivery from the daily limit. A timed pump that kept running through the restart (the rig's actuator box, which finishes a dose on its own) is switched off in step 1, and the command waits for its report as a stop does (up to 30 s), so the mL it reports are measured; until then the zone is busy.
 5. A `REBOOTED` event gives the reason.
 
 A new run of the simulator is not a reboot (agreed on #31). `start()` brings back what `nvs` kept and closes a journalled command the same way, without a `REBOOTED` event, and the zone is not stopped.
@@ -80,7 +84,7 @@ A new run of the simulator is not a reboot (agreed on #31). `start()` brings bac
 
 | `nvs` key | Holds | Written |
 |---|---|---|
-| `journal` | The running command, with the mL measured so far | Before any output switches on, at each line and progress report, and every 5 s of the controller's own clock while a line runs (so a fast simulated clock loses at most 5 s of pumping); emptied when it ends |
+| `journal` | The running command, with the mL measured so far and its `tolerancePct` | Before any output switches on, at each line and progress report, and every 5 s of the controller's own clock while a line runs (so a fast simulated clock loses at most 5 s of pumping); emptied when it ends |
 | `recentCmds` | The last 50 `cmdId`s with their last `CMD_STATE` | At every state |
 | `latches` | Active latches | When one is added or cleared |
 | `doseHistory` | `[atMs, line, ml]` from the last 24 h | When mL are delivered |
