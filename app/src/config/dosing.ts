@@ -1,13 +1,28 @@
-import type { CheckResult, Command, CommandState, LineState } from "../api/types";
+import type { CheckResult, Command, CommandState, DoseLineLimit, LineState } from "../api/types";
 import type { ChipTone } from "../components/StatusChip";
 
-/* Display text only. Which lines a zone has comes from doseLines in GET /api/farm, and
-   every limit comes from the check messages, so nothing here decides what may be dosed. */
+/* Display text only. Which lines a zone has comes from doseLines in GET /api/farm, and every
+   limit from GET /api/zones/{zoneId}/dose-limits or the check messages, so nothing here decides
+   what may be dosed: the review still checks. */
 
 const LINE_NAMES: Record<string, string> = { A: "Stock A", B: "Stock B", ACID: "Acid" };
 
 /** "Stock A" for a known line; any other line from the config still shows as "Line X". */
 export const lineName = (line: string) => LINE_NAMES[line] ?? `Line ${line}`;
+
+const ml = (n: number) => `${n.toLocaleString("en-US")} mL`;
+
+/** The line under a dose amount while it is typed (T1-37): the limits, or which one it is over. */
+export function limitHint(limit: DoseLineLimit, amountMl: number): { text: string; over: boolean } {
+  if (amountMl > limit.maxPerDoseMl)
+    return { text: `Over the ${ml(limit.maxPerDoseMl)} per-dose limit`, over: true };
+  if (amountMl > limit.left24hMl)
+    return {
+      text: limit.left24hMl > 0 ? `Over what's left today: ${ml(limit.left24hMl)}` : "Nothing left today",
+      over: true,
+    };
+  return { text: `Max ${ml(limit.maxPerDoseMl)} per dose · ${ml(limit.left24hMl)} left today`, over: false };
+}
 
 /** Headings for the §11.3 check IDs; an ID the back end adds later shows as itself. */
 const CHECK_TITLES: Record<string, string> = {

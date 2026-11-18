@@ -69,6 +69,58 @@ describe("Manual dose and review", () => {
     expect(await screen.findByText("Sent — waiting for the farm")).toBeInTheDocument();
   });
 
+  it("shows each line's limits under its amount, from GET /api/zones/Z1/dose-limits", async () => {
+    const { card } = await enter({});
+    // limits.json: 300 mL per dose and 1,500 a day of A and B, 100 and 400 of acid; the fake API
+    // has 240 mL of A and B and 60 mL of acid dosed today
+    await card.findByText("Max 100 mL per dose · 340 mL left today");
+    for (const label of ["Stock A", "Stock B"])
+      expect(card.getByLabelText(label)).toHaveAccessibleDescription(
+        "Max 300 mL per dose · 1,260 mL left today",
+      );
+    expect(card.getByLabelText("Acid")).toHaveAccessibleDescription(
+      "Max 100 mL per dose · 340 mL left today",
+    );
+  });
+
+  it("turns the box red as soon as the amount is over a limit, and Review still checks", async () => {
+    const { user, card } = await enter({});
+    const stockA = card.getByLabelText("Stock A");
+    await card.findByText("Max 100 mL per dose · 340 mL left today"); // the limits have loaded
+    await user.type(stockA, "300");
+    expect(stockA).toHaveAttribute("aria-invalid", "false");
+    await user.type(stockA, "1"); // 3001
+    expect(stockA).toHaveAttribute("aria-invalid", "true");
+    expect(stockA).toHaveAccessibleDescription("Over the 300 mL per-dose limit");
+    // only a hint: the review is still the one that decides
+    expect(card.getByRole("button", { name: "Review dose" })).toBeEnabled();
+  });
+
+  it("says when an amount is over what's left today", async () => {
+    server.use(
+      http.get("/api/zones/:zoneId/dose-limits", () =>
+        HttpResponse.json({
+          zone: "Z1",
+          lines: [{ line: "A", maxPerDoseMl: 300, max24hMl: 1500, dosed24hMl: 1400, left24hMl: 100 }],
+        }),
+      ),
+    );
+    const { user, card } = await enter({});
+    const stockA = card.getByLabelText("Stock A");
+    await card.findByText("Max 300 mL per dose · 100 mL left today");
+    await user.type(stockA, "150");
+    expect(stockA).toHaveAttribute("aria-invalid", "true");
+    expect(stockA).toHaveAccessibleDescription("Over what's left today: 100 mL");
+  });
+
+  it("works as before, without hints, when the limits can't be loaded", async () => {
+    server.use(http.get("/api/zones/:zoneId/dose-limits", () => HttpResponse.json({}, { status: 503 })));
+    const { user, card } = await enter({});
+    await user.type(card.getByLabelText("Stock A"), "400");
+    expect(card.queryByText(/per dose/)).not.toBeInTheDocument();
+    expect(card.getByRole("button", { name: "Review dose" })).toBeEnabled();
+  });
+
   it("shows Error and why for a dose over the per-dose limit, with the limit from the fake API", async () => {
     const { user } = await enter({ "Stock A": "400" });
     await user.click(screen.getByRole("button", { name: "Review dose" }));

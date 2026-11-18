@@ -53,8 +53,15 @@
 }
 .dose-input input[aria-invalid="true"] {
   border-color: var(--status-critical-action);
+  background: var(--status-critical-bg);
+}
+/* the line's limits under its amount; red once the amount is over one (T1-37) */
+.dose-limit.over {
+  color: var(--status-critical-fg);
+  font-weight: var(--weight-semibold);
 }
 .dose-input small,
+.dose-limit,
 .dose-note {
   font-size: var(--text-caption-size);
   font-weight: var(--weight-regular);

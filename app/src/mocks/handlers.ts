@@ -4,6 +4,7 @@ import { delay, http, HttpResponse } from "msw";
 import type {
   ApiErrorBody,
   DoseConfirmed,
+  DoseLimits,
   DoseRequest,
   DoseRequestBody,
   Farm,
@@ -207,6 +208,27 @@ export const handlers = [
     const zoneId = String(params.zoneId);
     if (!findZone(zoneId)) return apiError(404, "NOT_FOUND", `There is no zone ${zoneId}`);
     return HttpResponse.json(zoneStatus(zoneId));
+  }),
+
+  // GET /api/zones/:zoneId/dose-limits · limits.json and the same 24 h totals the review counts (T1-37)
+  http.get("/api/zones/:zoneId/dose-limits", async ({ params }) => {
+    await networkDelay();
+    const zoneId = String(params.zoneId);
+    const zone = findZone(zoneId);
+    const dosing = zoneDosing(zoneId);
+    if (!zone || !dosing) return apiError(404, "NOT_FOUND", `There is no zone ${zoneId}`);
+    const { maxPerDoseMl, max24hMl } = dosing.limits;
+    const limits: DoseLimits = {
+      zone: zoneId,
+      lines: zone.doseLines.map((line) => ({
+        line,
+        maxPerDoseMl: maxPerDoseMl[line],
+        max24hMl: max24hMl[line],
+        dosed24hMl: dosing.dosed24hMl[line],
+        left24hMl: Math.max(0, max24hMl[line] - dosing.dosed24hMl[line]),
+      })),
+    };
+    return HttpResponse.json(limits);
   }),
 
   // POST /api/dose-requests · run the safety checks; nothing is sent to the farm (contract §11.3)

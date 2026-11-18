@@ -6,6 +6,7 @@ import type {
   ClimateStatus,
   Command,
   DoseConfirmed,
+  DoseLimits,
   DoseRequest,
   DoseRequestBody,
   Farm,
@@ -112,6 +113,17 @@ export function usePower() {
   return useQuery({
     queryKey: ["power"],
     queryFn: () => getJson<PowerStatus>("/power"),
+    refetchInterval: pollMs,
+  });
+}
+
+/** GET /api/zones/{zoneId}/dose-limits · each line's limits and what is left today (T1-37), so the
+    dose form can warn while typing. As often as the zone, since a finished dose changes it. */
+export function useDoseLimits(zoneId: string) {
+  const pollMs = usePollMs(ONE_MINUTE);
+  return useQuery({
+    queryKey: ["dose-limits", zoneId],
+    queryFn: () => getJson<DoseLimits>(`/zones/${zoneId}/dose-limits`),
     refetchInterval: pollMs,
   });
 }

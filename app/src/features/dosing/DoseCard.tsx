@@ -1,11 +1,11 @@
 import { useId, useState } from "react";
-import { useConfirmDose, useDoseReview, useZone } from "../../api/hooks";
+import { useConfirmDose, useDoseLimits, useDoseReview, useZone } from "../../api/hooks";
 import type { DoseLineAmount, DoseRequest, FarmZone } from "../../api/types";
 import { can, WHY } from "../../auth/roles";
 import { useSession } from "../../auth/session";
 import { LockedButton } from "../../components/LockedButton";
 import { StatusChip } from "../../components/StatusChip";
-import { checkTitle, lineName, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
+import { checkTitle, limitHint, lineName, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
 import { DOSE_CARD } from "../zones/doseCard";
 import { CommandStatus } from "./CommandStatus";
 
@@ -33,6 +33,8 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
   const review = useDoseReview();
   const confirm = useConfirmDose();
   const telemetry = useZone(zone.id);
+  // only a hint while typing: if it can't load, the form works as before and the review checks
+  const limits = useDoseLimits(zone.id);
   const idBase = useId();
 
   const allowed = role !== null && can(role, "operate");
@@ -92,29 +94,41 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
           }}
         >
           <div className="dose-lines">
-            {zone.doseLines.map((line) => (
-              <div key={line} className="dose-line">
-                <label htmlFor={`${idBase}-${line}`}>{lineName(line)}</label>
-                <span className="dose-input">
-                  <input
-                    id={`${idBase}-${line}`}
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
-                    value={amounts[line] ?? ""}
-                    disabled={!allowed}
-                    aria-invalid={!isWholeMl(amounts[line])}
-                    onChange={(e) => setAmounts({ ...amounts, [line]: e.target.value })}
-                  />
-                  <small>mL</small>
-                </span>
-              </div>
-            ))}
+            {zone.doseLines.map((line) => {
+              const limit = limits.data?.lines.find((l) => l.line === line);
+              const ml = lines.find((l) => l.line === line)?.ml ?? 0;
+              const hint = limit && limitHint(limit, ml);
+              const hintId = `${idBase}-${line}-limit`;
+              return (
+                <div key={line} className="dose-line">
+                  <label htmlFor={`${idBase}-${line}`}>{lineName(line)}</label>
+                  <span className="dose-input">
+                    <input
+                      id={`${idBase}-${line}`}
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={1}
+                      value={amounts[line] ?? ""}
+                      disabled={!allowed}
+                      aria-invalid={!isWholeMl(amounts[line]) || Boolean(hint?.over)}
+                      aria-describedby={hint ? hintId : undefined}
+                      onChange={(e) => setAmounts({ ...amounts, [line]: e.target.value })}
+                    />
+                    <small>mL</small>
+                  </span>
+                  {hint && (
+                    <small id={hintId} className={`dose-limit${hint.over ? " over" : ""}`}>
+                      {hint.text}
+                    </small>
+                  )}
+                </div>
+              );
+            })}
           </div>
           {review.error && <p className="banner crit">{review.error.message}</p>}
           <div className="dose-actions">
-            <span className="dose-note">Enter whole mL. Limits are checked on the next step.</span>
+            <span className="dose-note">Enter whole mL. The safety checks run on the next step.</span>
             {allowed ? (
               <button type="submit" className="btn primary" disabled={!valid || review.isPending}>
                 {review.isPending ? "Checking…" : "Review dose"}

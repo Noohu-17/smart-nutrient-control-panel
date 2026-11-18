@@ -148,6 +148,18 @@ export type DoseRequest = {
 /* ---------- POST /api/dose-requests/{id}/confirm (contract §11.3, states §8.1) ---------- */
 export type DoseConfirmed = { cmdId: string; state: "DISPATCHED" };
 
+/* ---------- GET /api/zones/{zoneId}/dose-limits (contract §11.2, T1-37) ---------- */
+/** One line's limits and what is left of its 24 h limit, for the dose form while typing. */
+export type DoseLineLimit = {
+  line: string;
+  maxPerDoseMl: number;
+  max24hMl: number;
+  dosed24hMl: number; // delivered in the last 24 h, as the LIMIT_24H check counts it
+  left24hMl: number; // never below 0
+};
+
+export type DoseLimits = { zone: string; lines: DoseLineLimit[] };
+
 /* ---------- Simulator control, playground sites only (contract §11.4) ---------- */
 /** Clock speed: 0 is paused, 288 is one simulated day in five minutes. */
 export type SimSpeed = 0 | 1 | 60 | 288;
