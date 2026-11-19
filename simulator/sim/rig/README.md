@@ -98,8 +98,10 @@ a publish that fails reconnects with that command still first.
 
 ## Not covered yet
 
-- The rig's own alarms (`sf/event`) aren't forwarded: alerts for sensor faults, rig offline and
-  stale readings are T1-34.
+- The rig's own alarms (`sf/event`: its thresholds and probe alarms) aren't forwarded. The back
+  end raises its own from what ZC1 reports (T1-34): `SENSOR_FAULT` from a reading with nothing
+  measured (`FAULT`), `READING_STALE` from an old part (`STALE`) or no new readings, and
+  `DEVICE_OFFLINE` when the rig goes silent.
 - The back end's dose review checks day-tank levels from telemetry. The rig sends none, so it
   refuses a dose from the app until the back end knows those lines have no sensors (T1-38's
   "sensors fitted" per zone).

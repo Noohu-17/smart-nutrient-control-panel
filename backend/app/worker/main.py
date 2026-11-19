@@ -11,7 +11,8 @@ growing delay. If the database is down or not migrated yet it keeps the message 
 again with the same delay, so messages wait rather than get lost.
 
 Alongside, the stuck-command guard (stuck.py) marks a sent command that the farm has left without
-replies, so it shows UNKNOWN, TIMED_OUT rather than running for ever.
+replies, so it shows UNKNOWN, TIMED_OUT rather than running for ever, and the silence sweep
+(silence.py) raises and clears DEVICE_OFFLINE and READING_STALE for what the farm stops sending.
 """
 
 import asyncio
@@ -32,6 +33,7 @@ from ..alerts import AlertRules
 from ..config import Settings, load_settings
 from ..contract import DeviceStatusLastWill, Envelope, parse_farm_message
 from ..db.engine import create_db_engine
+from .silence import watch
 from .store import mark_offline, reading_rows, store_message
 from .stuck import guard
 
@@ -178,6 +180,7 @@ async def run(
     rules = AlertRules.from_pack(settings.client_dir)
     worker = Worker(engine, settings.client_dir.name, site, sleep=sleep, rules=rules)
     guarding = asyncio.create_task(guard(engine, worker.org_id, site))  # stuck commands (T1-23)
+    watching = asyncio.create_task(watch(engine, worker.org_id, site, rules))  # silence (T1-34)
     attempt = 0
     try:
         while True:
@@ -207,7 +210,8 @@ async def run(
                 await sleep(delay)
     finally:
         guarding.cancel()
-        await asyncio.gather(guarding, return_exceptions=True)  # its own end, never this one's
+        watching.cancel()
+        await asyncio.gather(guarding, watching, return_exceptions=True)  # their ends, never this one's
         engine.dispose()
 
 

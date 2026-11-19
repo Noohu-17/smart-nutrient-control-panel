@@ -1,15 +1,13 @@
 """The rules behind a zone's, the climate's, the power's and a device's status (§11.2, §14)."""
 
 from collections.abc import Iterable, Mapping, Sequence
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, get_origin
 
 from ..contract import ContractModel
 from ..contract.farm_messages import ClimateReadings, Phases, ZoneReadings
+from ..timing import FRESH_FOR, OFFLINE_AFTER  # §14, shared with the alerts (app/timing.py)
 from .schemas import ClimateStatus, PowerStatus, ZoneStatus
-
-OFFLINE_AFTER = timedelta(minutes=3)  # "3 minutes without any message" (§14)
-FRESH_FOR = timedelta(seconds=120)  # "Fresh EC/pH to dose: ≤ 120 s old" (§14)
 
 
 def is_online(

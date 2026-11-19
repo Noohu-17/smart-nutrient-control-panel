@@ -1,6 +1,8 @@
-"""Alerts (contract §6.5, §11.2, T1-24): what the back end raises from the farm's messages.
+"""Alerts (contract §6.5, §11.2, T1-24, T1-34): what the back end raises from the farm's messages,
+and from its silence.
 
-Two sources, both in the worker, in the same transaction that stores the message:
+Three sources, all in the worker. The first two run in the same transaction that stores the
+message:
 
 - **Rules on readings.** Each new ZONE_TELEMETRY is checked against the limits in alerts.json:
   EC above `zones.{zone}.alarms.ecMaxMsCm`, solution above `solTempMaxC`, circulation below
@@ -8,10 +10,21 @@ Two sources, both in the worker, in the same transaction that stores the message
   `events.DAYTANK_LOW.thresholdPct`. An alert is raised once the condition has lasted the
   kind's `delayS` (real time, §11.4), and cleared when a reading is back within the limit.
   Only a reading marked OK counts: a faulty or stale one says nothing about the water.
+  The quality itself raises two more (T1-34): SENSOR_FAULT while a reading is FAULT, cleared
+  once it reads again (OK, OUT_OF_RANGE or UNCALIBRATED), and READING_STALE while the
+  controller marks it STALE, cleared by anything else. Both wait out their kind's delayS.
 - **Events.** An EVENT (§6.5) that is CRITICAL or WARNING raises an alert with its own
   message, systemAction and nextStep (PRD rule 7). Its pair clears it: ESTOP_RELEASED clears
   ESTOP_PRESSED, LEAK_CLEARED clears LEAK_DETECTED, and so on; MODE_CHANGED back to REMOTE
   clears MODE_CHANGED. Other INFO events raise nothing.
+- **Silence** (T1-34, the worker's sweep every few seconds, worker/silence.py). DEVICE_OFFLINE
+  for a device that has been heard from at least once, once its last will has come or it has
+  sent nothing for `events.DEVICE_OFFLINE.thresholdS` (§14's 3 minutes if the pack gives none),
+  cleared when it is heard again. READING_STALE for a zone whose controller is online but whose
+  newest telemetry is older than `events.READING_STALE.thresholdS` (§14's 120 s fresh limit),
+  cleared by fresh telemetry. A device never heard from is not connected yet, not offline: a
+  part that isn't fitted raises nothing. For its first DEVICE_OFFLINE thresholdS the sweep only
+  clears: just after the worker starts, messages are old because the worker was away.
 
 One alert per condition: `key` names it (kind, zone and line, metric or equipment), and while an
 alert with that key is not cleared, no second one is raised; a reading rule's alert takes the
@@ -31,6 +44,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from .contract import Envelope, Event, ZoneTelemetry
 from .db.models import Alert
+from .timing import FRESH_FOR, OFFLINE_AFTER
 
 # An event that clears the alert another event raised (§6.5).
 CLEARS = {
@@ -40,6 +54,19 @@ CLEARS = {
     "SENSOR_RECOVERED": "SENSOR_FAULT",
 }
 DETAIL_KEYS = ("line", "metric", "equipment")  # what tells two alerts of one kind apart (§6.5)
+# §14's times (app/timing.py, as the zone API uses them), when alerts.json gives no threshold.
+OFFLINE_AFTER_S = OFFLINE_AFTER.total_seconds()
+FRESH_FOR_S = FRESH_FOR.total_seconds()
+# A quality that means the probe is answering again (§6.1): its fault is over.
+ANSWERING = ("OK", "OUT_OF_RANGE", "UNCALIBRATED")
+DOSING_METRICS = ("ec", "ph")  # a dose needs these fresh and OK (§8.3 rule 7: SENSOR_STALE)
+METRIC_NAMES = {  # what an alert calls a quality key (§6.1)
+    "ec": "EC", "ph": "pH", "solTempC": "solution temperature", "reservoirPct": "reservoir level",
+    "circFlowLpm": "circulation flow", "doMgL": "dissolved oxygen", "dayTankPct": "day-tank level",
+}
+DEVICE_NAMES = {  # what an alert calls a device of each kind (§2.2)
+    "GATEWAY": "gateway", "CLIMATE_CONTROLLER": "climate controller", "POWER_MONITOR": "power monitor",
+}
 
 
 @dataclass(frozen=True)
@@ -58,6 +85,8 @@ class AlertRules:
     reservoir_low_pct: float | None
     daytank_low_pct: float | None
     delay_s: Mapping[str, float]  # by kind, from alerts.json events.{kind}.delayS
+    device_offline_s: float = OFFLINE_AFTER_S  # events.DEVICE_OFFLINE.thresholdS
+    reading_stale_s: float = FRESH_FOR_S  # events.READING_STALE.thresholdS
 
     def delay(self, kind: str) -> timedelta:
         return timedelta(seconds=self.delay_s.get(kind, 0) or 0)
@@ -82,7 +111,17 @@ class AlertRules:
             reservoir_low_pct=(events.get("RESERVOIR_LOW") or {}).get("thresholdPct"),
             daytank_low_pct=(events.get("DAYTANK_LOW") or {}).get("thresholdPct"),
             delay_s={kind: spec.get("delayS") or 0 for kind, spec in events.items() if isinstance(spec, dict)},
+            device_offline_s=_seconds(events, "DEVICE_OFFLINE", OFFLINE_AFTER_S),
+            reading_stale_s=_seconds(events, "READING_STALE", FRESH_FOR_S),
         )
+
+
+def _seconds(events: Mapping[str, Any], kind: str, default: float) -> float:
+    """events.{kind}.thresholdS from alerts.json, or the contract's own time (§14)."""
+    value = (events.get(kind) or {}).get("thresholdS")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
+        return default
+    return float(value)
 
 
 @dataclass(frozen=True)
@@ -100,6 +139,13 @@ class Condition:
 
 def _number(value: float) -> str:
     return f"{value:g}"
+
+
+def _duration(seconds: float) -> str:
+    """180 -> "3 min", 90 -> "90 s": how long, as the alert says it."""
+    if seconds >= 60 and seconds % 60 == 0:
+        return f"{seconds / 60:g} min"
+    return f"{seconds:g} s"
 
 
 NO_ACTION = "No automatic action: the farm keeps running as it was"
@@ -159,6 +205,89 @@ def zone_conditions(message: ZoneTelemetry, rules: AlertRules) -> list[Condition
                     NO_ACTION,
                     f"Top up day-tank {line} and record the refill",
                 ))
+    found += quality_conditions(message, limits)
+    return found
+
+
+def _doses(metric: str, zone: str, until: str) -> str:
+    """What the farm does about a reading it can't use: a dose needs EC and pH (§8.3 rule 7)."""
+    if metric in DOSING_METRICS:
+        return f"Doses to {zone} are refused {until}"
+    return NO_ACTION
+
+
+def quality_conditions(message: ZoneTelemetry, limits: ZoneLimits) -> list[Condition]:
+    """SENSOR_FAULT and READING_STALE from each reading's quality (§6.1, T1-34). The key is the
+    one a controller's own SENSOR_FAULT event has (kind, zone, metric), so either can raise it,
+    and SENSOR_RECOVERED or a reading that answers again clears it."""
+    found: list[Condition] = []
+    zone = message.zone
+    for metric, quality in message.quality.items():
+        what = METRIC_NAMES.get(metric, metric)
+        if quality == "FAULT" or quality in ANSWERING:  # STALE says nothing about a fault
+            found.append(Condition(
+                "SENSOR_FAULT", f"SENSOR_FAULT:{zone}:{metric}", quality == "FAULT", "WARNING",
+                f"The {what} sensor in {limits.name} reports a fault: it gives no reading",
+                _doses(metric, limits.name, "until it reads again"),
+                "Check the probe, its cable and its connector; clean or recalibrate it if it reads wrong",
+            ))
+        found.append(Condition(
+            "READING_STALE", f"READING_STALE:{zone}:{metric}", quality == "STALE", "WARNING",
+            f"The {what} reading in {limits.name} is stale: the sensor hasn't sent a new value",
+            _doses(metric, limits.name, "until it is fresh again"),
+            "Check the sensor and its link to the controller",
+        ))
+    return found
+
+
+@dataclass(frozen=True)
+class DeviceSeen:
+    """A device as the worker last heard it (the device table), for the silence sweep."""
+
+    device_id: str
+    kind: str
+    zone_id: str | None
+    last_seen: datetime | None  # the newest ts of any message from it
+    last_will_at: datetime | None  # its last will, until it sends anything new
+    telemetry_ts: datetime | None  # a zone controller's newest ZONE_TELEMETRY
+
+
+def silence_conditions(device: DeviceSeen, rules: AlertRules, now: datetime) -> list[Condition]:
+    """DEVICE_OFFLINE for a device, and READING_STALE for a zone controller's readings (T1-34).
+    A device never heard from gives nothing: it isn't connected yet, or isn't fitted."""
+    if device.last_seen is None:
+        return []
+    zone = rules.zones.get(device.zone_id) if device.zone_id else None
+    if device.kind == "ZONE_CONTROLLER":
+        label = f"The {zone.name if zone else device.zone_id} controller ({device.device_id})"
+    else:
+        label = f"The {DEVICE_NAMES.get(device.kind, 'device')} ({device.device_id})"
+    silent_s = (now - device.last_seen).total_seconds()
+    offline = device.last_will_at is not None or silent_s >= rules.device_offline_s
+    why = (
+        "it dropped off the network (its last will)" if device.last_will_at is not None
+        else f"it has sent nothing for {_duration(rules.device_offline_s)}"
+    )
+    zone_name = zone.name if zone else device.zone_id
+    found = [Condition(
+        "DEVICE_OFFLINE", f"DEVICE_OFFLINE:{device.device_id}", offline,
+        "WARNING" if device.kind == "POWER_MONITOR" else "CRITICAL",
+        f"{label} is offline: {why}",
+        f"Doses to {zone_name} are refused, and its readings show as old, until it is back"
+        if device.kind == "ZONE_CONTROLLER" else "Its readings show as old until it is back",
+        "Check its power and network at the farm; the alert clears when it is heard again",
+    )]
+    if device.kind == "ZONE_CONTROLLER" and zone is not None and device.telemetry_ts is not None:
+        old_s = (now - device.telemetry_ts).total_seconds()
+        found.append(Condition(
+            # Offline says more: while it is, this one stands down.
+            "READING_STALE", f"READING_STALE:{device.zone_id}", not offline and old_s > rules.reading_stale_s,
+            "WARNING",
+            f"No new readings from {zone.name} for over {_duration(rules.reading_stale_s)}, "
+            "though its controller is online",
+            f"Doses to {zone.name} are refused until fresh readings arrive",
+            "Check the zone's sensors and their link to the controller",
+        ))
     return found
 
 

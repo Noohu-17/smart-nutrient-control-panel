@@ -3,7 +3,7 @@
   "_meta": {
     "client": "client_A",
     "placeholder": true,
-    "note": "Placeholder values until the farm team and agronomy agree alert thresholds, delays and escalation. Do not use for a real farm. Phase A alerts are in the app only. ecMaxMsCm (T1-24) is a placeholder set to limits.json ecCeiling. RESERVOIR_LOW and DAYTANK_LOW delayS are 0 so the playground shows them within a reading (board demo); a real farm will want a delay against flapping."
+    "note": "Placeholder values until the farm team and agronomy agree alert thresholds, delays and escalation. Do not use for a real farm. Phase A alerts are in the app only. ecMaxMsCm (T1-24) is a placeholder set to limits.json ecCeiling. RESERVOIR_LOW and DAYTANK_LOW delayS are 0 so the playground shows them within a reading (board demo); a real farm will want a delay against flapping. T1-34: SENSOR_FAULT is also raised from a reading's quality FAULT, after its delayS; DEVICE_OFFLINE once a device heard from before has sent nothing for thresholdS (contract 14: 180 s) or its last will came; READING_STALE once a zone's readings are older than thresholdS (contract 14: 120 s) while its controller is online, or a reading's quality is STALE. A paused playground stops its readings, so READING_STALE comes after its delay."
   },
   "delivery": ["IN_APP"],
   "zones": {
@@ -20,6 +20,8 @@
     "CIRC_FLOW_RESTORED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
     "SENSOR_FAULT": { "delayS": 60, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 30 },
     "SENSOR_RECOVERED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
+    "DEVICE_OFFLINE": { "thresholdS": 180, "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 15 },
+    "READING_STALE": { "thresholdS": 120, "delayS": 60, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 30 },
     "RESERVOIR_LOW": { "thresholdPct": 40, "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": 60 },
     "DAYTANK_LOW": { "thresholdPct": 20, "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": 60 },
     "PUMP_FAULT": { "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 10 },
