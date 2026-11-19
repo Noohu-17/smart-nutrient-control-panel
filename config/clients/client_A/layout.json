@@ -5,7 +5,7 @@
   "timezone": "Asia/Kolkata",
   "zones": [
     {
-      "id": "Z1", "name": "Zone A", "controller": "ZC1",
+      "id": "Z1", "name": "Zone A", "source": "SIMULATED", "controller": "ZC1",
       "reservoir": { "id": "R1", "usableL": 1200 },
       "dosingCabinet": "D1",
       "doseLines": ["A", "B", "ACID"],
@@ -19,7 +19,7 @@
       ]
     },
     {
-      "id": "Z2", "name": "Zone B", "controller": "ZC2",
+      "id": "Z2", "name": "Zone B", "source": "SIMULATED", "controller": "ZC2",
       "reservoir": { "id": "R2", "usableL": 1200 },
       "dosingCabinet": "D2",
       "doseLines": ["A", "B", "ACID"],

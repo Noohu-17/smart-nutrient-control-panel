@@ -148,6 +148,12 @@ def test_a_line_whose_largest_dose_needs_over_600_s_is_refused(tmp_path):
     assert zone.pump_ml_per_s["A"] == 0.5
 
 
+def test_a_simulated_zone_is_never_run_on_the_rig(tmp_path):
+    """Contract 2.4 (T1-33): a controller with link SF_GATEWAY runs a LIVE zone."""
+    with pytest.raises(ValueError, match="source must be LIVE"):
+        load_rig_zones(make_rig_pack(tmp_path, zone_source="SIMULATED"))
+
+
 def test_client_b_runs_zone_a_on_the_rigs_zone_1():
     """T1-31: client_B's Zone A is the rig's actuator box. Zone B joins with per-zone pump rates,
     and the simulator never plays a live farm's zones: it refuses the pack."""
@@ -204,3 +210,12 @@ def test_validate_config_checks_a_rig_entry(tmp_path):
     result = validate(slow)
     assert result.returncode == 1
     assert "line A's largest dose, 300 mL at 0.4 mL/s, is 750 s" in result.stdout + result.stderr
+
+    simulated = make_rig_pack(tmp_path / "simulated", zone_source="SIMULATED").parent
+    unknown = make_rig_pack(tmp_path / "unknown", zone_source="REAL").parent
+    result = validate(simulated)
+    assert result.returncode == 1
+    assert "zone Z1 runs on the rig, so its layout.json source must be LIVE" in result.stderr
+    result = validate(unknown)
+    assert result.returncode == 1
+    assert "zone Z1: source must be one of ['LIVE', 'SIMULATED'], got 'REAL'" in result.stderr

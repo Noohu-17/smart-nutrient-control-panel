@@ -54,7 +54,7 @@ def _status(connection: Connection, site: SiteRef, zone: FarmZone) -> ZoneStatus
         if not queries.site_is_loaded(connection, site):
             raise _not_loaded()
         raise ApiError(404, "NOT_FOUND", f"There is no zone {zone.id}")
-    return _zone(connection, site, rows[0])
+    return _zone(connection, site, rows[0], zone.source)
 
 
 def _dosed_24h(
@@ -65,11 +65,12 @@ def _dosed_24h(
     status: ZoneStatus,
     now: datetime,
 ) -> dict[str, float]:
-    """Delivered mL per line in the last 24 hours. On playground sites they follow simulated time
-    (§11.4): the zone's newest simTs is the farm's "now" there."""
-    farm_now = status.sim_ts if dosing.playground and status.sim_ts is not None else now
+    """Delivered mL per line in the last 24 hours. A simulated zone on a playground site follows
+    simulated time (§11.4): its newest simTs is the farm's "now" there. A live zone's are on real
+    time, whatever the site."""
+    farm_now = status.sim_ts if dosing.simulated_time and status.sim_ts is not None else now
     return queries.delivered_ml_since(
-        connection, site, zone.controller, farm_now - DAY, simulated=dosing.playground
+        connection, site, zone.controller, farm_now - DAY, simulated=dosing.simulated_time
     )
 
 

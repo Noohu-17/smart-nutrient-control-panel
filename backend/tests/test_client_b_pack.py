@@ -18,6 +18,7 @@ def test_client_b_is_two_nft_zones_dosed_with_n_p_and_k():
         ("Z1", "ZC1", ["N", "P", "K"]),
         ("Z2", "ZC2", ["N", "P", "K"]),
     ]
+    assert [zone.source for zone in farm.zones] == ["LIVE", "LIVE"]  # real hardware (T1-33, §2.4)
     assert farm.features["playground"] is False  # a real farm: no playground
     assert site_of(CLIENT_B).org_id == "client_B"
 

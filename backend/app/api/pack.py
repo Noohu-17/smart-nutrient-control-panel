@@ -43,13 +43,31 @@ def _read_json(path: Path) -> Any:
 
 
 def read_farm(client_dir: Path) -> Farm:
-    """layout.json with one more field, features, the contents of features.json (§11.2)."""
+    """layout.json with one more field, features, the contents of features.json (§11.2), and
+    every zone's source filled in (§2.4)."""
     try:
         layout = _read_json(client_dir / "layout.json")
         features = _read_json(client_dir / "features.json")
-        return Farm.model_validate(_without_meta({**layout, "features": features}))
-    except (OSError, TypeError, ValueError) as exc:  # a ValidationError is a ValueError
+        default = default_zone_source(features)
+        zones = [
+            {"source": default, **zone} if isinstance(zone, dict) else zone
+            for zone in layout.get("zones", [])
+        ]
+        return Farm.model_validate(_without_meta({**layout, "zones": zones, "features": features}))
+    except (OSError, TypeError, ValueError, AttributeError) as exc:  # ValidationError: ValueError
         raise _cannot_load(exc) from exc
+
+
+def default_zone_source(features: Any) -> str:
+    """A zone layout.json gives no source is SIMULATED on a playground site and LIVE everywhere
+    else (§2.4): a real farm's zone is never treated as simulated by mistake."""
+    playground = isinstance(features, dict) and features.get("playground") is True
+    return "SIMULATED" if playground else "LIVE"
+
+
+def zone_sources(client_dir: Path) -> dict[str, str]:
+    """Each zone's source, LIVE or SIMULATED, by zone ID."""
+    return {zone.id: zone.source for zone in read_farm(client_dir).zones}
 
 
 def site_of(client_dir: Path) -> SiteRef:
@@ -81,7 +99,9 @@ class ZoneDosing:
     day_tank_warn_pct: float  # alerts.json events.DAYTANK_LOW.thresholdPct
     ec_per_ml_per_l: dict[str, float]  # EC added per mL in each litre: nutrients.json
     ph_per_ml_per_l: dict[str, float]  # pH change per mL in each litre: the same
-    playground: bool  # features.json: 24 h totals follow simulated time (§11.4)
+    # A SIMULATED zone on a playground site: its 24 h totals follow simulated time and start again
+    # at a reset (§11.4). A LIVE zone's are on real time, always.
+    simulated_time: bool
 
 
 def _target(recipes: dict[str, Any], zone_id: str) -> Target | None:
@@ -105,6 +125,7 @@ def read_dosing(client_dir: Path, zone_id: str) -> ZoneDosing | None:
         stock = _read_json(client_dir / "nutrients.json")["doseLines"]
         alerts = _read_json(client_dir / "alerts.json")
         features = _read_json(client_dir / "features.json")
+        source = zone_sources(client_dir).get(zone_id)
         return ZoneDosing(
             limits=zone["limits"],
             mix_wait_s=zone["dose"]["mixWaitS"],
@@ -113,7 +134,7 @@ def read_dosing(client_dir: Path, zone_id: str) -> ZoneDosing | None:
             day_tank_warn_pct=alerts["events"]["DAYTANK_LOW"]["thresholdPct"],
             ec_per_ml_per_l={line: entry["ecChangePerMlPerL"] for line, entry in stock.items()},
             ph_per_ml_per_l={line: entry["phChangePerMlPerL"] for line, entry in stock.items()},
-            playground=bool(features.get("playground")),
+            simulated_time=features.get("playground") is True and source == "SIMULATED",
         )
     except (OSError, KeyError, TypeError, ValueError, StopIteration) as exc:
         raise _cannot_load(exc) from exc

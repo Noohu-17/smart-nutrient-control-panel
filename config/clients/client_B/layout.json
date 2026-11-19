@@ -5,7 +5,7 @@
   "timezone": "Asia/Kolkata",
   "zones": [
     {
-      "id": "Z1", "name": "NFT Zone A", "controller": "ZC1",
+      "id": "Z1", "name": "NFT Zone A", "source": "LIVE", "controller": "ZC1",
       "reservoir": { "id": "R1", "usableL": 90 },
       "dosingCabinet": "D1",
       "doseLines": ["N", "P", "K"],
@@ -19,7 +19,7 @@
       ]
     },
     {
-      "id": "Z2", "name": "NFT Zone B", "controller": "ZC2",
+      "id": "Z2", "name": "NFT Zone B", "source": "LIVE", "controller": "ZC2",
       "reservoir": { "id": "R2", "usableL": 90 },
       "dosingCabinet": "D2",
       "doseLines": ["N", "P", "K"],

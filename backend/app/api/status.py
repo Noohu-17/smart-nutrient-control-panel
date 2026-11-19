@@ -65,6 +65,7 @@ def _sim_ts(latest: Any) -> dict[str, Any]:
 
 def zone_status(
     zone_id: str,
+    source: str,
     dose_lines: Sequence[str],
     last_seen: datetime | None,
     rows: Sequence[Any],
@@ -76,6 +77,8 @@ def zone_status(
     active_cmd_id: str | None = None,
 ) -> ZoneStatus:
     """A zone's answer (§11.2), from the rows of its latest telemetry and its latest ZONE_STATE.
+
+    source is the zone's LIVE or SIMULATED, from the layout (§2.4).
 
     Readings stay as sent. A quality of OK turns into STALE when the reading is older than the
     fresh limit or its controller is offline; every other quality stays as it is.
@@ -92,6 +95,7 @@ def zone_status(
     quality = _readings_and_quality(rows, readings, stale)
     return ZoneStatus(
         zone=zone_id,
+        source=source,
         online=online,
         last_seen=last_seen,
         ts=latest.ts if latest is not None else None,

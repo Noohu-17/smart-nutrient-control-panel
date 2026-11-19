@@ -33,11 +33,17 @@ RIG_ENTRY = {
 }
 
 
-def make_rig_pack(tmp_path: Path, **entry_changes) -> Path:
+def make_rig_pack(tmp_path: Path, *, zone_source: str = "LIVE", **entry_changes) -> Path:
+    """client_A with ZC1 on the rig, its zone Z1 LIVE (contract 2.4) unless zone_source says."""
     pack = shutil.copytree(load_settings({}).client_dir, tmp_path / "client")
     io_map = json.loads((pack / "io_map.json").read_text(encoding="utf-8"))
     io_map["controllers"] = {"ZC1": {**RIG_ENTRY, **entry_changes}}
     (pack / "io_map.json").write_text(json.dumps(io_map), encoding="utf-8")
+    layout = json.loads((pack / "layout.json").read_text(encoding="utf-8"))
+    for zone in layout["zones"]:
+        if zone["controller"] == "ZC1":
+            zone["source"] = zone_source
+    (pack / "layout.json").write_text(json.dumps(layout), encoding="utf-8")
     return pack
 
 

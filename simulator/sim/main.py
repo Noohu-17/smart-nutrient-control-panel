@@ -16,7 +16,6 @@ from .alarms import climate_alarms, zone_alarms
 from .clock import SimClock, TickLoop
 from .config import (
     load_demo_start,
-    load_devices,
     load_min_real_reading_interval_s,
     load_site,
     load_speed_options,
@@ -24,6 +23,7 @@ from .config import (
     load_zone_limits,
     playground_enabled,
     read_pack_file,
+    simulated_devices,
 )
 from .control_api import run_control_api
 from .controller.zone import ZoneController
@@ -116,7 +116,8 @@ def controllers_of(devices: list[SimDevice]) -> list[ZoneDevice]:
 
 async def run(settings: Settings) -> None:
     site = load_site(settings.client_dir)
-    layout_devices = load_devices(settings.client_dir)  # one SimDevice per entry (contract 2.2)
+    # One SimDevice per entry (contract 2.2), but never a LIVE zone's controller (2.4).
+    layout_devices = simulated_devices(settings.client_dir)
     # The simulated day starts now; scenario start times (contract 11.4) come later.
     is_playground = playground_enabled(settings.client_dir)
     speed = starting_speed(settings, is_playground)

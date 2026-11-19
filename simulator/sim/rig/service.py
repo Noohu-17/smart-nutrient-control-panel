@@ -6,7 +6,8 @@ on the broker. The back end and the app see the same messages as from any zone c
 
     python -m sim.rig        (from simulator/; settings: simulator/readme.md, sim/rig/README.md)
 
-Never run it beside the simulator for the same zones: both would be ZC1.
+Its zones are LIVE (layout.json source, contract 2.4): the simulator never plays a live zone's
+controller, so the two are never both ZC1.
 """
 
 from __future__ import annotations

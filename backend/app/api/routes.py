@@ -22,7 +22,7 @@ from sqlalchemy.exc import TimeoutError as NoConnectionFree
 from ..config import Settings, load_settings
 from ..db.engine import database_url
 from . import queries
-from .pack import SiteRef, read_farm, site_of
+from .pack import SiteRef, read_farm, site_of, zone_sources
 from .schemas import (
     ClimateStatus,
     DeviceInfo,
@@ -101,32 +101,42 @@ def get_farm(settings: SettingsDep) -> Farm:
     return read_farm(settings.client_dir)
 
 
-def list_zones(engine: EngineDep, site: SiteDep) -> ZoneList:
+def list_zones(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> ZoneList:
     """The latest readings and state of every zone (§11.2)."""
+    sources = zone_sources(settings.client_dir)
     with _database(engine) as connection:
         rows = queries.zones(connection, site)
         if not rows and not queries.site_is_loaded(connection, site):
             raise _not_loaded()
-        return ZoneList(items=[_zone(connection, site, row) for row in rows])
+        return ZoneList(items=[_zone(connection, site, row, _source(sources, row)) for row in rows])
 
 
 def get_zone(
-    zone_id: Annotated[str, Path(alias="zoneId")], engine: EngineDep, site: SiteDep
+    zone_id: Annotated[str, Path(alias="zoneId")],
+    settings: SettingsDep,
+    engine: EngineDep,
+    site: SiteDep,
 ) -> ZoneStatus:
     """A zone's latest readings and state. 200 even when offline; 404 means no such zone (§11.2)."""
     no_such_zone = HTTPException(404, f"There is no zone {zone_id}")
     if not ZONE_ID.fullmatch(zone_id):
         raise no_such_zone
+    sources = zone_sources(settings.client_dir)
     with _database(engine) as connection:
         rows = queries.zones(connection, site, zone_id)
         if rows:
-            return _zone(connection, site, rows[0])
+            return _zone(connection, site, rows[0], _source(sources, rows[0]))
         if not queries.site_is_loaded(connection, site):
             raise _not_loaded()
         raise no_such_zone
 
 
-def _zone(connection: Connection, site: SiteRef, row: Any) -> ZoneStatus:
+def _source(sources: dict[str, str], row: Any) -> str:
+    """The zone's source from the layout; a zone the layout no longer names is LIVE (safe)."""
+    return sources.get(row.zone_id, "LIVE")
+
+
+def _zone(connection: Connection, site: SiteRef, row: Any, source: str) -> ZoneStatus:
     telemetry = (
         queries.latest_zone_telemetry(connection, site, row.zone_id, row.device_id)
         if row.device_id is not None
@@ -134,6 +144,7 @@ def _zone(connection: Connection, site: SiteRef, row: Any) -> ZoneStatus:
     )
     return zone_status(
         row.zone_id,
+        source,
         row.dose_lines,
         row.last_seen,
         telemetry,

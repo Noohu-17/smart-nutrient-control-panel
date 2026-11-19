@@ -74,6 +74,13 @@ LAYOUT = {
 FEATURES = {"playground": True, "demoFarm": False}
 
 
+def farm_answer(layout: dict, features: dict = FEATURES) -> dict:
+    """GET /api/farm: the layout and its features, with each zone's source filled in where the
+    layout leaves it out: SIMULATED on a playground site, LIVE elsewhere (§2.4)."""
+    default = "SIMULATED" if features.get("playground") is True else "LIVE"
+    return layout | {"zones": [{"source": default, **z} for z in layout["zones"]], "features": features}
+
+
 def write_pack(folder: Path, layout: dict = LAYOUT, features: dict = FEATURES) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "layout.json").write_text(json.dumps(layout), encoding="utf-8")
@@ -147,7 +154,7 @@ def contract_zone_example() -> dict:
 def test_farm_is_the_layout_plus_its_features(api):
     response = api.get("/api/farm")
     assert response.status_code == 200
-    assert response.json() == LAYOUT | {"features": FEATURES}
+    assert response.json() == farm_answer(LAYOUT)
 
 
 def test_farm_answers_for_the_real_config_pack_as_the_fake_api_does():
@@ -165,7 +172,7 @@ def test_farm_never_sends_meta_blocks(tmp_path, no_database):
     layout = copy.deepcopy(LAYOUT) | {"_meta": {"placeholder": True}}
     layout["zones"][0]["_meta"] = {"note": "inside a zone"}
     folder = write_pack(tmp_path / ORG, layout, FEATURES | {"_meta": {"note": "in the features"}})
-    assert api_client(folder, no_database).get("/api/farm").json() == LAYOUT | {"features": FEATURES}
+    assert api_client(folder, no_database).get("/api/farm").json() == farm_answer(LAYOUT)
 
 
 def test_farm_passes_on_fields_the_model_doesnt_name(tmp_path, no_database):
@@ -173,7 +180,7 @@ def test_farm_passes_on_fields_the_model_doesnt_name(tmp_path, no_database):
     layout["zones"][0]["sensors"] = {"dissolvedOxygen": True}
     layout["zones"][0]["newInZone"] = [1, 2]
     folder = write_pack(tmp_path / ORG, layout)
-    assert api_client(folder, no_database).get("/api/farm").json() == layout | {"features": FEATURES}
+    assert api_client(folder, no_database).get("/api/farm").json() == farm_answer(layout)
 
 
 def test_farm_leaves_out_what_the_pack_leaves_out(api):
@@ -245,7 +252,7 @@ def test_a_zone_that_has_never_reported_answers_as_the_contract_says(api):
     response = api.get("/api/zones/Z2")
     assert response.status_code == 200
     assert response.json() == {
-        "zone": "Z2", "online": False, "lastSeen": None, "ts": None,
+        "zone": "Z2", "source": "SIMULATED", "online": False, "lastSeen": None, "ts": None,
         "readings": {
             "ec": None, "ph": None, "solTempC": None, "reservoirPct": None, "reservoirL": None,
             "circFlowLpm": None, "doMgL": None,
@@ -308,7 +315,7 @@ def test_an_offline_controllers_readings_are_stale_however_new_they_are():
     """§11.2 gives both reasons. Today an offline controller's readings are old anyway."""
     now = datetime.now(UTC)
     row = SimpleNamespace(metric="ec", value=1.62, quality="OK", ts=now, sim_ts=None)
-    status = zone_status("Z1", ["A"], now - OFFLINE_AFTER, [row], now)
+    status = zone_status("Z1", "SIMULATED", ["A"], now - OFFLINE_AFTER, [row], now)
     assert status.online is False
     assert status.quality == {"ec": "STALE"}
 

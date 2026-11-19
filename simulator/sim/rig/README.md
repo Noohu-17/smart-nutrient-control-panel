@@ -18,7 +18,9 @@ python -m sim.rig            # from simulator/, with the settings below
 docker compose -f infra/docker-compose.dev.yml --profile rig up -d zone-controller
 ```
 
-Stop the simulator first: both would be ZC1. With no rig yet, start the stand-in too:
+A zone on the rig is `LIVE` in `layout.json` (`source`, contract 2.4; the default on a real
+farm): the service refuses a `SIMULATED` one, and the simulator never plays a live zone's
+controller, so the two can't both be ZC1. With no rig yet, start the stand-in too:
 `python -m sim.rig.fake --interval 10` (or `--profile fake-rig`). It publishes what gateway 1.0.0
 publishes and obeys `dose`, `switch` and `estop`; `--time-scale 10` runs doses ten times faster.
 With a pack that puts no zone on the rig (client_A), the service says so once and exits cleanly,
@@ -99,7 +101,8 @@ a publish that fails reconnects with that command still first.
 - The rig's own alarms (`sf/event`) aren't forwarded: alerts for sensor faults, rig offline and
   stale readings are T1-34.
 - The back end's dose review checks day-tank levels from telemetry. The rig sends none, so it
-  refuses a dose from the app until the back end knows those lines have no sensors (T1-33, T1-38).
+  refuses a dose from the app until the back end knows those lines have no sensors (T1-38's
+  "sensors fitted" per zone).
 - If the whole rig lost power (the actuator box too), its dose ended with it and won't report:
   the interrupted dose closes after 30 s with what was measured, usually nothing.
 - The rig has no key switch, so the zone is always `REMOTE` and the E-stop is the only local

@@ -5,6 +5,9 @@ outside the server can reach, on the same path without /api/sim (GET /api/sim/st
 /state). Only these routes are forwarded, never any other path. GET /api/sim/scenario-options is
 read from the config pack's scenarios.json, the file the simulator checks against (§11.4.1). They
 exist only on sites whose features.json has "playground": true: elsewhere every one answers 404.
+On a playground site, a hold or drill aimed at a LIVE zone (layout.json source, §2.4), or at its
+controller, is refused with 409 LIVE_ZONE and never reaches the simulator, and so is a reset while
+any zone is live (T1-33): real hardware runs those zones, on real time.
 Each call is logged on the api.sim logger, with its body and the simulator's answer. Roles (§11.4)
 wait for sign-in. A reset the simulator accepted is also recorded in the database, so the 24-hour
 totals start again (§11.4, T1-25).
@@ -32,6 +35,7 @@ from ...db.models import PlaygroundReset
 from ...errors import ApiError, _error
 from ..pack import PackError, SiteRef, _read_json, _without_meta, read_farm
 from ..routes import EngineDep, SettingsDep, SiteDep, _errors
+from ..schemas import Farm
 from .client import BadAnswer, HttpSimulator, SimAnswer, Simulator, SimulatorDown, SimulatorTimedOut
 from .schemas import FaultBody, HoldBody, SimId, SpeedBody
 
@@ -52,6 +56,25 @@ def playground_only(request: Request, settings: SettingsDep) -> None:
     if read_farm(settings.client_dir).features.get("playground") is not True:
         log.info("%s %s refused: this site has no playground", request.method, _one_line(request.url.path))
         raise HTTPException(404, "This site has no simulator")
+
+
+def _live_zone_of(farm: Farm, target: str) -> str | None:
+    """The LIVE zone a hold or drill target belongs to: the zone ("Z1"), a part of it ("Z1.ph",
+    "Z1.ACID") or its zone controller ("ZC1"). None for a simulated zone, POLYHOUSE or a device
+    of no zone."""
+    live = {zone.id: zone for zone in farm.zones if zone.source == "LIVE"}
+    zone_id = target.partition(".")[0]
+    if zone_id in live:
+        return zone_id
+    return next((zone.id for zone in live.values() if zone.controller == target), None)
+
+
+def refuse_live_target(settings: SettingsDep, target: str, what: str) -> None:
+    """409 LIVE_ZONE for a hold or drill on a live zone: the simulator doesn't play it (T1-33)."""
+    zone_id = _live_zone_of(read_farm(settings.client_dir), target)
+    if zone_id is not None:
+        log.info("%s on %s refused: %s is a live zone", what, _one_line(target), zone_id)
+        raise ApiError(409, "LIVE_ZONE", f"{zone_id} is a live zone: real hardware runs it, not the simulator")
 
 
 @cache
@@ -178,9 +201,16 @@ def record_reset(engine: Engine, site: SiteRef, at: datetime) -> None:
     log.info("reset recorded: the 24 h totals start again from %s", at.isoformat())
 
 
-def post_reset(simulator: SimulatorDep, engine: EngineDep, site: SiteDep) -> Response:
+def post_reset(
+    settings: SettingsDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep
+) -> Response:
     """Back to the start of the current scenario: all drills off, levels and readings reset, and
-    the 24-hour totals start again."""
+    the 24-hour totals start again. Refused while any zone is live: a reset is for the whole site,
+    and a live zone's totals and alerts are real (T1-33)."""
+    live = [zone.id for zone in read_farm(settings.client_dir).zones if zone.source == "LIVE"]
+    if live:
+        log.info("POST /reset refused: live zones %s", ", ".join(live))
+        raise ApiError(409, "LIVE_ZONE", f"This site has live zones ({', '.join(live)}): a reset is only for a simulated farm")
     answer = _forward(simulator, "POST", "/reset")
     if 200 <= answer.status_code < 300:
         # After the answer: a dose the reset stopped is reported before it, so it doesn't count.
@@ -188,20 +218,26 @@ def post_reset(simulator: SimulatorDep, engine: EngineDep, site: SiteDep) -> Res
     return answer
 
 
-def post_fault(body: FaultBody, simulator: SimulatorDep) -> Response:
-    """Trigger ("on": true) or Fix ("on": false) a failure drill (§11.4.3)."""
+def post_fault(body: FaultBody, settings: SettingsDep, simulator: SimulatorDep) -> Response:
+    """Trigger ("on": true) or Fix ("on": false) a failure drill (§11.4.3); never on a live zone."""
+    refuse_live_target(settings, body.target, f"POST /faults {body.kind}")
     return _forward(simulator, "POST", "/faults", _body(body))
 
 
-def post_hold(body: HoldBody, simulator: SimulatorDep) -> Response:
-    """Set a value and hold it (§11.4.2)."""
+def post_hold(body: HoldBody, settings: SettingsDep, simulator: SimulatorDep) -> Response:
+    """Set a value and hold it (§11.4.2); never on a live zone."""
+    refuse_live_target(settings, body.target, "POST /holds")
     return _forward(simulator, "POST", "/holds", _body(body))
 
 
 def delete_hold(
-    target: Annotated[SimId, Path()], metric: Annotated[SimId, Path()], simulator: SimulatorDep
+    target: Annotated[SimId, Path()],
+    metric: Annotated[SimId, Path()],
+    settings: SettingsDep,
+    simulator: SimulatorDep,
 ) -> Response:
-    """Release one held value."""
+    """Release one held value; a live zone has none."""
+    refuse_live_target(settings, target, "DELETE /holds")
     return _forward(simulator, "DELETE", f"/holds/{quote(target, safe='')}/{quote(metric, safe='')}")
 
 

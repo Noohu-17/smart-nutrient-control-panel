@@ -136,8 +136,8 @@ services:
 
   # The zone controller service (T1-32), only with --profile rig: the zones io_map.json puts on
   # the prototype rig (link SF_GATEWAY), run by sim/controller on the rig's sf/* messages. The
-  # app sees them as any zone controller. Never beside the simulator for the same zones: both
-  # would be ZC1. The rig's topic bases (m/<workspace>/c/<channel>) come from the gateway's
+  # app sees them as any zone controller. Those zones are LIVE in layout.json (contract 2.4), so
+  # the simulator never plays their controllers. The rig's topic bases (m/<workspace>/c/<channel>) come from the gateway's
   # secrets: set them in infra/.env, never in git. Run it with CLIENT set to a pack that puts a
   # zone on the rig (client_B, T1-31); with none (client_A) it says so once and stops.
   zone-controller:

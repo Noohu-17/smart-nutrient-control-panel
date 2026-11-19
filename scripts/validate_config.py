@@ -46,6 +46,10 @@ EXPECTED_DEVICES = {
 
 ZONE_ID = re.compile(r"Z[1-9][0-9]*")
 
+# Contract 2.4: real hardware runs the zone, or the simulator. Left out, a zone is SIMULATED on a
+# playground site and LIVE everywhere else.
+ZONE_SOURCES = ("LIVE", "SIMULATED")
+
 
 def _reject_duplicate_keys(pairs):
     obj = {}
@@ -117,6 +121,9 @@ def check_layout(client, rel, layout, errors):
             fail(f"zone id {zone_id} is used more than once")
             continue
         where = f"zone {zone_id}"
+
+        if "source" in zone and zone["source"] not in ZONE_SOURCES:
+            fail(f"{where}: source must be one of {list(ZONE_SOURCES)}, got {zone['source']!r}")
 
         bench_pattern = re.compile(re.escape(zone_id) + r"-B[1-9][0-9]*")
         for bench in zone.get("benches") or []:
@@ -254,7 +261,8 @@ def validate_client(client_dir, errors):
     io_map = loaded.get("io_map.json")
     if isinstance(io_map, dict) and isinstance(layout, dict):
         check_rig_controllers(display(client_dir / "io_map.json"), io_map, layout,
-                              loaded.get("hardware.json"), errors, loaded.get("limits.json"))
+                              loaded.get("hardware.json"), errors, loaded.get("limits.json"),
+                              loaded.get("features.json"))
 
     return len(files)
 
@@ -263,10 +271,13 @@ RIG_RELAYS = ("relay1", "relay2", "relay3")  # the rig's dosing pumps (relay4 is
 RIG_MAX_DOSE_S = 600  # the rig runs one timed dose for at most this long (sf/cmd/1)
 
 
-def check_rig_controllers(rel, io_map, layout, hardware, errors, limits=None):
+def check_rig_controllers(rel, io_map, layout, hardware, errors, limits=None, features=None):
     """A controller run by the zone controller service on the prototype rig (T1-32,
     simulator/sim/rig): `"link": "SF_GATEWAY"` in io_map.json controllers. A line's largest
-    dose (limits.json maxPerDoseMl) must fit in one rig dose at its pump's flow."""
+    dose (limits.json maxPerDoseMl) must fit in one rig dose at its pump's flow, and its zone is
+    LIVE (contract 2.4)."""
+    playground = isinstance(features, dict) and features.get("playground") is True
+    default_source = "SIMULATED" if playground else "LIVE"
     controllers = io_map.get("controllers")
     if not isinstance(controllers, dict):
         errors.append(f"{rel}: controllers must be an object")
@@ -281,6 +292,9 @@ def check_rig_controllers(rel, io_map, layout, hardware, errors, limits=None):
         if zone is None:
             errors.append(f"{where}: no layout.json zone has controller {device}")
             continue
+        if zone.get("source", default_source) != "LIVE":
+            errors.append(f"{where}: zone {zone.get('id')} runs on the rig, so its layout.json "
+                          "source must be LIVE")
         if not isinstance(entry.get("gateway"), str) or not entry["gateway"]:
             errors.append(f"{where}.gateway must be the gateway's client ID")
         if entry.get("rigZone") not in (1, 2) or isinstance(entry.get("rigZone"), bool):

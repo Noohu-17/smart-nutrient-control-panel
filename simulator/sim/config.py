@@ -12,6 +12,7 @@ SITE_ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")  # contract 2.1: lowercase slug
 DEVICE_ID = re.compile(r"[A-Z][A-Z0-9]*")  # contract 2.2: GW1, ZC1 ...; also the MQTT client ID
 # The kinds of device the simulator knows how to play (layout.json "devices").
 DEVICE_KINDS = ("GATEWAY", "ZONE_CONTROLLER", "CLIMATE_CONTROLLER", "POWER_MONITOR")
+ZONE_SOURCES = ("LIVE", "SIMULATED")  # contract 2.4: real hardware runs the zone, or this simulator
 DEMO_ZONE_KEYS = ("reservoirPct", "ecMsCm", "ph", "solTempC", "dayTankPct")  # model.initialState's
 
 
@@ -155,3 +156,32 @@ def load_devices(client_dir: Path) -> tuple[dict[str, Any], ...]:
             )
         seen.add(device_id)
     return tuple(devices)
+
+
+def zone_sources(client_dir: Path) -> dict[str, str]:
+    """Each zone's source (layout.json, contract 2.4): LIVE, run by real hardware or the zone
+    controller service, or SIMULATED, played here. Left out, a zone is SIMULATED on a playground
+    site and LIVE everywhere else, so a real farm's zone is never simulated by mistake."""
+    default = "SIMULATED" if playground_enabled(client_dir) else "LIVE"
+    sources = {}
+    for zone in read_pack_file(client_dir, "layout.json").get("zones") or ():
+        if not isinstance(zone, dict):
+            continue
+        source = zone.get("source", default)
+        if source not in ZONE_SOURCES:
+            raise ValueError(
+                f"layout.json: zone {zone.get('id')!r} source must be LIVE or SIMULATED, "
+                f"got {source!r}"
+            )
+        sources[zone.get("id")] = source
+    return sources
+
+
+def simulated_devices(client_dir: Path) -> tuple[dict[str, Any], ...]:
+    """The devices the simulator plays: every layout.json device except a LIVE zone's controller,
+    which its hardware plays (contract 2.4). Its zone's model still runs, unseen."""
+    live = {zone for zone, source in zone_sources(client_dir).items() if source == "LIVE"}
+    return tuple(
+        device for device in load_devices(client_dir)
+        if not (device["kind"] == "ZONE_CONTROLLER" and device.get("zone") in live)
+    )

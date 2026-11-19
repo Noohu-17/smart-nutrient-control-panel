@@ -145,10 +145,10 @@ def _checked_dose(
     rows = queries.zones(connection, site, zone.id)
     if not rows:
         raise _not_loaded()
-    status = _zone(connection, site, rows[0])
-    farm_now = status.sim_ts if dosing.playground and status.sim_ts is not None else now
+    status = _zone(connection, site, rows[0], zone.source)
+    farm_now = status.sim_ts if dosing.simulated_time and status.sim_ts is not None else now
     dosed = queries.delivered_ml_since(
-        connection, site, zone.controller, farm_now - DAY, simulated=dosing.playground
+        connection, site, zone.controller, farm_now - DAY, simulated=dosing.simulated_time
     )
     _refuse_if_blocked(review(zone, status, dosing, lines, dosed, now).checks)
 

@@ -21,6 +21,7 @@ To add a client, copy an existing folder, change the values, run the validator, 
 JSON has no comments, so placeholder status is written into the files:
 
 - **Real values with no marker:** `layout.json` (contract §2.4) and `features.json` (contract §2.5).
+- **Live or simulated:** each zone in `layout.json` has a `source`, `LIVE` (real hardware runs it) or `SIMULATED` (the simulator plays it). Left out, it is `SIMULATED` on a playground site and `LIVE` everywhere else (contract §2.4). client_A's zones are `SIMULATED` and client_B's are `LIVE`. The validator checks the value, and that a zone on the prototype rig is `LIVE`.
 - **Every other file** starts with `"v": 1` and a `_meta` block:
 
   ```json

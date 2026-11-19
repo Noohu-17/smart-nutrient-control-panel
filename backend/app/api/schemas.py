@@ -59,6 +59,9 @@ class ErrorBody(ContractModel):
 
 # --- GET /api/farm: layout.json (§2.4) and features.json (§2.5) --------------------------
 
+# Where a zone's readings and controller come from (§2.4): real hardware, or the simulator.
+ZoneSource = Literal["LIVE", "SIMULATED"]
+
 
 class PackModel(ContractModel):
     """A part of the config pack. Anything the model doesn't name goes through as it is."""
@@ -84,6 +87,7 @@ class Bench(PackModel):
 class FarmZone(PackModel):
     id: str
     name: str
+    source: ZoneSource  # read_farm fills it in when layout.json leaves it out (§2.4)
     controller: str
     reservoir: Reservoir
     dosing_cabinet: str
@@ -140,6 +144,7 @@ class ZoneStatus(ContractModel):
     """A zone's latest readings and state. Anything not known yet is null, {} or [] (§11.2)."""
 
     zone: str
+    source: ZoneSource  # LIVE or SIMULATED, from the layout (§2.4)
     online: bool
     last_seen: ApiTime | None
     ts: ApiTime | None

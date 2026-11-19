@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..config import load_site, load_zone_dose, load_zone_limits, read_pack_file
+from ..config import load_site, load_zone_dose, load_zone_limits, read_pack_file, zone_sources
 from .sf import DOSE_SECONDS
 
 LINK = "SF_GATEWAY"
@@ -147,6 +147,10 @@ def _rig_zone(
         raise ValueError(f"{where}.dayTankLevelSensors must be true or false, got {sensors!r}")
     zone_id = zone["id"]
     load_site(client_dir)  # the pack must name its site
+    if zone_sources(client_dir).get(zone_id) != "LIVE":  # contract 2.4: real hardware runs it
+        raise ValueError(
+            f"{where}: zone {zone_id} runs on the rig, so its layout.json source must be LIVE"
+        )
     limits = load_zone_limits(client_dir, zone_id)
     largest = limits.get("maxPerDoseMl")
     for line in lines:
