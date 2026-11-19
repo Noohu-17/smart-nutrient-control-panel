@@ -1,8 +1,9 @@
 # Staging stack: Caddy (HTTPS, the app and /api), the API, the worker, PostgreSQL with
 # TimescaleDB, the Mosquitto broker and the farm simulator. Steps: README.md, "Deploy to staging".
 #
-# Only Caddy has published ports. The database and the broker are on a network with no route
-# in or out, and every MQTT client logs in with its own account (contract sections 3 and 4).
+# Published ports: Caddy (80, 443) and the broker's TLS port for the farm's gateway (8883).
+# The database and the broker's plain port 1883 are on a network with no route in or out, and
+# every MQTT client logs in with its own account (contract sections 3 and 4, infra/readme.md).
 #
 # Run from the repo root:
 #   docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml up -d --build
@@ -190,10 +191,17 @@ services:
       <<: *device-passwords
       MQTT_PASSWORD_CLOUD_API: ${MQTT_PASSWORD_CLOUD_API:?set in infra/.env.staging}
       MQTT_PASSWORD_CLOUD_WORKER: ${MQTT_PASSWORD_CLOUD_WORKER:?set in infra/.env.staging}
+    # MQTT over TLS for the farm's gateway: farm device logins only (start.sh). Plain 1883 is
+    # never published: the API, the worker and the simulator reach it on the internal network.
+    ports:
+      - "${MQTT_TLS_PORT:-8883}:8883"
     volumes:
+      # Also secrets/ (git-ignored): device logins, and the broker's certificate and key.
       - ./mosquitto/staging:/mosquitto/staging:ro
       - mqtt-data:/mosquitto/data  # queued messages and retained state survive a restart
-    networks: [internal]
+    # internal: the back end and the simulator. broker-edge: only so 8883 can be published,
+    # since a port can't be published from a network with no route in.
+    networks: [internal, broker-edge]
     healthcheck:
       # Logging in proves the broker is up and its accounts loaded. The ACL drops the message itself.
       test: ["CMD-SHELL", "mosquitto_pub -h localhost -u CLOUD-api -P \"$${MQTT_PASSWORD_CLOUD_API}\" -t healthcheck -m ok"]
@@ -207,6 +215,7 @@ networks:
   edge:
   internal:
     internal: true  # no published ports and no route out
+  broker-edge:  # the broker alone, for its TLS port
 
 volumes:
   caddy-data:

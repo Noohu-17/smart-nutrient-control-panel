@@ -219,7 +219,7 @@ config/clients/client_A/          ← first demo pack (SIET Polyhouse 1 values)
 | Item | Agreement |
 |---|---|
 | Protocol | MQTT 3.1.1 (all clients). MQTT 5 features are not relied on. |
-| Broker | Mosquitto on the staging server, reachable **only from inside the server** (API, worker, simulator). No MQTT port is open to the internet. |
+| Broker | Mosquitto on the staging server. Plain MQTT (1883) is reachable **only from inside the server** (API, worker, simulator) and is never published. The farm's gateway connects from outside on **8883, MQTT over TLS only**, with the broker's certificate from the project's own CA. Only the real farm devices' own logins may log in there; the simulator's device logins and `CLOUD-*` accounts are refused. |
 | Client ID | The device ID (`ZC1`, `GW1`, …). The back end uses `CLOUD-api` and `CLOUD-worker`. |
 | Credentials | One username and password per device; the simulator logs in as each device it plays. Never shared. |
 | Sessions | Devices (simulated) and back end use persistent sessions (`cleanSession=false`). |
@@ -1338,6 +1338,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, nutrients.json | `nutrients.json` added to the config pack (2.5): what each dose line's stock does to EC and pH, read by the dose review (11.3) instead of the simulator's model, so a real farm's lines (N, P, K or any other) need no code (T1-30). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, dose limits | `GET /zones/{zoneId}/dose-limits` (11.2): the limits and what is left of the 24 h limit, per line, for the dose form (T1-37). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, rig zones | `io_map.json` (2.5): a zone controller with `"link": "SF_GATEWAY"` runs on the prototype rig through the zone controller service, which speaks this contract for it: the same messages and rules as any zone controller (T1-32). The rig's own sf messages stay outside this contract. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
+| v1.0, broker TLS | Transport (3): the broker's TLS port 8883 is open for the farm's gateway, the real farm devices' own logins only; plain 1883 stays inside the server. `GW1`'s permissions are listed topic by topic as in 4, with no wildcards (T1-36). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 
 ### v1.0 section review
 
@@ -1346,7 +1347,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | 0 Scope | No change | |
 | 1 Conventions | Changed | `dayTankL` to 0.1 L, `reservoirL` whole litres |
 | 2 Identifiers and layout | Changed | 2.3 table separator fixed; `devices` noted in 2.4; two lines in the 2.5 file list |
-| 3 Transport | No change | |
+| 3 Transport | Changed | The broker's TLS port 8883 for the farm's gateway, the real farm devices' own logins only; 1883 stays inside the server (T1-36) |
 | 4 Topics | Changed | `RESUME` and `CLEAR_FAULT` use the `cmd` topics; ACL unchanged |
 | 5 Envelope | No change | |
 | 6 Farm → cloud | Changed | 6.1 and 6.2 reading rate pointer; 6.2 alarm limits; 6.6 `CMD_STATE`; 6.8 `operation` in the mix wait. 6.3, 6.4, 6.5, 6.7 and 6.9: no change |

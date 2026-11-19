@@ -25,7 +25,9 @@ The back end's database tests run only when the dev stack is up (`docker compose
 
 ## Deploy to staging
 
-`infra/docker-compose.staging.yml` runs Caddy (HTTPS, the app and `/api`), the API, the worker, the database, the broker and the simulator. Only Caddy has published ports (80 and 443). The database and the broker are internal only. On a server, the domain's DNS must point at it and ports 80 and 443 must be open. To try it on a laptop, keep `SITE_ADDRESS=localhost`.
+`infra/docker-compose.staging.yml` runs Caddy (HTTPS, the app and `/api`), the API, the worker, the database, the broker and the simulator. Published ports: Caddy's (80 and 443) and the broker's TLS port for the farm's gateway (8883). The database and the broker's plain port (1883) are internal only. On a server, the domain's DNS must point at it and ports 80, 443 and 8883 must be open. To try it on a laptop, keep `SITE_ADDRESS=localhost`.
+
+Before the farm's gateway can connect, the broker needs its certificate and the gateway its login: [infra/readme.md](infra/readme.md). Without the certificate the broker runs without 8883, and the rest of the stack works as before.
 
 1. Copy `infra/.env.example` to `infra/.env.staging` (git ignores it) and fill in every blank password. On a server, set `SITE_ADDRESS` to the domain.
 
@@ -62,7 +64,7 @@ The back end's database tests run only when the dev stack is up (`docker compose
 
    `--speed 60` makes it take about a minute; Reset puts the start speed back. On `localhost` add `--insecure`, for the same certificate reason as `-k`. Against the dev stack it needs no login: `python scripts/demo-check.py http://localhost:8000 --speed 60`. On a site without the playground it runs only the health and readings checks, so it never doses a real farm.
 
-Stop it with `down` in place of `up -d --build`. Data stays in Docker volumes (database, broker, simulator `.state`, certificates); `down -v` deletes all of it.
+Stop it with `down` in place of `up -d --build`. Data stays in Docker volumes (database, broker, simulator `.state`, certificates); `down -v` deletes all of it. The broker's logins and certificate are files in `infra/mosquitto/staging/secrets/`, not volumes, so `down -v` keeps them.
 
 Changing `POSTGRES_PASSWORD` later needs an `ALTER USER` in the database too, because the value only takes effect when the database is first created.
 

@@ -222,3 +222,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 app/node_modules/
+
+# MQTT broker secrets (T1-36, infra/readme.md): device logins, the broker's TLS key and the CA
+infra/mosquitto/staging/secrets/
+infra/mosquitto/ca/
