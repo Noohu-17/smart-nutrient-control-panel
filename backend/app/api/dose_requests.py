@@ -10,7 +10,7 @@ the app can show them while the amounts are typed (T1-37). The review still deci
 
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import FastAPI, Path
 from sqlalchemy import Connection, insert
@@ -134,6 +134,7 @@ def get_dose_limits(
         lines=[
             DoseLineLimit(
                 line=line,
+                **_about(dosing, line),
                 max_per_dose_ml=per_dose.get(line, 0),
                 max24h_ml=per_day.get(line, 0),
                 dosed24h_ml=dosed.get(line, 0),
@@ -142,6 +143,19 @@ def get_dose_limits(
             for line in zone.dose_lines
         ],
     )
+
+
+def _about(dosing: ZoneDosing, line: str) -> dict[str, Any]:
+    """What the line doses and its pump rate (T1-38); null for what the pack doesn't say."""
+    stock = dosing.stock.get(line)
+    return {
+        "name": stock.name if stock else None,
+        "compound": stock.compound if stock else None,
+        "strength_pct": stock.strength_pct if stock else None,
+        "drum": stock.drum if stock else None,
+        "purpose": stock.purpose if stock else None,
+        "pump_ml_per_min": dosing.pump_ml_per_min.get(line),
+    }
 
 
 def add_dose_api(app: FastAPI) -> None:

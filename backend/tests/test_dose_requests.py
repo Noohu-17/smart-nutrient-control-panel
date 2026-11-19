@@ -422,11 +422,38 @@ def limits(api, zone="Z1"):
 def test_dose_limits_come_from_the_config_pack_with_nothing_dosed_yet(api, worker):
     ready_zone(worker)
     # limits.json: Z1 allows 300 mL per dose and 1500 mL a day of A and B, 100 and 400 of acid
-    assert limits(api) == {
+    numbers = ("line", "maxPerDoseMl", "max24hMl", "dosed24hMl", "left24hMl")
+    assert {line: {key: entry[key] for key in numbers} for line, entry in limits(api).items()} == {
         "A": {"line": "A", "maxPerDoseMl": 300, "max24hMl": 1500, "dosed24hMl": 0, "left24hMl": 1500},
         "B": {"line": "B", "maxPerDoseMl": 300, "max24hMl": 1500, "dosed24hMl": 0, "left24hMl": 1500},
         "ACID": {"line": "ACID", "maxPerDoseMl": 100, "max24hMl": 400, "dosed24hMl": 0, "left24hMl": 400},
     }
+
+
+def test_dose_limits_say_what_each_line_doses_and_how_fast_its_pump_runs(api, worker):
+    """T1-38: nutrients.json's stock and hardware.json's pump rate, for the dose form."""
+    ready_zone(worker)
+    acid = limits(api)["ACID"]
+    stock = json.loads((CLIENT_A / "nutrients.json").read_text(encoding="utf-8"))["doseLines"]["ACID"]
+    flow = json.loads((CLIENT_A / "hardware.json").read_text(encoding="utf-8"))["pumps"]["doseLines"]["ACID"]
+    assert {key: acid[key] for key in ("name", "compound", "strengthPct", "drum", "purpose")} == {
+        key: stock[key] for key in ("name", "compound", "strengthPct", "drum", "purpose")
+    }
+    assert acid["pumpMlPerMin"] == flow["flowMlPerS"] * 60
+
+
+def test_dose_limits_of_a_pack_that_doesnt_describe_its_lines_are_null(tmp_path, migrated_db):
+    pack = write_dosing_pack(tmp_path / ORG)
+    nutrients = json.loads((pack / "nutrients.json").read_text(encoding="utf-8"))
+    nutrients["doseLines"] = {
+        line: {key: entry[key] for key in ("ecChangePerMlPerL", "phChangePerMlPerL")}
+        for line, entry in nutrients["doseLines"].items()
+    }
+    (pack / "nutrients.json").write_text(json.dumps(nutrients), encoding="utf-8")
+    seed(migrated_db, pack)
+    line = limits(api_client(pack, migrated_db))["A"]
+    assert [line[key] for key in ("name", "compound", "strengthPct", "drum", "purpose")] == [None] * 5
+    assert line["pumpMlPerMin"] == 120  # hardware.json still gives the pump rate
 
 
 def test_dose_limits_count_the_last_24_hours_as_the_review_does(api, worker):

@@ -3,12 +3,12 @@
   "_meta": {
     "client": "client_B",
     "placeholder": true,
-    "note": "EC/pH targets from the farm details form (R-1), section 8; crops and stages from section 3. EC is the form's TDS ppm / 500 (the probes' 0.5 factor). The form gives one range per crop, so GROWING and READY reuse it, for the team to check. Varieties (Grand Rapids, Ooty 1), planting dates and days to harvest wait for T1-38's crop fields.",
-    "placeholderKeys": ["crops.*.stages.GROWING", "crops.*.stages.READY"]
+    "note": "EC/pH targets from the farm details form (R-1), section 8; crops and stages from section 3. EC is the form's TDS ppm / 500 (the probes' 0.5 factor). The form gives one range per crop, so GROWING and READY reuse it, for the team to check. Each zone names its crop's variety (the form's Grand Rapids and Ooty 1) and plantedOn, the day it was planted (YYYY-MM-DD, the farm's own date) (T1-38). The form gives no planting dates, so 2026-11-10 is proposed for every zone, as seedlings in the week before the form; the team should correct it. Days to harvest are still open.",
+    "placeholderKeys": ["crops.*.stages.GROWING", "crops.*.stages.READY", "zones.*.plantedOn"]
   },
   "zones": {
-    "Z1": { "crop": "LETTUCE", "stage": "SEEDLING" },
-    "Z2": { "crop": "SPINACH", "stage": "SEEDLING" }
+    "Z1": { "crop": "LETTUCE", "variety": "Grand Rapids", "stage": "SEEDLING", "plantedOn": "2026-11-10" },
+    "Z2": { "crop": "SPINACH", "variety": "Ooty 1", "stage": "SEEDLING", "plantedOn": "2026-11-10" }
   },
   "crops": [
     {

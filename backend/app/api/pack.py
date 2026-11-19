@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .schemas import Farm
+from .schemas import Drum, Farm, FarmZone, ZoneCrop, ZoneProfile
 
 log = logging.getLogger("api")
+
+DIRECT_LINK = "MQTT"  # a controller on the farm's broker (§3); io_map.json names any other link
 
 
 class PackError(Exception):
@@ -70,6 +72,60 @@ def zone_sources(client_dir: Path) -> dict[str, str]:
     return {zone.id: zone.source for zone in read_farm(client_dir).zones}
 
 
+def _read_optional(path: Path) -> Any:
+    """A pack file that an older or smaller pack may not have: None if it isn't there."""
+    try:
+        return _read_json(path)
+    except FileNotFoundError:
+        return None
+
+
+def _profile(zone: FarmZone, links: dict[str, Any]) -> ZoneProfile:
+    units = zone.growing_units or []
+    link = (links.get(zone.controller) or {}).get("link") or DIRECT_LINK
+    return ZoneProfile(
+        name=zone.name,
+        growing_system=zone.growing_system,
+        growing_units=units,
+        plant_sites=sum(unit.count * unit.plant_sites_each for unit in units) if units else None,
+        size=zone.size,
+        position=zone.position,
+        tank=zone.reservoir,
+        sensors=zone.sensors or {},
+        controller=zone.controller,
+        link=link,
+        dose_lines=zone.dose_lines,
+        notes=zone.notes,
+    )
+
+
+def _crop(recipes: dict[str, Any], zone_id: str) -> ZoneCrop | None:
+    applied = (recipes.get("zones") or {}).get(zone_id)
+    if applied is None:
+        return None
+    crop = next((c for c in recipes.get("crops", []) if c.get("id") == applied["crop"]), {})
+    return ZoneCrop(
+        crop=applied["crop"],
+        name=crop.get("name"),
+        variety=applied.get("variety"),
+        stage=applied["stage"],
+        planted_on=applied.get("plantedOn"),
+    )
+
+
+def read_zone_details(client_dir: Path) -> dict[str, tuple[ZoneProfile, ZoneCrop | None]]:
+    """Each zone's profile (layout.json, and its controller's link from io_map.json) and crop
+    (recipes.json), keyed by zone ID (T1-38). A pack without io_map.json or recipes.json gives
+    MQTT links and no crops."""
+    try:
+        farm = read_farm(client_dir)
+        links = (_read_optional(client_dir / "io_map.json") or {}).get("controllers") or {}
+        recipes = _read_optional(client_dir / "recipes.json") or {}
+        return {zone.id: (_profile(zone, links), _crop(recipes, zone.id)) for zone in farm.zones}
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        raise _cannot_load(exc) from exc
+
+
 def site_of(client_dir: Path) -> SiteRef:
     """org_id is the client's folder name until organisations exist (OPEN-11), as in the seed."""
     try:
@@ -89,6 +145,28 @@ class Target:
 
 
 @dataclass(frozen=True)
+class LineStock:
+    """What a dose line doses (nutrients.json doseLines.<line>, T1-38). None where the pack doesn't say."""
+
+    name: str | None
+    compound: str | None
+    strength_pct: float | None
+    drum: Drum | None
+    purpose: str | None
+
+
+def _stock(entry: dict[str, Any]) -> LineStock:
+    drum = entry.get("drum")
+    return LineStock(
+        name=entry.get("name"),
+        compound=entry.get("compound"),
+        strength_pct=entry.get("strengthPct"),
+        drum=Drum.model_validate(drum) if drum is not None else None,
+        purpose=entry.get("purpose"),
+    )
+
+
+@dataclass(frozen=True)
 class ZoneDosing:
     """Everything about dosing in one zone that comes from the config pack, never from code."""
 
@@ -102,6 +180,7 @@ class ZoneDosing:
     # A SIMULATED zone on a playground site: its 24 h totals follow simulated time and start again
     # at a reset (§11.4). A LIVE zone's are on real time, always.
     simulated_time: bool
+    stock: dict[str, LineStock]  # what each line doses: nutrients.json, T1-38
 
 
 def _target(recipes: dict[str, Any], zone_id: str) -> Target | None:
@@ -135,6 +214,7 @@ def read_dosing(client_dir: Path, zone_id: str) -> ZoneDosing | None:
             ec_per_ml_per_l={line: entry["ecChangePerMlPerL"] for line, entry in stock.items()},
             ph_per_ml_per_l={line: entry["phChangePerMlPerL"] for line, entry in stock.items()},
             simulated_time=features.get("playground") is True and source == "SIMULATED",
+            stock={line: _stock(entry) for line, entry in stock.items()},
         )
     except (OSError, KeyError, TypeError, ValueError, StopIteration) as exc:
         raise _cannot_load(exc) from exc

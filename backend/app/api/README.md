@@ -5,13 +5,13 @@ The routes in `routes.py`, as listed in `docs/contract.md` §11.2. The full sche
 | Route | Answers | From |
 | :--- | :--- | :--- |
 | `GET /api/farm` | `layout.json` plus `features`, without `_meta` blocks | The config pack in `CLIENT_DIR`; needs no database |
-| `GET /api/zones` | `{ "items": [ … ] }`, one zone object per zone, in layout order | The database |
-| `GET /api/zones/{zoneId}` | One zone object; `404` if there is no such zone | The database |
+| `GET /api/zones` | `{ "items": [ … ] }`, one zone object per zone, in layout order | The database, and the config pack for `profile` and `crop` |
+| `GET /api/zones/{zoneId}` | One zone object; `404` if there is no such zone | The database, and the config pack for `profile` and `crop` |
 | `GET /api/climate` | The climate controller's readings and state; `200` even when it is offline | The config pack and the database |
 | `GET /api/power` | The power monitor's latest `POWER_STATE`; `200` even when it is offline | The config pack and the database |
 | `GET /api/devices` | `{ "items": [ … ], "nextCursor": … }`, with `?limit=` (max 200) and `?cursor=` | The database |
 | `POST /api/dose-requests` | The §11.3 review of a dose: every check, `projected`, `estimate`, `canConfirm`; `201` whatever the checks say. Saved for the confirm step; nothing goes to the farm | The config pack and the database |
-| `GET /api/zones/{zoneId}/dose-limits` | Per line: `maxPerDoseMl`, `max24hMl`, `dosed24hMl` (last 24 h, counted as `LIMIT_24H` counts) and `left24hMl`, for the dose form while typing (T1-37) | The config pack and the database |
+| `GET /api/zones/{zoneId}/dose-limits` | Per line: `maxPerDoseMl`, `max24hMl`, `dosed24hMl` (last 24 h, counted as `LIMIT_24H` counts) and `left24hMl`, for the dose form while typing (T1-37); and what the line doses, `name`, `compound`, `strengthPct`, `drum`, `purpose` (`nutrients.json`), with `pumpMlPerMin` (`hardware.json`), `null` where the pack doesn't say (T1-38) | The config pack and the database |
 
 Every query is scoped by `org_id` and `site_id` (OPEN-11). They come from the config pack: `org_id` is the client's folder name, as in the seed.
 
@@ -27,6 +27,7 @@ Every query is scoped by `org_id` and `site_id` (OPEN-11). They come from the co
 - **`readings`, `quality`, `ts`, `simTs`:** the zone's newest `ZONE_TELEMETRY` rows in the `reading` table.
 - **`mode`, `estop`, `stopped`, `operation`, `latches`, `configVersion` and `equipment`:** the zone's latest `ZONE_STATE`, in `latest_message`. `equipment` is its `outputs` (§6.8 calls them outputs, §11.2 equipment), and `ZONE_STATE` is authoritative where it overlaps telemetry (§6.8).
 - **`leak`, `activeCmdId`:** the zone's latest `ZONE_TELEMETRY`, in `latest_message`.
+- **`profile`, `crop`:** the config pack, read on each request (`pack.read_zone_details`, T1-38). `profile` is the layout zone (growing system and units, `plantSites` added up, size, position, `tank` = its reservoir, sensors fitted, controller, dose lines, notes) with the controller's `link` from `io_map.json` (`MQTT` unless it names another); `crop` is the zone's `recipes.json` entry with the crop's name, or `null` with no recipe. A pack without `io_map.json` or `recipes.json` gives `MQTT` and `null`.
 
 A field is `null` (or `{}` / `[]`) only while nothing has been received for it, in the form §11.2 gives a zone that has never reported. A controller's messages for another zone, from before the layout moved it, don't count.
 

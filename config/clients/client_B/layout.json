@@ -6,10 +6,20 @@
   "zones": [
     {
       "id": "Z1", "name": "NFT Zone A", "source": "LIVE", "controller": "ZC1",
-      "reservoir": { "id": "R1", "usableL": 90 },
+      "growingSystem": "NFT",
+      "growingUnits": [
+        { "type": "NFT_BENCH", "count": 4, "channels": 3, "lengthM": 2.1, "plantSitesEach": 45 }
+      ],
+      "size": { "lengthM": 3.0, "widthM": 4.0 },
+      "position": { "xM": 0.0, "yM": 0.0, "label": "First NFT bay from the door" },
+      "notes": "Runs on the prototype rig's Zone 1, the actuator box (io_map.json). The N, P and K tanks have no level sensors: check them by eye before a dose.",
+      "reservoir": { "id": "R1", "volumeL": 90, "usableL": 90 },
       "dosingCabinet": "D1",
       "doseLines": ["N", "P", "K"],
-      "sensors": { "dissolvedOxygen": false },
+      "sensors": {
+        "ec": true, "ph": true, "solTemp": true, "reservoirLevel": true, "circFlow": false,
+        "dayTankLevel": false, "leak": false, "dissolvedOxygen": false
+      },
       "dayTanks": { "N": { "usableL": 10 }, "P": { "usableL": 10 }, "K": { "usableL": 10 } },
       "benches": [
         { "id": "Z1-B1", "channels": 3, "lengthM": 2.1 },
@@ -20,10 +30,20 @@
     },
     {
       "id": "Z2", "name": "NFT Zone B", "source": "LIVE", "controller": "ZC2",
-      "reservoir": { "id": "R2", "usableL": 90 },
+      "growingSystem": "NFT",
+      "growingUnits": [
+        { "type": "NFT_BENCH", "count": 4, "channels": 3, "lengthM": 2.1, "plantSitesEach": 45 }
+      ],
+      "size": { "lengthM": 3.0, "widthM": 4.0 },
+      "position": { "xM": 0.0, "yM": 4.5, "label": "Second NFT bay" },
+      "notes": "The gateway's own relays and probes (rig Zone 2). Its pumps run 1 L/min, so it joins the rig with per-zone pump rates.",
+      "reservoir": { "id": "R2", "volumeL": 90, "usableL": 90 },
       "dosingCabinet": "D2",
       "doseLines": ["N", "P", "K"],
-      "sensors": { "dissolvedOxygen": false },
+      "sensors": {
+        "ec": true, "ph": true, "solTemp": true, "reservoirLevel": true, "circFlow": false,
+        "dayTankLevel": false, "leak": false, "dissolvedOxygen": false
+      },
       "dayTanks": { "N": { "usableL": 10 }, "P": { "usableL": 10 }, "K": { "usableL": 10 } },
       "benches": [
         { "id": "Z2-B1", "channels": 3, "lengthM": 2.1 },

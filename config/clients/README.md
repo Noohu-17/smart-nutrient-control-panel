@@ -39,6 +39,8 @@ JSON has no comments, so placeholder status is written into the files:
 
   Every other file except `layout.json` and `features.json` is placeholder throughout.
 
+- **What a zone, crop and dose line are (T1-38):** each `layout.json` zone has a `growingSystem` (`NFT`, `DWC`, `DUTCH_BUCKET`, `DRIP`, `VERTICAL` or `MIXED`), `growingUnits` (one entry per kind of unit: `type`, `count`, `plantSitesEach` and the size its type needs; `NFT_BENCH` units are the zone's `benches`), a `size` (`lengthM`, `widthM`), a `position` (`xM`, `yM` from the site's corner and a `label`), `notes`, a `reservoir.volumeL` beside `usableL` (the tank), and `sensors` saying `true` or `false` for every sensor: `ec`, `ph`, `solTemp`, `reservoirLevel`, `circFlow`, `dayTankLevel`, `leak` and `dissolvedOxygen`. The controller's link is `io_map.json`'s (`MQTT` unless it says `SF_GATEWAY`). `recipes.json` `zones` gives each zone's `crop`, `variety`, `stage` and `plantedOn` (`YYYY-MM-DD`). `nutrients.json` gives each dose line's `name`, `compound`, `strengthPct`, `drum` (`id`, `volumeL`) and `purpose`; its pump rate is `hardware.json`'s, never copied. `GET /api/zones` answers these as each zone's `profile` and `crop`, and `GET /api/zones/{zoneId}/dose-limits` each line's stock and `pumpMlPerMin` (contract 2.4, 11.2).
+- **Proposed layout values in client_A (T1-38)**, which has no `_meta` in `layout.json`: `reservoir.volumeL` (1300 L), `plantSitesEach` (252: 6 channels of 42 sites), the zone sizes and positions, and `sensors.leak`. Its `nutrients.json` names, compounds, strengths and drums are placeholders like the rest of that file.
 - **What the dose review reads (T1-16):** `recipes.json` `zones` is the crop and stage each zone is on, so its EC/pH target, until recipes can be applied from the app (`POST /zones/{zoneId}/recipe`). `hardware.json` `pumps.doseLines.*.flowMlPerS`, the simulator's pump rates (T4-8), gives the estimated dose time. The validator checks that every zone has a recipe that exists.
 
 Before loading a pack for a real farm, every `"placeholder": true` must be gone.
@@ -53,7 +55,8 @@ client_B is the farm with the prototype-extension rig (T1-31), from the farm det
 - **Zone B (`ZC2`) joins the rig with per-zone pump rates** (T1-31's pump-rate PR): `hardware.json` has one rate per dose line, and Zone B's pumps run 1 L/min.
 - **Not fitted:** any climate equipment (`CC1`) and a power monitor (`PM1`). The layout format needs them, so they are listed with nothing on them, and the app shows them as not available.
 - **No playground** (`features.json`) and no simulator model: the simulator refuses to start with this pack, so it can never play the rig's zones.
-- **Proposed in `layout.json`**, which has no `_meta`: the site ID `coimbatore-ph1`, the zone names' capital letters, `nursery.tables` 0, and `power` `generator` and `ups` false (the form's UPS answer is "?").
+- **Proposed in `layout.json`**, which has no `_meta`: the site ID `coimbatore-ph1`, the zone names' capital letters, `nursery.tables` 0, and `power` `generator` and `ups` false (the form's UPS answer is "?"); and from T1-38, the zone sizes (3 x 4 m) and positions. The NFT structures (3 channels, 2.1 m, 45 plant sites) and the sensors fitted are the form's and the rig's: TDS (as EC), pH, water temperature and tank level on Zones A and B; no circulation flow, leak, N/P/K tank level or DO sensor.
+- **Crops and stocks (T1-38):** the varieties (Grand Rapids, Ooty 1) and the N, P and K compounds and strengths are the form's. The N, P and K tank size (`drum.volumeL`, 10 L) is confirmed by Noohu. The planting date, 2026-11-10 for both zones, and each line's `purpose` are proposed (`_meta.placeholderKeys`).
 
 Some other conventions:
 
@@ -72,7 +75,11 @@ The validator needs Python 3 and no extra packages. It parses every `config/clie
 - every client has all 12 files;
 - `layout.json`: `v` is 1; zone IDs are unique and match `Z{n}`; bench IDs match `{zone}-B{n}`; each zone's controller is a `ZONE_CONTROLLER` in `devices`; `doseLines` match the `dayTanks` keys; chillers are keyed by zone IDs that exist; the climate controller and power monitor are in `devices`; client_A lists exactly `GW1`, `ZC1`, `ZC2`, `CC1` and `PM1`;
 - every other file except `features.json` has `"v": 1` and `_meta.placeholder`;
-- `limits.json` and `alerts.json` are keyed by the layout's zone IDs, and the per-line limits are keyed by that zone's `doseLines`.
+- `limits.json` and `alerts.json` are keyed by the layout's zone IDs, and the per-line limits are keyed by that zone's `doseLines`;
+- each zone's details (T1-38): a known `growingSystem`; `growingUnits` of known types with a whole `count` and `plantSitesEach` above 0, the size keys their type needs, and a type that belongs to the zone's system; as many `NFT_BENCH` units as `benches`, each bench the size of one; `size`, `position` and `notes`; `reservoir.volumeL` no less than `usableL`; and `sensors` with exactly the eight sensor keys, each `true` or `false`;
+- each zone's crop in `recipes.json`: a `variety` and a real `plantedOn` date (`YYYY-MM-DD`);
+- each `nutrients.json` dose line: `name`, `compound` and `purpose` as text, `strengthPct` above 0 and no more than 100, and a `drum` with an `id` no other line uses and a `volumeL` no smaller than any day-tank it fills;
+- every dose line in the layout has a pump rate, `hardware.json` `pumps.doseLines.<line>.flowMlPerS` above 0.
 
 It exits non-zero on any problem and prints one `FAIL` line for each. To check a folder outside the repo, pass it as an argument: `python scripts/validate_config.py path/to/clients`.
 

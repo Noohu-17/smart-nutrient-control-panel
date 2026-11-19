@@ -22,7 +22,7 @@ from sqlalchemy.exc import TimeoutError as NoConnectionFree
 from ..config import Settings, load_settings
 from ..db.engine import database_url
 from . import queries
-from .pack import SiteRef, read_farm, site_of, zone_sources
+from .pack import PackError, SiteRef, read_farm, read_zone_details, site_of, zone_sources
 from .schemas import (
     ClimateStatus,
     DeviceInfo,
@@ -30,7 +30,9 @@ from .schemas import (
     ErrorBody,
     Farm,
     PowerStatus,
+    ZoneCrop,
     ZoneList,
+    ZoneProfile,
     ZoneStatus,
 )
 from .status import climate_status, is_online, power_status, zone_status
@@ -102,13 +104,16 @@ def get_farm(settings: SettingsDep) -> Farm:
 
 
 def list_zones(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> ZoneList:
-    """The latest readings and state of every zone (§11.2)."""
+    """The latest readings and state of every zone, with what each zone is (§11.2, T1-38)."""
+    details = _zone_details(settings)
     sources = zone_sources(settings.client_dir)
     with _database(engine) as connection:
         rows = queries.zones(connection, site)
         if not rows and not queries.site_is_loaded(connection, site):
             raise _not_loaded()
-        return ZoneList(items=[_zone(connection, site, row, _source(sources, row)) for row in rows])
+        return ZoneList(
+            items=[_described(_zone(connection, site, row, _source(sources, row)), details) for row in rows]
+        )
 
 
 def get_zone(
@@ -122,10 +127,11 @@ def get_zone(
     if not ZONE_ID.fullmatch(zone_id):
         raise no_such_zone
     sources = zone_sources(settings.client_dir)
+    details = _zone_details(settings)
     with _database(engine) as connection:
         rows = queries.zones(connection, site, zone_id)
         if rows:
-            return _zone(connection, site, rows[0], _source(sources, rows[0]))
+            return _described(_zone(connection, site, rows[0], _source(sources, rows[0])), details)
         if not queries.site_is_loaded(connection, site):
             raise _not_loaded()
         raise no_such_zone
@@ -134,6 +140,27 @@ def get_zone(
 def _source(sources: dict[str, str], row: Any) -> str:
     """The zone's source from the layout; a zone the layout no longer names is LIVE (safe)."""
     return sources.get(row.zone_id, "LIVE")
+
+
+def _zone_details(settings: Settings) -> dict[str, tuple[ZoneProfile, ZoneCrop | None]]:
+    """Each zone's profile and crop, or none at all if the pack can't give them: a mistake in
+    recipes.json or io_map.json must not cost the farm its readings. The cause is logged."""
+    try:
+        return read_zone_details(settings.client_dir)
+    except PackError:
+        log.warning("zones answered without profile and crop: the config pack could not be read")
+        return {}
+
+
+def _described(status: ZoneStatus, details: dict[str, tuple[ZoneProfile, ZoneCrop | None]]) -> ZoneStatus:
+    """The zone answer with its profile and crop from the config pack (T1-38). A zone the database
+    has but the layout no longer lists keeps them unset, so they are left out."""
+    if status.zone not in details:
+        return status
+    profile, crop = details[status.zone]
+    status.profile = profile  # assigning marks them set, so response_model_exclude_unset sends them
+    status.crop = crop
+    return status
 
 
 def _zone(connection: Connection, site: SiteRef, row: Any, source: str) -> ZoneStatus:

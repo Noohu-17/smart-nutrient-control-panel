@@ -6,10 +6,20 @@
   "zones": [
     {
       "id": "Z1", "name": "Zone A", "source": "SIMULATED", "controller": "ZC1",
-      "reservoir": { "id": "R1", "usableL": 1200 },
+      "growingSystem": "NFT",
+      "growingUnits": [
+        { "type": "NFT_BENCH", "count": 4, "channels": 6, "lengthM": 8.5, "plantSitesEach": 252 }
+      ],
+      "size": { "lengthM": 10.0, "widthM": 8.0 },
+      "position": { "xM": 0.0, "yM": 0.0, "label": "Pad end, left of the central aisle" },
+      "notes": "",
+      "reservoir": { "id": "R1", "volumeL": 1300, "usableL": 1200 },
       "dosingCabinet": "D1",
       "doseLines": ["A", "B", "ACID"],
-      "sensors": { "dissolvedOxygen": false },
+      "sensors": {
+        "ec": true, "ph": true, "solTemp": true, "reservoirLevel": true, "circFlow": true,
+        "dayTankLevel": true, "leak": true, "dissolvedOxygen": false
+      },
       "dayTanks": { "A": { "usableL": 50 }, "B": { "usableL": 50 }, "ACID": { "usableL": 50 } },
       "benches": [
         { "id": "Z1-B1", "channels": 6, "lengthM": 8.5 },
@@ -20,10 +30,20 @@
     },
     {
       "id": "Z2", "name": "Zone B", "source": "SIMULATED", "controller": "ZC2",
-      "reservoir": { "id": "R2", "usableL": 1200 },
+      "growingSystem": "NFT",
+      "growingUnits": [
+        { "type": "NFT_BENCH", "count": 4, "channels": 6, "lengthM": 8.5, "plantSitesEach": 252 }
+      ],
+      "size": { "lengthM": 10.0, "widthM": 8.0 },
+      "position": { "xM": 10.0, "yM": 0.0, "label": "Fan end, left of the central aisle" },
+      "notes": "",
+      "reservoir": { "id": "R2", "volumeL": 1300, "usableL": 1200 },
       "dosingCabinet": "D2",
       "doseLines": ["A", "B", "ACID"],
-      "sensors": { "dissolvedOxygen": false },
+      "sensors": {
+        "ec": true, "ph": true, "solTemp": true, "reservoirLevel": true, "circFlow": true,
+        "dayTankLevel": true, "leak": true, "dissolvedOxygen": false
+      },
       "dayTanks": { "A": { "usableL": 50 }, "B": { "usableL": 50 }, "ACID": { "usableL": 50 } },
       "benches": [
         { "id": "Z2-B1", "channels": 6, "lengthM": 8.5 },

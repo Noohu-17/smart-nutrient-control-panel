@@ -5,7 +5,7 @@ dose lines or equipment IDs are plain dicts, because those keys come from the cl
 (OPEN-12), and fields the models don't name in the config pack are passed on unchanged.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import UUID4, ConfigDict, Field, PlainSerializer, StrictBool, WithJsonSchema
@@ -70,7 +70,10 @@ class PackModel(ContractModel):
 
 
 class Reservoir(PackModel):
+    """The zone's tank: its full size (volumeL, T1-38) and what can be drawn from it (usableL)."""
+
     id: str
+    volume_l: float | None = None
     usable_l: float
 
 
@@ -84,15 +87,45 @@ class Bench(PackModel):
     length_m: float
 
 
+class GrowingUnit(PackModel):
+    """One kind of growing unit in a zone (T1-38): its type, how many, and the plant sites on each.
+
+    The size keys follow the type (channels and lengthM for an NFT_BENCH, volumeL for a bucket …),
+    so they go through as written.
+    """
+
+    type: str
+    count: int
+    plant_sites_each: int
+
+
+class ZoneSize(PackModel):
+    length_m: float
+    width_m: float
+
+
+class ZonePosition(PackModel):
+    """Where the zone is: metres from the site's corner, and how the farm describes the spot."""
+
+    x_m: float
+    y_m: float
+    label: str | None = None
+
+
 class FarmZone(PackModel):
     id: str
     name: str
     source: ZoneSource  # read_farm fills it in when layout.json leaves it out (§2.4)
     controller: str
+    growing_system: str | None = None  # NFT, DWC … (T1-38); None in a pack from before it
+    growing_units: list[GrowingUnit] | None = None
+    size: ZoneSize | None = None
+    position: ZonePosition | None = None
+    notes: str | None = None
     reservoir: Reservoir
     dosing_cabinet: str
     dose_lines: list[str]
-    sensors: dict[str, bool] | None = None
+    sensors: dict[str, bool] | None = None  # each sensor, fitted or not
     day_tanks: dict[str, DayTank]
     benches: list[Bench]
 
@@ -140,6 +173,33 @@ class Farm(PackModel):
 # --- GET /api/zones and /api/zones/{zoneId} (§11.2) -------------------------------------
 
 
+class ZoneProfile(ContractModel):
+    """What the zone is, from the config pack (T1-38): never from the farm's messages."""
+
+    name: str
+    growing_system: str | None
+    growing_units: list[GrowingUnit]
+    plant_sites: int | None  # every unit's plant sites added up; None without growing units
+    size: ZoneSize | None
+    position: ZonePosition | None
+    tank: Reservoir  # layout.json reservoir
+    sensors: dict[str, bool]  # each sensor, fitted (true) or not
+    controller: str
+    link: str  # how the controller reaches the back end: MQTT, or SF_GATEWAY on the rig (io_map.json)
+    dose_lines: list[str]
+    notes: str | None
+
+
+class ZoneCrop(ContractModel):
+    """What the zone is growing (recipes.json zones, T1-38)."""
+
+    crop: str  # the recipe's crop ID, e.g. LETTUCE
+    name: str | None  # its name, e.g. Lettuce
+    variety: str | None
+    stage: str
+    planted_on: date | None  # the farm's own calendar day, YYYY-MM-DD
+
+
 class ZoneStatus(ContractModel):
     """A zone's latest readings and state. Anything not known yet is null, {} or [] (§11.2)."""
 
@@ -160,6 +220,10 @@ class ZoneStatus(ContractModel):
     operation: ZoneOperation | None
     latches: list[str]
     config_version: Count | None
+    # From the config pack, not the farm (T1-38). Set on every GET /zones answer; crop is null
+    # when no recipe is applied to the zone.
+    profile: ZoneProfile | None = None
+    crop: ZoneCrop | None = None
 
 
 class ZoneList(ContractModel):
@@ -255,10 +319,23 @@ class DoseReview(ContractModel):
 # --- GET /api/zones/{zoneId}/dose-limits (§11.2) ------------------------------------------
 
 
+class Drum(ContractModel):
+    id: str
+    volume_l: float
+
+
 class DoseLineLimit(ContractModel):
-    """One line's limits and how much of its 24 h limit is left, so the app can warn while typing."""
+    """One line's limits and how much of its 24 h limit is left, so the app can warn while typing,
+    and what the line doses (nutrients.json) and how fast its pump runs (hardware.json), T1-38.
+    A pack that doesn't say gives null."""
 
     line: str
+    name: str | None
+    compound: str | None
+    strength_pct: float | None
+    drum: Drum | None
+    purpose: str | None
+    pump_ml_per_min: float | None
     max_per_dose_ml: float
     # named here: the camelCase generator would make "max24HMl" of these
     max24h_ml: float = Field(alias="max24hMl")

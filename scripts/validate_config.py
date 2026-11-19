@@ -18,6 +18,7 @@ below are what "valid" means for a config pack.
 import json
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -49,6 +50,24 @@ ZONE_ID = re.compile(r"Z[1-9][0-9]*")
 # Contract 2.4: real hardware runs the zone, or the simulator. Left out, a zone is SIMULATED on a
 # playground site and LIVE everywhere else.
 ZONE_SOURCES = ("LIVE", "SIMULATED")
+# T1-38: what a zone grows in. growingSystem is the zone's; each growingUnits entry is one kind of
+# unit, with the size keys its type needs (all > 0) and its plant sites.
+GROWING_SYSTEMS = {"NFT", "DWC", "DUTCH_BUCKET", "DRIP", "VERTICAL", "MIXED"}
+UNIT_SIZE_KEYS = {
+    "NFT_BENCH": ("channels", "lengthM"),  # a table or structure of NFT channels: a layout bench
+    "DWC_RAFT": ("lengthM", "widthM"),
+    "DUTCH_BUCKET": ("volumeL",),
+    "GROW_BAG": ("volumeL",),
+    "VERTICAL_TOWER": ("heightM",),
+}
+# The system each unit type belongs to (MIXED takes any).
+UNIT_SYSTEM = {"NFT_BENCH": "NFT", "DWC_RAFT": "DWC", "DUTCH_BUCKET": "DUTCH_BUCKET",
+               "GROW_BAG": "DRIP", "VERTICAL_TOWER": "VERTICAL"}
+# The sensors a zone says it has fitted or not: every key, true or false (contract 6.1 readings).
+SENSOR_KEYS = {"ec", "ph", "solTemp", "reservoirLevel", "circFlow", "dayTankLevel", "leak", "dissolvedOxygen"}
+# What nutrients.json says about each dose line, besides its EC and pH change (T1-38).
+DOSE_LINE_TEXT_KEYS = ("name", "compound", "purpose")
+PLANTED_ON = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
 def _reject_duplicate_keys(pairs):
@@ -150,6 +169,7 @@ def check_layout(client, rel, layout, errors):
         elif len(set(dose_lines)) != len(dose_lines) or set(dose_lines) != set(day_tanks):
             fail(f"{where}: doseLines {dose_lines} do not match dayTanks keys {sorted(day_tanks)}")
         dose_lines_by_zone[zone_id] = dose_lines
+        check_zone_details(where, zone, fail)
 
     climate = layout.get("climate") or {}
     for zone_id, chiller in (climate.get("chillers") or {}).items():
@@ -162,6 +182,75 @@ def check_layout(client, rel, layout, errors):
             fail(f"{path}: {device_id} is not listed in devices")
 
     return dose_lines_by_zone
+
+
+def check_zone_details(where, zone, fail):
+    """T1-38: the zone's growing system and units, size, position, tank, sensors and notes."""
+    system = zone.get("growingSystem")
+    if system not in GROWING_SYSTEMS:
+        fail(f"{where}: growingSystem {system!r} must be one of {sorted(GROWING_SYSTEMS)}")
+
+    units = zone.get("growingUnits")
+    if not isinstance(units, list) or not units:
+        fail(f'{where}: "growingUnits" must be a non-empty list')
+        units = []
+    nft_units = []
+    for index, unit in enumerate(units):
+        at = f"{where}: growingUnits[{index}]"
+        if not isinstance(unit, dict):
+            fail(f"{at} must be an object")
+            continue
+        kind = unit.get("type")
+        if kind not in UNIT_SIZE_KEYS:
+            fail(f"{at}: type {kind!r} must be one of {sorted(UNIT_SIZE_KEYS)}")
+            continue
+        if system in GROWING_SYSTEMS and system != "MIXED" and UNIT_SYSTEM[kind] != system:
+            fail(f"{at}: a {kind} is not part of a {system} zone")
+        for key in ("count", "plantSitesEach"):
+            if not _positive_int(unit.get(key)):
+                fail(f"{at}.{key} must be a whole number > 0")
+        for key in UNIT_SIZE_KEYS[kind]:
+            check = _positive_int if key == "channels" else _positive_number
+            if not check(unit.get(key)):
+                fail(f"{at}.{key} must be a {'whole ' if key == 'channels' else ''}number > 0")
+        if kind == "NFT_BENCH":
+            nft_units.append(unit)
+
+    # NFT benches are the layout's benches too: the same number, and each one's size is a unit's.
+    if nft_units:
+        benches = [b for b in zone.get("benches") or [] if isinstance(b, dict)]
+        counted = sum(u["count"] for u in nft_units if _positive_int(u.get("count")))
+        if counted != len(benches):
+            fail(f"{where}: growingUnits list {counted} NFT_BENCH units but benches lists {len(benches)}")
+        sizes = {(u.get("channels"), u.get("lengthM")) for u in nft_units}
+        for bench in benches:
+            if (bench.get("channels"), bench.get("lengthM")) not in sizes:
+                fail(f"{where}: bench {bench.get('id')} ({bench.get('channels')} channels, "
+                     f"{bench.get('lengthM')} m) matches no NFT_BENCH unit")
+
+    size = zone.get("size")
+    if not isinstance(size, dict) or not all(_positive_number(size.get(k)) for k in ("lengthM", "widthM")):
+        fail(f'{where}: "size" needs lengthM and widthM, numbers > 0')
+    position = zone.get("position")
+    if not isinstance(position, dict) or not all(_number(position.get(k)) for k in ("xM", "yM")):
+        fail(f'{where}: "position" needs xM and yM, numbers (metres from the site\'s corner)')
+    elif not isinstance(position.get("label", ""), str):
+        fail(f"{where}: position.label must be text")
+    if not isinstance(zone.get("notes"), str):
+        fail(f'{where}: "notes" must be text ("" for none)')
+
+    reservoir = zone.get("reservoir")
+    reservoir = reservoir if isinstance(reservoir, dict) else {}
+    volume, usable = reservoir.get("volumeL"), reservoir.get("usableL")
+    if not _positive_number(volume) or not _positive_number(usable) or usable > volume:
+        fail(f"{where}: reservoir needs volumeL and usableL, numbers > 0 with usableL no more than volumeL")
+
+    sensors = zone.get("sensors")
+    if not isinstance(sensors, dict) or set(sensors) != SENSOR_KEYS:
+        got = sorted(sensors) if isinstance(sensors, dict) else sensors
+        fail(f'{where}: "sensors" must say true or false for exactly {sorted(SENSOR_KEYS)}; got {got}')
+    elif not all(isinstance(value, bool) for value in sensors.values()):
+        fail(f"{where}: every sensors value must be true or false")
 
 
 def check_placeholder_meta(rel, data, errors):
@@ -209,10 +298,18 @@ def check_zone_recipes(rel, recipes, zones, errors):
         stage = zone.get("stage") if isinstance(zone, dict) else None
         if crop not in stages or stage not in stages[crop]:
             errors.append(f"{rel}: zone {zone_id}: no recipe for crop {crop!r} at stage {stage!r}")
+        if not isinstance(zone, dict):
+            continue
+        if not _text(zone.get("variety")):
+            errors.append(f"{rel}: zone {zone_id}: variety must be the crop's variety, as text")
+        if not _date(zone.get("plantedOn")):
+            errors.append(f"{rel}: zone {zone_id}: plantedOn must be the day it was planted, YYYY-MM-DD; "
+                          f"got {zone.get('plantedOn')!r}")
 
 
-def check_nutrients(rel, nutrients, dose_lines_by_zone, errors):
-    """Every dose line in the layout needs its stock's EC and pH change per mL in each litre."""
+def check_nutrients(rel, nutrients, dose_lines_by_zone, errors, layout=None):
+    """Every dose line in the layout needs its stock's EC and pH change per mL in each litre, and
+    what the stock is (T1-38): name, compound, strengthPct, drum and purpose."""
     lines = nutrients.get("doseLines")
     if not isinstance(lines, dict):
         errors.append(f'{rel}: "doseLines" must be an object keyed by dose line')
@@ -221,11 +318,53 @@ def check_nutrients(rel, nutrients, dose_lines_by_zone, errors):
     missing = [line for line in used if line not in lines]
     if missing:
         errors.append(f"{rel}: no entry for dose lines {missing} used in the layout")
+    day_tank_l = _day_tank_litres(layout)
+    drum_lines = {}
     for line, entry in lines.items():
+        entry = entry if isinstance(entry, dict) else {}
+        where = f"{rel}: doseLines.{line}"
         for key in ("ecChangePerMlPerL", "phChangePerMlPerL"):
-            value = entry.get(key) if isinstance(entry, dict) else None
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                errors.append(f"{rel}: doseLines.{line}.{key} must be a number")
+            if not _number(entry.get(key)):
+                errors.append(f"{where}.{key} must be a number")
+        for key in DOSE_LINE_TEXT_KEYS:
+            if not _text(entry.get(key)):
+                errors.append(f"{where}.{key} must be text")
+        strength = entry.get("strengthPct")
+        if not _positive_number(strength) or strength > 100:
+            errors.append(f"{where}.strengthPct must be a number > 0 and no more than 100")
+        drum = entry.get("drum")
+        drum = drum if isinstance(drum, dict) else {}
+        if not _text(drum.get("id")) or not _positive_number(drum.get("volumeL")):
+            errors.append(f"{where}.drum needs an id (text) and volumeL (a number > 0)")
+            continue
+        if drum["id"] in drum_lines:
+            errors.append(f"{where}.drum: {drum['id']} already holds line {drum_lines[drum['id']]}'s stock")
+        drum_lines[drum["id"]] = line
+        largest = max(day_tank_l.get(line, [0]))
+        if largest > drum["volumeL"]:
+            errors.append(f"{where}.drum: {drum['volumeL']:g} L is less than a {largest:g} L day-tank "
+                          "it fills (layout.json dayTanks)")
+
+
+def check_pump_rates(rel, hardware, dose_lines_by_zone, errors):
+    """Each dose line's pump rate (hardware.json pumps.doseLines.<line>.flowMlPerS), which the dose
+    review's estimate and the dose-line answer use (T1-38)."""
+    flows = ((hardware.get("pumps") or {}).get("doseLines") or {}) if isinstance(hardware, dict) else {}
+    for line in sorted({line for lines in dose_lines_by_zone.values() for line in lines}):
+        flow = (flows.get(line) or {}).get("flowMlPerS") if isinstance(flows.get(line), dict) else None
+        if not _positive_number(flow):
+            errors.append(f"{rel}: pumps.doseLines.{line}.flowMlPerS must be a number > 0 "
+                          "(every dose line in the layout needs its pump rate)")
+
+
+def _day_tank_litres(layout):
+    """{line: [usableL of each zone's day-tank]} from layout.json."""
+    litres = {}
+    for zone in (layout or {}).get("zones", []) if isinstance(layout, dict) else []:
+        for line, tank in ((zone.get("dayTanks") or {}) if isinstance(zone, dict) else {}).items():
+            if isinstance(tank, dict) and _positive_number(tank.get("usableL")):
+                litres.setdefault(line, []).append(tank["usableL"])
+    return litres
 
 
 def validate_client(client_dir, errors):
@@ -256,7 +395,9 @@ def validate_client(client_dir, errors):
         if name in ZONE_KEYED_FILES and dose_lines_by_zone and isinstance(data, dict):
             check_zone_keys(rel, name, data, dose_lines_by_zone, errors)
         if name == "nutrients.json" and dose_lines_by_zone and isinstance(data, dict):
-            check_nutrients(rel, data, dose_lines_by_zone, errors)
+            check_nutrients(rel, data, dose_lines_by_zone, errors, layout)
+        if name == "hardware.json" and dose_lines_by_zone:
+            check_pump_rates(rel, data, dose_lines_by_zone, errors)
 
     io_map = loaded.get("io_map.json")
     if isinstance(io_map, dict) and isinstance(layout, dict):
@@ -331,8 +472,31 @@ def _max_per_dose(limits, zone_id):
     return node if isinstance(node, dict) else None
 
 
+def _number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 def _positive_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and value > 0
+    return _number(value) and value > 0
+
+
+def _positive_int(value):
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _text(value):
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _date(value):
+    """A calendar date as YYYY-MM-DD that exists (2026-02-30 doesn't)."""
+    if not isinstance(value, str) or not PLANTED_ON.fullmatch(value):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
 
 
 def main(argv):
