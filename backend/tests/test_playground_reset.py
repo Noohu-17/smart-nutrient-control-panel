@@ -34,6 +34,7 @@ from app.db.models import PlaygroundReset
 from app.db.seed import seed
 from app.main import app
 from app.worker.main import Worker
+from conftest import sign_in_as
 
 CMD_TOPIC = "farm/siet-ph1/zone/Z1/cmd/state"
 BLOCKED = ("BLOCK", "Line A would reach 1520 mL of the 1500 mL 24 h limit")  # 1400 + the review's 120
@@ -56,6 +57,7 @@ def api_for(pack, engine, url) -> TestClient:
     settings = dataclasses.replace(load_settings(), client_dir=pack, sim_control_url=url)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_engine] = lambda: engine
+    sign_in_as(app)  # an Owner: only an Owner may reset (§11.4)
     return TestClient(app, raise_server_exceptions=False)
 
 

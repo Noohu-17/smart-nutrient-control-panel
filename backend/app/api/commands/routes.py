@@ -1,9 +1,11 @@
 """GET /api/commands/{cmdId}, POST /api/stop, POST /api/resume and
 POST /api/dose-requests/{id}/confirm (contract §7.2, §7.4, §7.8, §11.2, §11.3).
 
-Stop is never checked (§8.3 rule 9) and needs only the config pack and the broker, so it works
-even while the database is down. Resume is sent only while its controller is online (§8.3 rule 9).
-Confirm checks the dose again and sends it once (confirm.py). Roles (§13) wait for sign-in.
+Stop is never checked (§8.3 rule 9) and needs only the config pack, the broker and a signed-in
+session, which it checks without the database, so it works even while the database is down.
+Every role may Stop; Resume and Confirm are for Owner, Agronomist and Operator (§13). Resume is
+sent only while its controller is online (§8.3 rule 9). Confirm checks the dose again and sends
+it once (confirm.py). Each command names who sent it in issuedBy (§7.1) and the audit log.
 """
 
 import logging
@@ -14,10 +16,12 @@ from typing import Annotated
 from fastapi import Depends, FastAPI, Header, HTTPException, Path
 from sqlalchemy import select
 
+from ...auth.access import STAFF, Caller, StopCaller, allowed
 from ...config import Settings
 from ...db.models import CommandReport, Device
 from ...errors import ApiError
 from .. import queries
+from ..dose_requests import MayDose
 from ..pack import read_farm
 from ..routes import EngineDep, SettingsDep, SiteDep, _database, _errors, _not_loaded
 from ..status import is_online
@@ -35,6 +39,9 @@ def get_publisher(settings: SettingsDep) -> Publisher:
 
 
 PublisherDep = Annotated[Publisher, Depends(get_publisher)]
+
+may_operate = allowed(*STAFF, why="Viewers can’t resume")  # §11.2: Owner, Agronomist, Operator
+MayOperate = Annotated[Caller, Depends(may_operate)]
 
 
 def _send(publisher: Publisher, command: Command) -> CommandSent:
@@ -80,30 +87,34 @@ def get_command(
 
 
 def post_stop(
-    body: StopBody, settings: SettingsDep, engine: EngineDep, site: SiteDep, publisher: PublisherDep
+    body: StopBody, settings: SettingsDep, engine: EngineDep, site: SiteDep, publisher: PublisherDep,
+    session: StopCaller,
 ) -> CommandSent:
-    """Stop (§7.4): always allowed, for every role, with no check and no confirmation."""
+    """Stop (§7.4): always allowed, for every signed-in role, Viewer included (§13), with no check
+    and no confirmation. The session is checked without the database (app.auth.access.stop_caller)."""
     if body.zone is not None and _no_such_zone(settings, body.zone):
         raise HTTPException(404, f"There is no zone {body.zone}")
-    command = messages.stop(site.site_id, body.scope, body.zone, datetime.now(UTC))
+    command = messages.stop(site.site_id, body.scope, body.zone, datetime.now(UTC), f"user:{session.user_id}")
     answer = _send(publisher, command)
-    sent.record(engine, site, command, datetime.now(UTC))
+    sent.record(engine, site, command, datetime.now(UTC), user_id=session.user_id)
     return answer
 
 
 def post_resume(
-    body: ResumeBody, settings: SettingsDep, engine: EngineDep, site: SiteDep, publisher: PublisherDep
+    body: ResumeBody, settings: SettingsDep, engine: EngineDep, site: SiteDep, publisher: PublisherDep,
+    caller: MayOperate,
 ) -> CommandSent:
-    """Resume (§7.8) a zone or climate after a stop, once its controller is online (§8.3 rule 9)."""
+    """Resume (§7.8) a zone or climate after a stop, once its controller is online (§8.3 rule 9).
+    403 for a Viewer (§13)."""
     farm = read_farm(settings.client_dir)
     now = datetime.now(UTC)
     if body.zone is not None:
         zone = next((z for z in farm.zones if z.id == body.zone), None)
         if zone is None:
             raise HTTPException(404, f"There is no zone {body.zone}")
-        controller, command = zone.controller, messages.resume_zone(site.site_id, zone.id, now)
+        controller, command = zone.controller, messages.resume_zone(site.site_id, zone.id, now, caller.issued_by)
     else:
-        controller, command = farm.climate.controller, messages.resume_climate(site.site_id, now)
+        controller, command = farm.climate.controller, messages.resume_climate(site.site_id, now, caller.issued_by)
     with _database(engine) as connection:
         device = connection.execute(
             select(Device.last_seen, Device.last_will_at).where(
@@ -115,7 +126,7 @@ def post_resume(
     if device is None or not is_online(device.last_seen, now, device.last_will_at):
         raise ApiError(409, "DEVICE_OFFLINE", f"{controller} is offline, so nothing was sent")
     answer = _send(publisher, command)
-    sent.record(engine, site, command, datetime.now(UTC))
+    sent.record(engine, site, command, datetime.now(UTC), user_id=caller.user_id, role=caller.role)
     return answer
 
 
@@ -125,12 +136,13 @@ def post_confirm(
     engine: EngineDep,
     site: SiteDep,
     publisher: PublisherDep,
+    caller: MayDose,
     idempotency_key: Annotated[uuid.UUID | None, Header(alias="Idempotency-Key")] = None,
 ) -> CommandSent:
     """Send a reviewed dose (§11.3), once it passes its checks again. The same Idempotency-Key
-    again gets the same cmdId, and never a second dose (§11.1)."""
+    again gets the same cmdId, and never a second dose (§11.1). 403 for a Viewer (§13)."""
     key = None if idempotency_key is None else str(idempotency_key)
-    return confirm(settings, engine, site, publisher, request_id, key)
+    return confirm(settings, engine, site, publisher, request_id, key, caller)
 
 
 def add_command_api(app: FastAPI) -> None:
@@ -143,8 +155,8 @@ def add_command_api(app: FastAPI) -> None:
         tags=["commands"],
     )
     for path, endpoint, errors in (
-        ("/api/stop", post_stop, (404, 422, 503)),
-        ("/api/resume", post_resume, (404, 409, 422, 503)),
+        ("/api/stop", post_stop, (401, 403, 404, 422, 503)),
+        ("/api/resume", post_resume, (401, 403, 404, 409, 422, 503)),
     ):
         app.add_api_route(
             path,
@@ -161,6 +173,6 @@ def add_command_api(app: FastAPI) -> None:
         methods=["POST"],
         status_code=202,
         response_model=CommandSent,
-        responses=_errors(404, 409, 422, 500, 503),
+        responses=_errors(401, 403, 404, 409, 422, 500, 503),
         tags=["dosing"],
     )

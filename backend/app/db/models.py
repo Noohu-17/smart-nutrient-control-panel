@@ -1,5 +1,5 @@
 """Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message, command
-report, dose request, sent command, playground reset, alert and user.
+report, dose request, sent command, playground reset, alert, user, user session and audit log.
 
 Every table has org_id and site_id (OPEN-11), so more organisations and sites can share
 the database later. Rows are keyed by the contract's own IDs (§2.1, §2.2): siet-ph1, Z1,
@@ -208,6 +208,7 @@ class DoseRequest(Base):
     estimate: Mapped[dict[str, Any]] = mapped_column(JSONB)
     can_confirm: Mapped[bool]
     limits: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    requested_by: Mapped[str | None] = mapped_column(ID)  # the user_id; null before sign-in existed
 
 
 class SentCommand(Base):
@@ -238,6 +239,7 @@ class SentCommand(Base):
     issued_at: Mapped[datetime] = mapped_column(Timestamp)
     expires_at: Mapped[datetime] = mapped_column(Timestamp)
     dispatched_at: Mapped[datetime | None] = mapped_column(Timestamp)  # null until the broker has it
+    issued_by: Mapped[str | None] = mapped_column(ID)  # the user_id; null before sign-in existed
     dose_request_id: Mapped[str | None] = mapped_column(ID)  # a confirmed dose only
     idempotency_key: Mapped[str | None] = mapped_column(String(36))  # a UUID (§11.1)
     # The stuck-command guard (app/worker/stuck.py), both in server time: when the worker last
@@ -288,7 +290,7 @@ class Alert(Base):
     sim_ts: Mapped[datetime | None] = mapped_column(Timestamp)  # the farm clock, playground only
     cleared_at: Mapped[datetime | None] = mapped_column(Timestamp)
     acked_at: Mapped[datetime | None] = mapped_column(Timestamp)
-    acked_by: Mapped[str | None] = mapped_column(String(32))  # the role, until sign-in exists
+    acked_by: Mapped[str | None] = mapped_column(ID)  # the user_id (before T1-35: the demo role)
 
 
 class User(Base):
@@ -309,3 +311,53 @@ class User(Base):
     email: Mapped[str] = mapped_column(Text)
     role: Mapped[str] = mapped_column(String(32))  # OWNER, AGRONOMIST, OPERATOR, VIEWER
     password_hash: Mapped[str | None] = mapped_column(Text)
+    # Two-factor (T1-35): the authenticator secret, when it was turned on, the last code step used.
+    totp_secret: Mapped[str | None] = mapped_column(Text)
+    totp_enabled_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    totp_last_step: Mapped[int | None] = mapped_column(BigInteger)
+    disabled_at: Mapped[datetime | None] = mapped_column(Timestamp)  # turned off: can't sign in
+
+
+class UserSession(Base):
+    """A signed-in browser (contract §11.1, T1-35). The cookie holds a random ID and a signature;
+    only the ID's SHA-256 is stored, so a copy of this table can't sign anyone in. ended_at is set
+    by sign-out; a session also ends at expires_at. stage is FULL, or TOTP (the password was right,
+    the authenticator code is next) or TOTP_SETUP (an Owner who must set up two-factor first)."""
+
+    __tablename__ = "user_session"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "site_id", "user_id"],
+            ["app_user.org_id", "app_user.site_id", "app_user.user_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    session_hash: Mapped[str] = mapped_column(String(64), primary_key=True)  # sha256 hex of the ID
+    user_id: Mapped[str] = mapped_column(ID, index=True)
+    created_at: Mapped[datetime] = mapped_column(Timestamp)
+    expires_at: Mapped[datetime] = mapped_column(Timestamp)
+    ended_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    stage: Mapped[str] = mapped_column(String(16))
+    failed_codes: Mapped[int]  # wrong authenticator codes in this session; 5 end it
+
+
+class AuditLog(Base):
+    """Who did what (contract §11.4, §13, T1-35): every sign-in and sign-out, and every action that
+    changes the farm or the simulator. user_id is null for a failed sign-in; its detail says which
+    email was tried. Rows are only ever added."""
+
+    __tablename__ = "audit_log"
+    __table_args__ = (_site_fk(),)
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    audit_id: Mapped[str] = mapped_column(ID, primary_key=True)  # a UUID
+    at: Mapped[datetime] = mapped_column(Timestamp, index=True)
+    user_id: Mapped[str | None] = mapped_column(ID)
+    role: Mapped[str | None] = mapped_column(String(32))
+    action: Mapped[str] = mapped_column(String(32))  # SIGN_IN, DOSE_CONFIRM, STOP, SIM_RESET …
+    target: Mapped[str | None] = mapped_column(Text)  # a cmdId, a dose request, an alert …
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)

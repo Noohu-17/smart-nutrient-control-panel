@@ -15,10 +15,13 @@ import subprocess
 import sys
 import threading
 import uuid
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+
+from app.auth import totp
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "demo-check.py"
 spec = importlib.util.spec_from_file_location("demo_check", SCRIPT)
@@ -40,8 +43,11 @@ def fresh_zone(zone_id):
 class FakeStack:
     """The back end and the simulator as the script sees them through /api."""
 
-    def __init__(self, *, playground=True, login=None, broken=()):
-        self.playground, self.login, self.broken = playground, login, set(broken)
+    def __init__(self, *, playground=True, login=None, app_login=None, totp_secret=None, broken=()):
+        """login: the site's (user, password); app_login: the app's (email, password), T1-35;
+        totp_secret: the Owner's two-factor secret, when sign-in asks for a code."""
+        self.playground, self.login, self.app_login, self.broken = playground, login, app_login, set(broken)
+        self.totp_secret, self.signed_in = totp_secret, totp_secret is None
         self.calls: list[dict] = []
         self.reviews: dict[str, dict] = {}
         self.commands: dict[str, dict] = {}
@@ -81,6 +87,28 @@ class FakeStack:
             expected = "Basic " + base64.b64encode(f"{self.login[0]}:{self.login[1]}".encode()).decode()
             if headers.get("authorization") != expected:
                 return self._send(request, 401, None)
+        if self.app_login is not None:
+            if request.path == "/api/auth/login":
+                if body != {"email": self.app_login[0], "password": self.app_login[1]}:
+                    return self._send(request, 401, {"error": {"code": "UNAUTHORIZED", "message": "Wrong email or password"}})
+                cookie = "sna_session=the-session; Path=/api; HttpOnly; Secure; SameSite=lax"
+                step = "TOTP" if self.totp_secret else "DONE"
+                answer = {"user": {"role": "OWNER"}, "csrfToken": "the-csrf", "step": step}
+                return self._send(request, 200, answer, {"Set-Cookie": cookie})
+            if request.path == "/api/auth/totp":
+                if body != {"code": totp.code_at(self.totp_secret, totp.step_at(datetime.now(UTC)))}:
+                    return self._send(request, 400, {"error": {"code": "WRONG_CODE", "message": "wrong code"}})
+                self.signed_in = True
+                cookie = "sna_session=the-session; Path=/api; HttpOnly; Secure; SameSite=lax"
+                answer = {"user": {"role": "OWNER"}, "csrfToken": "the-csrf", "step": "DONE"}
+                return self._send(request, 200, answer, {"Set-Cookie": cookie})
+            if request.path != "/api/health" and not self.signed_in:
+                return self._send(request, 403, {"error": {"code": "TWO_FACTOR_REQUIRED", "message": "code first"}})
+            if request.path != "/api/health":
+                if headers.get("cookie") != "sna_session=the-session":
+                    return self._send(request, 401, None)
+                if request.command != "GET" and headers.get("x-csrf-token") != "the-csrf":
+                    return self._send(request, 403, {"error": {"code": "FORBIDDEN", "message": "no CSRF token"}})
         with self._lock:
             status, answer = self.answer(request.command, request.path, body, headers)
         return self._send(request, status, answer)
@@ -474,7 +502,79 @@ def test_a_wrong_password_is_named_as_such():
     finally:
         stack.close()
     assert code == 1
-    assert "401: check --user and the password in its environment variable" in results(lines)["health"][1]
+    assert "401: check --user and --email, and their passwords" in results(lines)["health"][1]
+
+
+def test_it_signs_in_to_the_app_and_sends_the_cookie_and_the_csrf_token():
+    stack = FakeStack(app_login=("owner@example.org", "app-secret"))
+    try:
+        code, lines, _ = run(stack.url, "--email", "owner@example.org", env={"DEMO_CHECK_APP_PASSWORD": "app-secret"})
+    finally:
+        stack.close()
+    assert code == 0, lines
+    assert stack.calls[0]["path"] == "/api/auth/login"
+    writes = [call for call in stack.calls[1:] if call["method"] != "GET"]
+    assert writes and all(call["headers"].get("x-csrf-token") == "the-csrf" for call in writes)
+
+
+def test_without_signing_in_to_the_app_every_scenario_after_health_fails():
+    stack = FakeStack(app_login=("owner@example.org", "app-secret"))
+    try:
+        code, lines, _ = run(stack.url)
+    finally:
+        stack.close()
+    assert code == 1
+    assert results(lines)["health"][0] == "PASS"
+    assert "check --user and --email" in results(lines)["fresh readings"][1]
+
+
+def test_a_wrong_app_password_does_not_start():
+    stack = FakeStack(app_login=("owner@example.org", "right"))
+    try:
+        code, lines, err = run(stack.url, "--email", "owner@example.org", env={"DEMO_CHECK_APP_PASSWORD": "wrong"})
+    finally:
+        stack.close()
+    assert (code, lines) == (2, [])
+    assert "signing in as owner@example.org answered 401: check --email and $DEMO_CHECK_APP_PASSWORD" in err
+
+
+def test_an_owner_with_two_factor_signs_in_with_the_code_from_the_secret():
+    secret = totp.new_secret()
+    stack = FakeStack(app_login=("owner@example.org", "app-secret"), totp_secret=secret)
+    try:
+        env = {"DEMO_CHECK_APP_PASSWORD": "app-secret", "DEMO_CHECK_TOTP_SECRET": secret}
+        code, lines, _ = run(stack.url, "--email", "owner@example.org", env=env)
+    finally:
+        stack.close()
+    assert code == 0, lines
+    assert [call["path"] for call in stack.calls[:2]] == ["/api/auth/login", "/api/auth/totp"]
+
+
+def test_an_owner_with_two_factor_but_no_secret_does_not_start():
+    stack = FakeStack(app_login=("owner@example.org", "app-secret"), totp_secret=totp.new_secret())
+    try:
+        code, lines, err = run(stack.url, "--email", "owner@example.org", env={"DEMO_CHECK_APP_PASSWORD": "app-secret"})
+    finally:
+        stack.close()
+    assert (code, lines) == (2, [])
+    assert "signs in with an authenticator code: put its secret in $DEMO_CHECK_TOTP_SECRET" in err
+
+
+def test_its_codes_are_the_back_ends():
+    secret = totp.new_secret()
+    assert demo_check.totp_code(secret, 1_800_000_000) == totp.code_at(secret, 1_800_000_000 // 30)
+
+
+def test_an_email_without_a_password_does_not_start(stack):
+    code, lines, err = run(stack.url, "--email", "owner@example.org")
+    assert (code, lines, stack.calls) == (2, [], [])
+    assert "--email owner@example.org needs its password in $DEMO_CHECK_APP_PASSWORD" in err
+
+
+def test_an_app_password_is_never_sent_unencrypted_to_another_machine():
+    code, lines, err = run("http://staging.example.org", "--email", "o@example.org", env={"DEMO_CHECK_APP_PASSWORD": "pw"})
+    assert (code, lines) == (2, [])
+    assert "use an https:// address" in err
 
 
 def test_a_user_without_a_password_does_not_start(stack):

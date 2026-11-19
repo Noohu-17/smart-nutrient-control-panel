@@ -1,7 +1,8 @@
 """Demo check (T1-23): run the demo scenarios against a running stack, through its API only.
 
-    python scripts/demo-check.py http://localhost:8000
-    DEMO_CHECK_PASSWORD=... python scripts/demo-check.py https://staging.example.org --user demo
+    DEMO_CHECK_APP_PASSWORD=... python scripts/demo-check.py http://localhost:8000 --email owner@example.org
+    DEMO_CHECK_PASSWORD=... DEMO_CHECK_APP_PASSWORD=... \
+        python scripts/demo-check.py https://staging.example.org --user demo --email owner@example.org
 
 Run it after deploying, and again before the demo. It prints PASS, FAIL or SKIP for each scenario,
 and exits with 0 when none failed, 1 when one did, and 2 when it could not start.
@@ -21,7 +22,12 @@ At the end it puts the demo farm back as it starts: values released, drills fixe
 
 The site login (the staging site's password) is given as --user, with the password in an
 environment variable (DEMO_CHECK_PASSWORD unless --password-env says otherwise), never on the
-command line or in a file. It is sent only over https, or to this machine.
+command line or in a file. The app's own sign-in (T1-35) is --email, with its password in
+DEMO_CHECK_APP_PASSWORD (or --app-password-env): every API call but /api/health needs it. Use an
+Owner, because the check resets the simulated farm. An Owner signs in with an authenticator code
+too: the check makes it from the Owner's two-factor secret in DEMO_CHECK_TOTP_SECRET (or
+--totp-env), the secret the app showed when two-factor was set up. Passwords are sent only over
+https, or to this machine.
 
 Only the standard library, so any Python 3.11 or later runs it.
 """
@@ -30,10 +36,13 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
+import hmac
 import ipaddress
 import json
 import os
 import ssl
+import struct
 import sys
 import time
 import urllib.error
@@ -47,6 +56,9 @@ POLL_S = 1.0  # between two looks while waiting for the farm
 REQUEST_TIMEOUT_S = 20.0
 FINAL = ("COMPLETED", "PARTIAL", "FAILED", "STOPPED", "REJECTED", "EXPIRED")  # contract 8.1
 PASSWORD_ENV = "DEMO_CHECK_PASSWORD"
+APP_PASSWORD_ENV = "DEMO_CHECK_APP_PASSWORD"
+TOTP_ENV = "DEMO_CHECK_TOTP_SECRET"
+SESSION_COOKIE = "sna_session"  # the back end's session cookie (backend/app/auth/sessions.py)
 SENSOR_DRILL = "SENSOR_OFFLINE"  # the probe-offline drill (scenarios.json, contract 11.4.3)
 
 
@@ -66,14 +78,16 @@ class _NoRedirects(urllib.request.HTTPRedirectHandler):
 class Api:
     """The stack's API at one address, with the site login if there is one."""
 
-    def __init__(self, address: str, user: str | None, password: str | None, insecure: bool):
+    def __init__(self, address: str, user: str | None, password: str | None, insecure: bool,
+                 signs_in: bool = False):
         parts = urlsplit(address)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise CannotStart(f"{address!r} is not an http:// or https:// address")
-        if user is not None and parts.scheme == "http" and not _this_machine(parts.hostname):
+        if (user is not None or signs_in) and parts.scheme == "http" and not _this_machine(parts.hostname):
             raise CannotStart("the password would travel unencrypted: use an https:// address")
         self.base = address.rstrip("/")
         self._headers = {"Accept": "application/json"}
+        self._csrf: str | None = None
         if user is not None:
             token = base64.b64encode(f"{user}:{password}".encode()).decode("ascii")
             self._headers["Authorization"] = f"Basic {token}"
@@ -82,29 +96,60 @@ class Api:
             context.check_hostname, context.verify_mode = False, ssl.CERT_NONE
         self._opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=context), _NoRedirects())
 
+    def sign_in(self, email: str, password: str, totp_secret: str | None = None) -> None:
+        """POST /api/auth/login, and the authenticator code when it asks for one, then send the
+        session cookie on every call and the CSRF token on every call that isn't a GET (contract
+        section 11.1). CannotStart if it is refused."""
+        status, answer, cookies = self._send("POST", "/api/auth/login", {"email": email, "password": password}, {})
+        if status != 200 or not isinstance(answer, dict) or SESSION_COOKIE not in cookies:
+            why = f"check --email and ${APP_PASSWORD_ENV}" if status == 401 else _short(answer)
+            raise CannotStart(f"signing in as {email} answered {status}: {why}")
+        self._headers["Cookie"] = f"{SESSION_COOKIE}={cookies[SESSION_COOKIE]}"
+        self._csrf = answer.get("csrfToken")
+        if answer.get("step") == "TOTP_SETUP":
+            raise CannotStart(f"{email} has no two-factor yet: set it up by signing in to the app first")
+        if answer.get("step") == "TOTP":
+            if not totp_secret:
+                raise CannotStart(f"{email} signs in with an authenticator code: put its secret in ${TOTP_ENV}")
+            status, answer, cookies = self._send("POST", "/api/auth/totp", {"code": totp_code(totp_secret)}, {})
+            if status != 200 or not isinstance(answer, dict) or SESSION_COOKIE not in cookies:
+                raise CannotStart(f"the authenticator code for {email} answered {status}: check ${TOTP_ENV}")
+            self._headers["Cookie"] = f"{SESSION_COOKIE}={cookies[SESSION_COOKIE]}"
+            self._csrf = answer.get("csrfToken")
+
     def call(self, method: str, path: str, body: Any = None, headers: Mapping[str, str] | None = None) -> tuple[int, Any]:
         """(status, JSON answer or None), whatever the status."""
+        status, answer, _ = self._send(method, path, body, headers or {})
+        if status == 401:
+            raise Fail(f"{method} {path} answered 401: check --user and --email, and their passwords")
+        return status, answer
+
+    def _send(self, method: str, path: str, body: Any, headers: Mapping[str, str]) -> tuple[int, Any, dict[str, str]]:
+        """(status, JSON answer or None, the cookies it set), whatever the status."""
         data = None if body is None else json.dumps(body).encode()
+        csrf = {"X-CSRF-Token": self._csrf} if self._csrf and method != "GET" else {}
         request = urllib.request.Request(self.base + path, data=data, method=method, headers={
-            **self._headers, **({"Content-Type": "application/json"} if data is not None else {}), **(headers or {}),
+            **self._headers, **csrf, **({"Content-Type": "application/json"} if data is not None else {}), **headers,
         })
         try:
             try:
                 with self._opener.open(request, timeout=REQUEST_TIMEOUT_S) as response:
-                    status, raw = response.status, response.read()
+                    status, raw, set_cookies = response.status, response.read(), response.headers.get_all("Set-Cookie")
             except urllib.error.HTTPError as answer:
                 with answer:
-                    status, raw = answer.code, answer.read()
+                    status, raw, set_cookies = answer.code, answer.read(), answer.headers.get_all("Set-Cookie")
                 if 300 <= status < 400:
                     raise Fail(f"{method} {path} was redirected to {answer.headers.get('Location')}: use that address")
         except urllib.error.URLError as exc:
             raise Fail(f"{method} {path}: cannot reach {self.base} ({exc.reason})") from exc
         except (OSError, ValueError) as exc:
             raise Fail(f"{method} {path}: {exc}") from exc
-        if status == 401:
-            raise Fail(f"{method} {path} answered 401: check --user and the password in its environment variable")
+        cookies = {}
+        for line in set_cookies or []:
+            name, _, value = line.split(";", 1)[0].partition("=")
+            cookies[name.strip()] = value.strip()
         try:
-            return status, json.loads(raw) if raw.strip() else None
+            return status, json.loads(raw) if raw.strip() else None, cookies
         except ValueError as exc:
             raise Fail(f"{method} {path} answered {status} with something that is not JSON") from exc
 
@@ -116,6 +161,15 @@ class Api:
         if got != status:
             raise Fail(f"{method} {path} answered {got}, not {status}: {_short(answer)}")
         return answer
+
+
+def totp_code(secret: str, now: float | None = None) -> str:
+    """The authenticator app's current code (RFC 6238: SHA-1, 6 digits, 30 s), as the back end checks it."""
+    key = base64.b32decode(secret.replace(" ", "").upper())
+    step = int(time.time() if now is None else now) // 30
+    digest = hmac.new(key, struct.pack(">Q", step), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    return str((struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF) % 10**6).zfill(6)
 
 
 def _this_machine(host: str) -> bool:
@@ -417,6 +471,11 @@ def _options(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--user", help=f"the site login; its password comes from ${PASSWORD_ENV}")
     parser.add_argument("--password-env", default=PASSWORD_ENV, metavar="NAME",
                         help=f"the environment variable holding the password (default {PASSWORD_ENV})")
+    parser.add_argument("--email", help=f"sign in to the app as this user, an Owner; its password comes from ${APP_PASSWORD_ENV}")
+    parser.add_argument("--app-password-env", default=APP_PASSWORD_ENV, metavar="NAME",
+                        help=f"the environment variable holding the app password (default {APP_PASSWORD_ENV})")
+    parser.add_argument("--totp-env", default=TOTP_ENV, metavar="NAME",
+                        help=f"the environment variable holding the Owner's two-factor secret (default {TOTP_ENV})")
     parser.add_argument("--zone", help="the zone to dose (default: the farm's first)")
     parser.add_argument("--line", help="the dose line to use (default: the zone's first)")
     parser.add_argument("--dose-ml", type=float, default=50, help="mL for the dose scenario (default 50)")
@@ -432,10 +491,18 @@ def _options(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str] | None = None, *, out: TextIO = sys.stdout, env: Mapping[str, str] = os.environ) -> int:
     options = _options(sys.argv[1:] if argv is None else argv)
     password = env.get(options.password_env) if options.user is not None else None
+    app_password = env.get(options.app_password_env) if options.email is not None else None
     try:
         if options.user is not None and not password:
             raise CannotStart(f"--user {options.user} needs its password in ${options.password_env}")
-        api = Api(options.address, options.user, password, options.insecure)
+        if options.email is not None and not app_password:
+            raise CannotStart(f"--email {options.email} needs its password in ${options.app_password_env}")
+        api = Api(options.address, options.user, password, options.insecure, signs_in=options.email is not None)
+        if options.email is not None:
+            try:
+                api.sign_in(options.email, app_password, env.get(options.totp_env))
+            except Fail as exc:
+                raise CannotStart(str(exc)) from exc
     except CannotStart as exc:
         print(f"demo-check: {exc}", file=sys.stderr)
         return 2

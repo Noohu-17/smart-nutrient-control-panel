@@ -31,10 +31,11 @@ from test_read_api import CONTRACT
 
 from app.api.commands.messages import COMMAND_EXPIRY
 from app.api.commands.schemas import CommandStatus
-from app.db.models import SentCommand
+from app.db.models import AuditLog, DoseRequest, SentCommand
 from app.db.seed import seed
 from app.main import app
 from app.worker.main import Worker
+from conftest import sign_in_as
 
 LIMITS = json.loads((CLIENT_A / "limits.json").read_text(encoding="utf-8"))["zones"]["Z1"]
 CMD_TOPIC = f"farm/{SITE}/zone/Z1/cmd"
@@ -121,7 +122,36 @@ def test_the_dose_command_is_the_one_in_the_contract(api, worker, publisher):
         assert command[key] == LIMITS["dose"][key]  # from limits.json
     assert parse_time(command["expiresAt"]) - parse_time(command["issuedAt"]) == COMMAND_EXPIRY
     assert command["ts"] == command["issuedAt"]
-    assert not {"issuedBy", "bootId", "seq"} & command.keys()
+    assert command["issuedBy"] == "user:test-user"  # the signed-in caller, for the audit trail (§7.1)
+    assert not {"bootId", "seq"} & command.keys()
+
+
+def test_every_dose_records_who_reviewed_it_and_who_confirmed_it(api, worker, publisher, seeded):
+    sign_in_as(app, "OPERATOR", user_id="op-7")
+    request_id = reviewed(api, worker)
+    sign_in_as(app, "AGRONOMIST", user_id="ag-3")
+    answer = confirm(api, request_id, uuid.uuid4()).json()
+    [(_, command)] = publisher.sent
+    assert command["issuedBy"] == "user:ag-3"
+    with seeded.connect() as connection:
+        assert connection.scalar(select(DoseRequest.requested_by)) == "op-7"
+        assert connection.scalar(select(SentCommand.issued_by)) == "ag-3"
+        logged = connection.execute(
+            select(AuditLog.user_id, AuditLog.role, AuditLog.action, AuditLog.target).order_by(AuditLog.at)
+        ).all()
+    assert logged == [
+        ("op-7", "OPERATOR", "DOSE_REVIEW", request_id),
+        ("ag-3", "AGRONOMIST", "DOSE_CONFIRM", answer["cmdId"]),
+    ]
+
+
+def test_a_viewer_cant_review_or_confirm_a_dose(api, worker, publisher, seeded):
+    request_id = reviewed(api, worker)  # reviewed by an Owner
+    sign_in_as(app, "VIEWER")
+    for refused in (api.post("/api/dose-requests", json=DOSE), confirm(api, request_id, uuid.uuid4())):
+        assert (refused.status_code, error_code(refused)) == (403, "FORBIDDEN")
+    assert publisher.sent == []
+    assert saved_commands(seeded) == []
 
 
 def change_limits(pack, change):

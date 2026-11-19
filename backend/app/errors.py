@@ -28,8 +28,8 @@ def _error(
 class ApiError(HTTPException):
     """An error with a code of its own, such as a reason code from §8.4 (INVALID_COMMAND)."""
 
-    def __init__(self, status: int, code: str, message: str):
-        super().__init__(status, message)
+    def __init__(self, status: int, code: str, message: str, headers: dict[str, str] | None = None):
+        super().__init__(status, message, headers)
         self.code = code
 
 

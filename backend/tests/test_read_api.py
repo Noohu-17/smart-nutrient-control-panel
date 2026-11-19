@@ -35,6 +35,7 @@ from app.db.models import Reading
 from app.db.seed import seed
 from app.main import app
 from app.worker.store import last_seen_times, reading_rows, store_message
+from conftest import sign_in_as
 
 ORG = "client_A"
 CONTRACT = Path(__file__).resolve().parents[2] / "docs" / "contract.md"
@@ -93,10 +94,12 @@ def pack(tmp_path) -> Path:
     return write_pack(tmp_path / ORG)
 
 
-def api_client(client_dir: Path, engine) -> TestClient:
+def api_client(client_dir: Path, engine, role: str = "OWNER") -> TestClient:
+    """A client signed in as `role` (conftest.sign_in_as): these tests aren't about signing in."""
     settings = dataclasses.replace(load_settings(), client_dir=client_dir)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_engine] = lambda: engine
+    sign_in_as(app, role)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -164,6 +167,7 @@ def test_farm_answers_for_the_real_config_pack_as_the_fake_api_does():
         pytest.skip("no config pack here (the Docker test image has none)")
     layout = json.loads((client_dir / "layout.json").read_text(encoding="utf-8"))
     features = json.loads((client_dir / "features.json").read_text(encoding="utf-8"))
+    sign_in_as(app)
     client = TestClient(app)
     assert client.get("/api/farm").json() == layout | {"features": features}
 

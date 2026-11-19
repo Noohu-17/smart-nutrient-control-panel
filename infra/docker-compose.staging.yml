@@ -24,6 +24,7 @@ x-backend-env: &backend-env
   DB_NAME: ${POSTGRES_DB:?set in infra/.env.staging}
   DB_USER: ${POSTGRES_USER:?set in infra/.env.staging}
   DB_PASSWORD: ${POSTGRES_PASSWORD:?set in infra/.env.staging}
+  SESSION_SECRET: ${SESSION_SECRET:?set in infra/.env.staging}
   MQTT_HOST: mqtt
   MQTT_PORT: "1883"
   CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}

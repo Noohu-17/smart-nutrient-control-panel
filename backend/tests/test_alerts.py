@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import select, update
+from sqlalchemy import insert, select, update
 from test_dose_requests import ORG, SITE, handle, telemetry, write_dosing_pack
 from test_event import event
 from test_read_api import api_client
@@ -17,10 +17,11 @@ from test_read_api import api_client
 from app.alerts import AlertRules
 from app.api.pack import SiteRef
 from app.api.sim.routes import record_reset
-from app.db.models import Alert
+from app.db.models import Alert, AuditLog, User
 from app.db.seed import seed
 from app.main import app
 from app.worker.main import Worker
+from conftest import sign_in_as
 
 TELEMETRY = "farm/siet-ph1/zone/Z1/telemetry"
 EVENTS = "farm/siet-ph1/zone/Z1/event"
@@ -199,25 +200,37 @@ def test_an_info_event_on_its_own_raises_nothing(api, worker):
 # --- Acknowledge, filters and reset -------------------------------------------------------------
 
 
-def test_acknowledging_records_who_and_keeps_the_alert_until_its_condition_ends(api, readings):
+def test_acknowledging_records_who_and_keeps_the_alert_until_its_condition_ends(api, readings, seeded):
+    with seeded.begin() as connection:
+        connection.execute(insert(User).values(
+            org_id=ORG, site_id=SITE, user_id="op-1", name="Olive Operator", email="olive@example.com",
+            role="OPERATOR",
+        ))
+    sign_in_as(app, "OPERATOR", user_id="op-1")
     readings.send({"ec": 2.61})
     alert_id = only(api)["id"]
-    response = api.post(f"/api/alerts/{alert_id}/ack", headers={"X-Demo-Role": "Operator"})
+    response = api.post(f"/api/alerts/{alert_id}/ack")
     assert response.status_code == 200, response.text
-    assert (response.json()["status"], response.json()["acknowledgedBy"]) == ("ACKNOWLEDGED", "Operator")
+    assert (response.json()["status"], response.json()["acknowledgedBy"]) == ("ACKNOWLEDGED", "Olive Operator")
     assert alerts(api, status="OPEN") == []
     assert len(alerts(api, status="ACKNOWLEDGED")) == 1
     readings.send({"ec": 1.9})
-    assert only(api, status="CLEARED")["acknowledgedBy"] == "Operator"
+    assert only(api, status="CLEARED")["acknowledgedBy"] == "Olive Operator"
+    with seeded.connect() as connection:
+        assert connection.scalar(select(Alert.acked_by)) == "op-1"
+        logged = connection.execute(select(AuditLog.user_id, AuditLog.role, AuditLog.action, AuditLog.target)).all()
+    assert logged == [("op-1", "OPERATOR", "ALERT_ACK", alert_id)]
 
 
 def test_a_viewer_cant_acknowledge_and_an_unknown_alert_is_a_404(api, readings):
     readings.send({"ec": 2.61})
     alert_id = only(api)["id"]
-    refused = api.post(f"/api/alerts/{alert_id}/ack", headers={"X-Demo-Role": "Viewer"})
+    sign_in_as(app, "VIEWER")
+    refused = api.post(f"/api/alerts/{alert_id}/ack")
     assert (refused.status_code, refused.json()["error"]["code"]) == (403, "FORBIDDEN")
     assert only(api)["status"] == "OPEN"
-    missing = api.post("/api/alerts/nope/ack", headers={"X-Demo-Role": "Owner"})
+    sign_in_as(app, "OWNER")
+    missing = api.post("/api/alerts/nope/ack")
     assert (missing.status_code, missing.json()["error"]["code"]) == (404, "NOT_FOUND")
 
 

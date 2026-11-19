@@ -15,10 +15,25 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import Engine
 
+from app.auth.access import Caller, gate, signed_in, stop_caller
+from app.auth.sessions import Token
 from app.config import load_settings
 from app.db.engine import create_db_engine
 
 BACKEND = Path(__file__).resolve().parents[1]
+
+
+def sign_in_as(app, role: str = "OWNER", user_id: str = "test-user") -> Caller:
+    """Let every request through as a signed-in `role`, without sessions or a database, for tests
+    that aren't about signing in (test_auth.py tests the real thing). The role checks still run."""
+    from datetime import UTC, datetime, timedelta
+
+    token = Token("test-session", user_id, datetime.now(UTC) + timedelta(hours=1))
+    caller = Caller(user_id, f"Test {role.title()}", f"{user_id}@example.com", role, token)
+    app.dependency_overrides[gate] = lambda: None
+    app.dependency_overrides[signed_in] = lambda: caller
+    app.dependency_overrides[stop_caller] = lambda: token
+    return caller
 
 
 def run_alembic(engine: Engine, action: str, revision: str) -> None:

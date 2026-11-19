@@ -12,9 +12,11 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import FastAPI, Path
+from fastapi import Depends, FastAPI, Path
 from sqlalchemy import Connection, insert
 
+from ..auth import audit
+from ..auth.access import STAFF, Caller, allowed
 from ..config import Settings
 from ..db.models import DoseRequest
 from ..errors import ApiError
@@ -33,6 +35,9 @@ from .schemas import (
 )
 
 DAY = timedelta(hours=24)
+
+may_dose = allowed(*STAFF, why="Viewers can’t dose")  # §11.2: Owner, Agronomist, Operator
+MayDose = Annotated[Caller, Depends(may_dose)]
 
 
 def _zone_and_dosing(settings: Settings, zone_id: str) -> tuple[FarmZone, ZoneDosing]:
@@ -75,9 +80,10 @@ def _dosed_24h(
 
 
 def create_dose_request(
-    body: DoseRequestBody, settings: SettingsDep, engine: EngineDep, site: SiteDep
+    body: DoseRequestBody, settings: SettingsDep, engine: EngineDep, site: SiteDep, caller: MayDose
 ) -> DoseReview:
-    """Review a dose. 201 with every check, whatever they say; canConfirm tells if it may go on."""
+    """Review a dose. 201 with every check, whatever they say; canConfirm tells if it may go on.
+    403 for a Viewer (§13)."""
     zone, dosing = _zone_and_dosing(settings, body.zone)
     try:
         validate_lines(zone, body.lines)
@@ -112,8 +118,11 @@ def create_dose_request(
                 estimate=saved["estimate"],
                 can_confirm=answer.can_confirm,
                 limits=dosing.limits,
+                requested_by=caller.user_id,
             )
         )
+        audit.write(connection, site, caller.user_id, caller.role, "DOSE_REVIEW", answer.id,
+                    {"zone": zone.id, "lines": saved["lines"], "canConfirm": answer.can_confirm})
         connection.commit()
     return answer
 
@@ -165,7 +174,7 @@ def add_dose_api(app: FastAPI) -> None:
         methods=["POST"],
         status_code=201,
         response_model=DoseReview,
-        responses=_errors(404, 422, 500, 503),
+        responses=_errors(401, 403, 404, 422, 500, 503),
         tags=["dosing"],
     )
     app.add_api_route(

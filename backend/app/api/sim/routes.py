@@ -8,8 +8,10 @@ exist only on sites whose features.json has "playground": true: elsewhere every 
 On a playground site, a hold or drill aimed at a LIVE zone (layout.json source, §2.4), or at its
 controller, is refused with 409 LIVE_ZONE and never reaches the simulator, and so is a reset while
 any zone is live (T1-33): real hardware runs those zones, on real time.
-Each call is logged on the api.sim logger, with its body and the simulator's answer. Roles (§11.4)
-wait for sign-in. A reset the simulator accepted is also recorded in the database, so the 24-hour
+Each call is logged on the api.sim logger, with its body and the simulator's answer. Reading is
+for every signed-in role; changing the farm is for Owner, Agronomist and Operator, and a reset for
+the Owner only (§11.4). Each change the simulator accepts is in the audit log, with who made it. A
+reset the simulator accepted is also recorded in the database, so the 24-hour
 totals start again (§11.4, T1-25).
 
 Plain functions, so FastAPI runs them in its thread pool while they wait for the simulator.
@@ -31,6 +33,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 
 from ... import alerts
+from ...auth import audit
+from ...auth.access import OWNER, STAFF, Caller, allowed
 from ...db.models import PlaygroundReset
 from ...errors import ApiError, _error
 from ..pack import PackError, SiteRef, _read_json, _without_meta, read_farm
@@ -94,6 +98,11 @@ def get_simulator(settings: SettingsDep) -> Simulator | None:
 
 
 SimulatorDep = Annotated[Simulator | None, Depends(get_simulator)]
+
+may_play = allowed(*STAFF, why="Viewers can’t change the simulated farm")  # §11.4
+may_reset = allowed(OWNER, why="Only an Owner can reset the simulated farm")  # §11.4
+MayPlay = Annotated[Caller, Depends(may_play)]
+MayReset = Annotated[Caller, Depends(may_reset)]
 
 
 def _one_line(text: str) -> str:
@@ -170,14 +179,24 @@ def _body(model: FaultBody | HoldBody | SpeedBody) -> dict[str, Any]:
     return model.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
+def _audited(answer: Response, engine: Engine, site: SiteRef, caller: Caller, action: str,
+             target: str | None = None, detail: dict[str, Any] | None = None) -> Response:
+    """Add a change the simulator accepted to the audit log. It has happened already, so a database
+    that can't take the row doesn't change the answer (audit.write_after logs it instead)."""
+    if 200 <= answer.status_code < 300:
+        audit.write_after(engine, site, caller.user_id, caller.role, action, target, detail)
+    return answer
+
+
 def get_state(simulator: SimulatorDep) -> Response:
     """The current scenario, simulated clock, speed, weather, running drills and held values."""
     return _forward(simulator, "GET", "/state")
 
 
-def post_speed(body: SpeedBody, simulator: SimulatorDep) -> Response:
+def post_speed(body: SpeedBody, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayPlay) -> Response:
     """Clock speed: 0 (pause), 1, 60 or 288."""
-    return _forward(simulator, "POST", "/speed", _body(body))
+    sent = _body(body)
+    return _audited(_forward(simulator, "POST", "/speed", sent), engine, site, caller, "SIM_SPEED", detail=sent)
 
 
 def record_reset(engine: Engine, site: SiteRef, at: datetime) -> None:
@@ -202,11 +221,11 @@ def record_reset(engine: Engine, site: SiteRef, at: datetime) -> None:
 
 
 def post_reset(
-    settings: SettingsDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep
+    settings: SettingsDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayReset
 ) -> Response:
     """Back to the start of the current scenario: all drills off, levels and readings reset, and
-    the 24-hour totals start again. Refused while any zone is live: a reset is for the whole site,
-    and a live zone's totals and alerts are real (T1-33)."""
+    the 24-hour totals start again. Owner only (§11.4). Refused while any zone is live: a reset is
+    for the whole site, and a live zone's totals and alerts are real (T1-33)."""
     live = [zone.id for zone in read_farm(settings.client_dir).zones if zone.source == "LIVE"]
     if live:
         log.info("POST /reset refused: live zones %s", ", ".join(live))
@@ -215,19 +234,25 @@ def post_reset(
     if 200 <= answer.status_code < 300:
         # After the answer: a dose the reset stopped is reported before it, so it doesn't count.
         record_reset(engine, site, datetime.now(UTC))
-    return answer
+    return _audited(answer, engine, site, caller, "SIM_RESET")
 
 
-def post_fault(body: FaultBody, settings: SettingsDep, simulator: SimulatorDep) -> Response:
+def post_fault(
+    body: FaultBody, settings: SettingsDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayPlay
+) -> Response:
     """Trigger ("on": true) or Fix ("on": false) a failure drill (§11.4.3); never on a live zone."""
     refuse_live_target(settings, body.target, f"POST /faults {body.kind}")
-    return _forward(simulator, "POST", "/faults", _body(body))
+    sent = _body(body)
+    return _audited(_forward(simulator, "POST", "/faults", sent), engine, site, caller, "SIM_FAULT", detail=sent)
 
 
-def post_hold(body: HoldBody, settings: SettingsDep, simulator: SimulatorDep) -> Response:
+def post_hold(
+    body: HoldBody, settings: SettingsDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayPlay
+) -> Response:
     """Set a value and hold it (§11.4.2); never on a live zone."""
     refuse_live_target(settings, body.target, "POST /holds")
-    return _forward(simulator, "POST", "/holds", _body(body))
+    sent = _body(body)
+    return _audited(_forward(simulator, "POST", "/holds", sent), engine, site, caller, "SIM_HOLD", detail=sent)
 
 
 def delete_hold(
@@ -235,15 +260,19 @@ def delete_hold(
     metric: Annotated[SimId, Path()],
     settings: SettingsDep,
     simulator: SimulatorDep,
+    engine: EngineDep,
+    site: SiteDep,
+    caller: MayPlay,
 ) -> Response:
     """Release one held value; a live zone has none."""
     refuse_live_target(settings, target, "DELETE /holds")
-    return _forward(simulator, "DELETE", f"/holds/{quote(target, safe='')}/{quote(metric, safe='')}")
+    answer = _forward(simulator, "DELETE", f"/holds/{quote(target, safe='')}/{quote(metric, safe='')}")
+    return _audited(answer, engine, site, caller, "SIM_RELEASE", detail={"target": target, "metric": metric})
 
 
-def post_release_all(simulator: SimulatorDep) -> Response:
+def post_release_all(simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayPlay) -> Response:
     """Release every held value."""
-    return _forward(simulator, "POST", "/holds/release-all")
+    return _audited(_forward(simulator, "POST", "/holds/release-all"), engine, site, caller, "SIM_RELEASE_ALL")
 
 
 def get_scenario_options(settings: SettingsDep) -> dict[str, Any]:
@@ -259,7 +288,7 @@ def get_scenario_options(settings: SettingsDep) -> dict[str, Any]:
     return {key: value for key, value in _without_meta(options).items() if key != "v"}
 
 
-FORWARDED = (400, 404, 409, 422, 500, 503)
+FORWARDED = (400, 401, 403, 404, 409, 422, 500, 503)
 
 ROUTES = (
     ("GET", "/api/sim/state", get_state, FORWARDED),

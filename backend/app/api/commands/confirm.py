@@ -25,6 +25,8 @@ from fastapi import HTTPException
 from sqlalchemy import Connection, Engine, Row, func, insert, select, update
 from sqlalchemy.exc import IntegrityError
 
+from ...auth import audit
+from ...auth.access import Caller
 from ...config import Settings
 from ...db.models import DoseRequest, SentCommand
 from ...errors import ApiError
@@ -50,12 +52,15 @@ def confirm(
     publisher: Publisher,
     request_id: str,
     key: str | None,
+    caller: Caller,
 ) -> CommandSent:
-    """Check the dose again and send it: the answer once the broker has it, or the first answer again."""
+    """Check the dose again and send it: the answer once the broker has it, or the first answer again.
+    The command names `caller` in issuedBy, sent_command.issued_by and the audit log."""
     with _database(engine) as connection, _one_at_a_time(connection, site, request_id):
         command = _command_of(connection, site, request_id)
         if command is None:
-            _save(connection, site, request_id, key, _checked_dose(connection, settings, site, request_id))
+            dose = _checked_dose(connection, settings, site, request_id, caller.issued_by)
+            _save(connection, site, request_id, key, dose, caller)
             command = _command_of(connection, site, request_id)
         elif key is None or key != command.idempotency_key:
             raise HTTPException(
@@ -116,7 +121,7 @@ def _refuse_if_blocked(checks: Iterable[DoseCheck]) -> None:
 
 
 def _checked_dose(
-    connection: Connection, settings: Settings, site: SiteRef, request_id: str
+    connection: Connection, settings: Settings, site: SiteRef, request_id: str, issued_by: str
 ) -> messages.Command:
     """The DOSE for a dose request, once both its review and a new one of the zone as it is now pass."""
     saved = connection.execute(
@@ -161,6 +166,7 @@ def _checked_dose(
         limits=saved.limits,  # the snapshot the review used (§7.2)
         run=_run_settings(settings.client_dir, zone.id),
         now=now,
+        issued_by=issued_by,
     )
 
 
@@ -175,15 +181,23 @@ def _run_settings(client_dir: Path, zone_id: str) -> dict[str, Any]:
 
 
 def _save(
-    connection: Connection, site: SiteRef, request_id: str, key: str | None, command: messages.Command
+    connection: Connection,
+    site: SiteRef,
+    request_id: str,
+    key: str | None,
+    command: messages.Command,
+    caller: Caller,
 ) -> None:
-    """Keep the command before it is sent, so a repeat finds it whatever happens next."""
+    """Keep the command before it is sent, so a repeat finds it whatever happens next, and who
+    confirmed it in the audit log."""
     try:
         connection.execute(
             insert(SentCommand).values(
                 {**sent.row(site, command), "dose_request_id": request_id, "idempotency_key": key}
             )
         )
+        audit.write(connection, site, caller.user_id, caller.role, "DOSE_CONFIRM", command.cmd_id,
+                    {"doseRequest": request_id, "target": command.body["target"], "lines": command.body["lines"]})
         connection.commit()
     except IntegrityError as exc:  # the dose request is locked, so it is the key
         connection.rollback()

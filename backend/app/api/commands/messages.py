@@ -27,11 +27,13 @@ def _command(
     topic: str,
     now: datetime,
     expiry: timedelta,
+    issued_by: str | None = None,
     **fields: Any,
 ) -> Command:
     """One command in the §7.1 envelope: device CLOUD, and no bootId or seq, as in its example.
 
-    issuedBy, which is for the audit trail only, is left out until people sign in.
+    issuedBy ("user:<id>", from the signed-in caller) is for the audit trail only: controllers never
+    decide anything with it (§7.1). It is left out when no one signed in sent the command.
     """
     cmd_id = str(uuid.uuid4())
     issued_at = contract_time(now)
@@ -46,29 +48,30 @@ def _command(
         "kind": kind,
         "issuedAt": issued_at,
         "expiresAt": contract_time(now + expiry),
+        **({"issuedBy": issued_by} if issued_by else {}),
         "target": target,
         **fields,
     }
     return Command(cmd_id, topic, body)
 
 
-def stop(site: str, scope: StopScope, zone: str | None, now: datetime) -> Command:
+def stop(site: str, scope: StopScope, zone: str | None, now: datetime, issued_by: str | None = None) -> Command:
     """STOP (§7.4), to every controller on farm/{site}/stop; each acts on the parts it owns."""
     if (scope == "ZONE") != (zone is not None):
         raise ValueError("a STOP names a zone with scope ZONE, and only then")
     target = {"scope": scope} if zone is None else {"scope": scope, "zone": zone}
-    return _command(site, "STOP", target, f"farm/{site}/stop", now, STOP_EXPIRY)
+    return _command(site, "STOP", target, f"farm/{site}/stop", now, STOP_EXPIRY, issued_by)
 
 
-def resume_zone(site: str, zone: str, now: datetime) -> Command:
+def resume_zone(site: str, zone: str, now: datetime, issued_by: str | None = None) -> Command:
     """RESUME (§7.8) for one zone, to its controller."""
-    return _command(site, "RESUME", {"zone": zone}, f"farm/{site}/zone/{zone}/cmd", now, COMMAND_EXPIRY)
+    return _command(site, "RESUME", {"zone": zone}, f"farm/{site}/zone/{zone}/cmd", now, COMMAND_EXPIRY, issued_by)
 
 
-def resume_climate(site: str, now: datetime) -> Command:
+def resume_climate(site: str, now: datetime, issued_by: str | None = None) -> Command:
     """RESUME (§7.8) for climate, to CC1."""
     target = {"scope": "CLIMATE"}
-    return _command(site, "RESUME", target, f"farm/{site}/climate/cmd", now, COMMAND_EXPIRY)
+    return _command(site, "RESUME", target, f"farm/{site}/climate/cmd", now, COMMAND_EXPIRY, issued_by)
 
 
 def dose(
@@ -80,6 +83,7 @@ def dose(
     limits: dict[str, Any],
     run: dict[str, Any],
     now: datetime,
+    issued_by: str | None = None,
 ) -> Command:
     """DOSE (§7.2), to the zone's controller: the lines, the order they run in, the limits snapshot,
     and `run`, which holds mixWaitS, maxDurationS and tolerancePct."""
@@ -90,6 +94,7 @@ def dose(
         f"farm/{site}/zone/{zone}/cmd",
         now,
         COMMAND_EXPIRY,
+        issued_by,
         lines=lines,
         order=order,
         mixWaitS=run["mixWaitS"],

@@ -1,8 +1,11 @@
-"""Smart Nutrient Advisor back end (FastAPI). Every route lives under /api."""
+"""Smart Nutrient Advisor back end (FastAPI). Every route lives under /api.
+
+Every route needs a signed-in user except /api/health and /api/auth/login (app.auth.access.gate).
+"""
 
 import asyncio
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 
 from .api.alerts import add_alert_api
@@ -10,6 +13,8 @@ from .api.commands import add_command_api
 from .api.dose_requests import add_dose_api
 from .api.routes import add_read_api
 from .api.sim import add_sim_api
+from .auth.access import gate
+from .auth.routes import add_auth_api
 from .config import load_settings
 from .errors import add_error_handlers
 from .health import UP, check_broker, check_database
@@ -21,8 +26,10 @@ app = FastAPI(
     docs_url="/api/docs" if settings.api_docs_enabled else None,
     openapi_url="/api/openapi.json" if settings.api_docs_enabled else None,
     redoc_url=None,
+    dependencies=[Depends(gate)],
 )
 add_error_handlers(app)
+add_auth_api(app)
 add_read_api(app)
 add_dose_api(app)
 add_command_api(app)

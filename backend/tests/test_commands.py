@@ -23,7 +23,10 @@ from app.worker.main import Worker
 
 ORG, SITE = "client_A", LAYOUT["site"]
 CMD_ID = "6f1c2a90-3d1e-4c7b-9f52-2b8f0e6a1c44"
-ENVELOPE_KEYS = {"v", "type", "msgId", "ts", "site", "device", "cmdId", "kind", "issuedAt", "expiresAt", "target"}
+# issuedBy names the signed-in caller (§7.1): "user:test-user" from conftest.sign_in_as.
+ENVELOPE_KEYS = {
+    "v", "type", "msgId", "ts", "site", "device", "cmdId", "kind", "issuedAt", "expiresAt", "issuedBy", "target",
+}
 
 
 class FakePublisher:
@@ -212,9 +215,11 @@ def test_stop_publishes_a_stop_and_answers_202(api, publisher, body, target):
     [(topic, command)] = publisher.sent
     assert topic == f"farm/{SITE}/stop"
     assert set(command) == ENVELOPE_KEYS
+    assert command["issuedBy"] == "user:test-user"
     assert command | {"msgId": None, "ts": None, "issuedAt": None, "expiresAt": None} == {
         "v": 1, "type": "CMD", "msgId": None, "ts": None, "site": SITE, "device": "CLOUD",
-        "cmdId": answer["cmdId"], "kind": "STOP", "issuedAt": None, "expiresAt": None, "target": target,
+        "cmdId": answer["cmdId"], "kind": "STOP", "issuedAt": None, "expiresAt": None,
+        "issuedBy": "user:test-user", "target": target,
     }
     issued = parse_time(command["issuedAt"])
     assert before <= issued <= datetime.now(UTC)
@@ -304,6 +309,7 @@ def test_resume_publishes_a_resume_to_its_controller(api, worker, publisher, bod
     [(sent_on, command)] = publisher.sent
     assert sent_on == topic
     assert set(command) == ENVELOPE_KEYS
+    assert command["issuedBy"] == "user:test-user"
     assert (command["type"], command["kind"], command["device"]) == ("CMD", "RESUME", "CLOUD")
     assert (command["cmdId"], command["site"], command["target"]) == (answer["cmdId"], SITE, target)
     assert parse_time(command["expiresAt"]) - parse_time(command["issuedAt"]) == timedelta(seconds=60)

@@ -55,14 +55,22 @@ Before the farm's gateway can connect, the broker needs its certificate and the 
 
    On `localhost`, Caddy uses its own certificate, so add `-k` to curl and accept the browser's warning. Without the login every address answers `401`.
 
-4. Run the demo check, after every deploy and again before the demo. It plays the demo through the API (a dose, Stop and Resume, a blocked dose, a sensor fault) and prints PASS or FAIL for each step, then puts the demo farm back with Reset. The password goes in an environment variable, never on the command line:
+4. The first time only, make the site's first Owner. It prints a random password once: put it in the password manager. Every API call except health needs a signed-in user (T1-35). At the first sign-in the Owner sets up two-factor with an authenticator app, then adds everyone else (`backend/app/auth/README.md`):
+
+   ```
+   docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml exec api python -m app.auth.users create-owner --email <email> --name "<name>"
+   ```
+
+5. Run the demo check, after every deploy and again before the demo. It plays the demo through the API (a dose, Stop and Resume, a blocked dose, a sensor fault) and prints PASS or FAIL for each step, then puts the demo farm back with Reset. It signs in to the site and to the app as the Owner. The passwords go in environment variables, never on the command line:
 
    ```
    $env:DEMO_CHECK_PASSWORD = "<the site password>"          # PowerShell; export DEMO_CHECK_PASSWORD=... in bash
-   python scripts/demo-check.py https://<SITE_ADDRESS> --user <SITE_USER> --speed 60
+   $env:DEMO_CHECK_APP_PASSWORD = "<the Owner's password>"
+   $env:DEMO_CHECK_TOTP_SECRET = "<the Owner's two-factor secret>"   # the secret shown at two-factor setup
+   python scripts/demo-check.py https://<SITE_ADDRESS> --user <SITE_USER> --email <Owner's email> --speed 60
    ```
 
-   `--speed 60` makes it take about a minute; Reset puts the start speed back. On `localhost` add `--insecure`, for the same certificate reason as `-k`. Against the dev stack it needs no login: `python scripts/demo-check.py http://localhost:8000 --speed 60`. On a site without the playground it runs only the health and readings checks, so it never doses a real farm.
+   `--speed 60` makes it take about a minute; Reset puts the start speed back. On `localhost` add `--insecure`, for the same certificate reason as `-k`. Against the dev stack it needs no site login, only the app's: `python scripts/demo-check.py http://localhost:8000 --email <email> --speed 60`, after making an Owner there with `python -m app.auth.users create-owner` from `backend/`. On a site without the playground it runs only the health and readings checks, so it never doses a real farm.
 
 Stop it with `down` in place of `up -d --build`. Data stays in Docker volumes (database, broker, simulator `.state`, certificates); `down -v` deletes all of it. The broker's logins and certificate are files in `infra/mosquitto/staging/secrets/`, not volumes, so `down -v` keeps them.
 

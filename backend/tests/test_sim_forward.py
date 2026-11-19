@@ -31,6 +31,7 @@ from app.api.sim.client import HttpSimulator
 from app.api.sim.routes import ROUTES, get_simulator
 from app.config import load_settings
 from app.main import app
+from conftest import sign_in_as
 
 REPO_PACK = load_settings().client_dir
 SCENARIOS = json.loads((REPO_PACK / "scenarios.json").read_text(encoding="utf-8"))
@@ -175,10 +176,12 @@ def write_sim_pack(folder: Path, features: dict = FEATURES) -> Path:
 NO_DATABASE = create_engine("postgresql+psycopg://nobody@127.0.0.1:1/none", connect_args={"connect_timeout": 1})
 
 
-def client(pack: Path, url: str | None) -> TestClient:
+def client(pack: Path, url: str | None, role: str = "OWNER") -> TestClient:
+    """A client signed in as `role` (conftest.sign_in_as), with no database."""
     settings = dataclasses.replace(load_settings(), client_dir=pack, sim_control_url=url)
     app.dependency_overrides[get_settings] = lambda: settings
     app.dependency_overrides[get_engine] = lambda: NO_DATABASE
+    sign_in_as(app, role)
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -588,7 +591,7 @@ def test_openapi_lists_the_routes_with_the_11_1_error_body():
             "$ref": "#/components/schemas/ErrorBody"}
 
 
-SERVER = {"APP_ENV": "staging", "DB_PASSWORD": "a-real-password"}
+SERVER = {"APP_ENV": "staging", "DB_PASSWORD": "a-real-password", "SESSION_SECRET": "a-real-session-secret-of-at-least-32-chars"}
 
 
 @pytest.mark.parametrize(
