@@ -39,11 +39,11 @@ async function enableMocking() {
 void enableMocking().then(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
-      <SessionProvider>
-        <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={queryClient}>
+        <SessionProvider>
           <RouterProvider router={router} />
-        </QueryClientProvider>
-      </SessionProvider>
+        </SessionProvider>
+      </QueryClientProvider>
     </StrictMode>,
   );
 });

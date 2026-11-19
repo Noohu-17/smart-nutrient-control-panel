@@ -2,11 +2,12 @@
 import { describe, expect, it } from "vitest";
 import configScenarios from "../../../config/clients/client_A/scenarios.json";
 import type { ApiErrorBody, ScenarioOptions, SimState } from "../api/types";
+import { csrfHeaders } from "./session";
 
 const send = (method: string, path: string, body?: unknown) =>
   fetch(`/api${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...csrfHeaders() }, // signed in by test/setup.ts
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 const state = async () => (await (await send("GET", "/sim/state")).json()) as SimState;

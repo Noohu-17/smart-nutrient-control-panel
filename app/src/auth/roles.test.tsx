@@ -5,11 +5,13 @@ import { renderAt } from "../test/render";
 
 const button = (name: string) => screen.getByRole("button", { name });
 
-/** The only way to change role: sign out, then sign in as someone else (back on the same screen). */
-async function signInAs(role: string) {
+/** The only way to change role: sign out, then sign in as someone else (back on the same screen,
+    which loads again: sign-out drops the last user's data). */
+async function signInAs(role: string, waitFor: string) {
   await userEvent.click(button("Sign out"));
   await userEvent.click(await screen.findByRole("button", { name: new RegExp(`^${role}`) }));
-  await screen.findByRole("button", { name: "Sign out" });
+  await screen.findByText(`· ${role}`, { exact: false });
+  await screen.findByRole("button", { name: waitFor });
 }
 
 describe("Roles", () => {
@@ -17,7 +19,7 @@ describe("Roles", () => {
     renderAt("/", { role: null });
     await userEvent.click(await screen.findByRole("button", { name: /Viewer/ }));
     expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.getByRole("banner")).toHaveTextContent("Signed in as Viewer");
+    expect(screen.getByRole("banner")).toHaveTextContent("Signed in as Demo Viewer · Viewer");
 
     await userEvent.click(button("Sign out"));
     expect(await screen.findByRole("heading", { name: "Sign in as" })).toBeInTheDocument();
@@ -26,7 +28,7 @@ describe("Roles", () => {
   it("keeps the signed-in role: there is no way to switch it without signing out", async () => {
     renderAt("/", { role: "Owner" });
     expect(await screen.findByRole("heading", { name: "Overview" })).toBeInTheDocument();
-    expect(screen.getByRole("banner")).toHaveTextContent("Signed in as Owner");
+    expect(screen.getByRole("banner")).toHaveTextContent("Signed in as Demo Owner · Owner");
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 
@@ -38,14 +40,14 @@ describe("Roles", () => {
 
     expect(locked()).toEqual([]); // Owner
 
-    await signInAs("Agronomist");
+    await signInAs("Agronomist", "Dose");
     expect(locked()).toEqual(["Clear fault"]);
     expect(button("Clear fault")).toHaveAccessibleDescription("Only Owners clear a latched fault");
 
-    await signInAs("Operator");
+    await signInAs("Operator", "Dose");
     expect(locked()).toEqual(["Change recipe", "Clear fault"]);
 
-    await signInAs("Viewer");
+    await signInAs("Viewer", "Dose");
     expect(locked()).toEqual(actions);
     expect(button("Dose")).toHaveAccessibleDescription("Viewers can’t operate equipment");
   });
@@ -53,7 +55,7 @@ describe("Roles", () => {
   it("locks Acknowledge and Export for a Viewer only", async () => {
     renderAt("/alerts", { role: "Viewer" });
     expect(await screen.findByRole("button", { name: "Acknowledge all" })).toBeDisabled();
-    await signInAs("Operator");
+    await signInAs("Operator", "Acknowledge all");
     expect(button("Acknowledge all")).toBeEnabled();
   });
 

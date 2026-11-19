@@ -1,51 +1,61 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { setDemoRole } from "../api/client";
-import { isDemoMode } from "../config/demo";
-import { ROLES, type Role } from "./roles";
-import { SessionContext } from "./session";
+import { getJson, postJson, setCsrfToken, setOnSignedOut } from "../api/client";
+import type { Me, TotpSetup } from "../api/types";
+import { fromServerRole, toServerRole } from "./roles";
+import { SessionContext, type Session } from "./session";
 
-// fake sign-in until Track 1's auth exists: the chosen role is remembered in this browser
-const ROLE_KEY = "snm.role";
+/** T2-27 · the server's session (T1-35). The browser keeps the cookie; this keeps who it says is
+    signed in and the CSRF token. Tests pass `initialMe` (or null for signed out) and skip GET /me. */
+export function SessionProvider({ children, initialMe }: { children: ReactNode; initialMe?: Me | null }) {
+  const queryClient = useQueryClient();
+  const fromTest = initialMe !== undefined;
+  const [me, setMe] = useState<Me | null>(fromTest ? initialMe : null);
+  const [checking, setChecking] = useState(!fromTest);
 
-function savedRole(): Role | null {
-  if (!isDemoMode()) return null; // a role picked in a demo build doesn't sign anyone in outside it
-  try {
-    const role = localStorage.getItem(ROLE_KEY);
-    return (ROLES as readonly string[]).includes(role ?? "") ? (role as Role) : null;
-  } catch {
-    return null;
-  }
-}
+  // every write sends the token (client.ts)
+  useEffect(() => setCsrfToken(me?.csrfToken ?? null), [me]);
 
-function saveRole(role: Role | null) {
-  try {
-    if (role) localStorage.setItem(ROLE_KEY, role);
-    else localStorage.removeItem(ROLE_KEY);
-  } catch {
-    /* storage blocked: the role still applies in this tab */
-  }
-}
+  // any 401 means the session is over: expired, signed out elsewhere, or a new role (T1-35)
+  useEffect(() => {
+    setOnSignedOut(() => setMe(null));
+    return () => setOnSignedOut(() => {});
+  }, []);
 
-/** Tests pass `initialRole` (a role, or null for signed out) and never touch browser storage. */
-export function SessionProvider({
-  children,
-  initialRole,
-}: {
-  children: ReactNode;
-  initialRole?: Role | null;
-}) {
-  const fromTest = initialRole !== undefined;
-  const [role, setRole] = useState<Role | null>(() => (fromTest ? initialRole : savedRole()));
-  // every write carries the role, so the back end can record who did what (demo sites only)
-  useEffect(() => setDemoRole(role), [role]);
-
-  const session = useMemo(() => {
-    const change = (next: Role | null) => {
-      setRole(next);
-      if (!fromTest) saveRole(next);
+  // a reload: is this browser still signed in?
+  useEffect(() => {
+    if (fromTest) return;
+    let live = true;
+    getJson<Me>("/me")
+      .then(
+        (answer) => live && setMe(answer),
+        () => live && setMe(null),
+      )
+      .finally(() => live && setChecking(false));
+    return () => {
+      live = false;
     };
-    return { role, signIn: (r: Role) => change(r), signOut: () => change(null) };
-  }, [role, fromTest]);
+  }, [fromTest]);
+
+  const session = useMemo<Session>(() => {
+    const done = me?.step === "DONE";
+    return {
+      role: me && done ? fromServerRole(me.user.role) : null,
+      user: me && done ? { ...me.user, role: fromServerRole(me.user.role) } : null,
+      step: me && me.step !== "DONE" ? me.step : null,
+      checking,
+      signIn: async (email, password) => setMe(await postJson<Me>("/auth/login", { email, password })),
+      demoSignIn: async (role) => setMe(await postJson<Me>("/auth/demo", { role: toServerRole(role) })),
+      sendCode: async (code) => setMe(await postJson<Me>("/auth/totp", { code })),
+      setUpTwoFactor: () => postJson<TotpSetup>("/auth/totp", {}),
+      signOut: async () => {
+        // signed out here even if the server can't be reached; the cookie ends with its session
+        await postJson("/auth/logout").catch(() => {});
+        setMe(null);
+        queryClient.clear(); // nothing of this user's is shown to the next one
+      },
+    };
+  }, [me, checking, queryClient]);
 
   return <SessionContext.Provider value={session}>{children}</SessionContext.Provider>;
 }

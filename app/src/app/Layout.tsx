@@ -14,8 +14,15 @@ const hasOwnAlerts = (path: string) => path === "/" || path.startsWith("/zone/")
 /** Top bar · sidebar on desktop · bottom tabs + menu sheet on phone. Signed-in people only. */
 export function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const { role } = useSession();
+  const { role, checking } = useSession();
   const { pathname } = useLocation();
+  // a reload: wait for GET /api/me rather than send a signed-in person to the sign-in page
+  if (checking)
+    return (
+      <main className="signin">
+        <p role="status">Checking sign-in…</p>
+      </main>
+    );
   if (!role) return <Navigate to="/sign-in" replace state={{ from: pathname }} />;
   return (
     <>

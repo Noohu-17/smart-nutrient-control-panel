@@ -4,6 +4,7 @@ import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import type { ServerAlert } from "../../api/types";
 import { server } from "../../mocks/node";
+import { csrfHeaders } from "../../mocks/session";
 import { renderAt } from "../../test/render";
 
 const EC_HIGH: ServerAlert = {
@@ -66,7 +67,7 @@ describe("server alerts in the app (T2-22)", () => {
     expect(within(cleared).queryByRole("button", { name: "Acknowledge" })).not.toBeInTheDocument();
   });
 
-  it("Acknowledge sends the role and shows who acknowledged it", async () => {
+  it("Acknowledge goes with the session's CSRF token and shows who acknowledged it", async () => {
     let ackedBy: string | null = null;
     server.use(
       http.get("/api/alerts", () =>
@@ -79,15 +80,17 @@ describe("server alerts in the app (T2-22)", () => {
         }),
       ),
       http.post("/api/alerts/a1/ack", ({ request }) => {
-        ackedBy = request.headers.get("X-Demo-Role");
+        // the server knows who from the session (T1-35); the app sends only the token
+        expect(request.headers.get("X-CSRF-Token")).toBe(csrfHeaders()["X-CSRF-Token"]);
+        ackedBy = "Demo Operator";
         return HttpResponse.json({ ...EC_HIGH, status: "ACKNOWLEDGED", acknowledgedBy: ackedBy });
       }),
     );
     renderAt("/alerts", { role: "Operator" });
     const list = within(await screen.findByRole("list", { name: "Current alerts" }));
     await userEvent.click(list.getByRole("button", { name: "Acknowledge" }));
-    expect(await list.findByText(/Acknowledged by Operator/)).toBeInTheDocument();
-    expect(ackedBy).toBe("Operator");
+    expect(await list.findByText(/Acknowledged by Demo Operator/)).toBeInTheDocument();
+    expect(ackedBy).toBe("Demo Operator");
     expect(list.queryByRole("button", { name: "Acknowledge" })).not.toBeInTheDocument();
   });
 

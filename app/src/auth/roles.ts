@@ -1,8 +1,13 @@
 /* Who may do what (contract §13). A hint for the screens only: the server enforces every rule,
    and a disabled button is never the protection. */
+import type { ServerRole } from "../api/types";
 
 export const ROLES = ["Owner", "Agronomist", "Operator", "Viewer"] as const;
 export type Role = (typeof ROLES)[number];
+
+/** The server says OWNER, OPERATOR …; the screens say Owner, Operator … (T1-35). */
+export const fromServerRole = (role: ServerRole) => (role.charAt(0) + role.slice(1).toLowerCase()) as Role;
+export const toServerRole = (role: Role) => role.toUpperCase() as ServerRole;
 
 export type Permission = "operate" | "ack" | "export" | "recipe" | "clearFault" | "sim" | "simReset";
 

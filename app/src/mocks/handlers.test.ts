@@ -5,7 +5,8 @@ import configLayout from "../../../config/clients/client_A/layout.json";
 import configAlerts from "../../../config/clients/client_A/alerts.json";
 import configLimits from "../../../config/clients/client_A/limits.json";
 import configScenarios from "../../../config/clients/client_A/scenarios.json";
-import type { ClimateStatus, Farm, PowerStatus, ZoneStatus } from "../api/types";
+import type { ClimateStatus, Farm, PowerStatus, ServerRole, ZoneStatus } from "../api/types";
+import { csrfHeaders, fakeSignIn } from "./session";
 import { hold } from "./sim";
 import mockAlerts from "./data/alerts.json";
 import mockFeatures from "./data/features.json";
@@ -81,10 +82,13 @@ describe("fake API (MSW)", () => {
     await get("/zones/Z1"); // the app sees the zone first, as it does on screen
     const { items } = (await (await get("/alerts")).json()) as { items: { id: string; kind: string }[] };
     expect(items.map((a) => a.kind)).toEqual(["EC_HIGH"]);
-    const ack = (role: string) =>
-      fetch(`/api/alerts/${items[0].id}/ack`, { method: "POST", headers: { "X-Demo-Role": role } });
-    expect((await ack("Viewer")).status).toBe(403);
-    expect(((await (await ack("Owner")).json()) as { status: string }).status).toBe("ACKNOWLEDGED");
+    const ack = (role: ServerRole) => {
+      fakeSignIn(role);
+      return fetch(`/api/alerts/${items[0].id}/ack`, { method: "POST", headers: csrfHeaders() });
+    };
+    expect((await ack("VIEWER")).status).toBe(403);
+    const acked = (await (await ack("OWNER")).json()) as { status: string; acknowledgedBy: string };
+    expect(acked).toMatchObject({ status: "ACKNOWLEDGED", acknowledgedBy: "Demo Owner" });
   });
 
   it("the mock limits are an exact copy of config/clients/client_A/limits.json", () => {

@@ -256,5 +256,19 @@ export type ServerAlert = {
   acknowledgedBy: string | null;
 };
 
+/* ---------- sign-in (contract §11.1, §11.2, T1-35: backend/app/auth/README.md) ---------- */
+export type ServerRole = "OWNER" | "AGRONOMIST" | "OPERATOR" | "VIEWER";
+
+/** GET /api/me, and the answer to login, demo login and a right two-factor code. */
+export type Me = {
+  user: { id: string; name: string; email: string; role: ServerRole };
+  csrfToken: string; // sent as X-CSRF-Token on every request that isn't a GET
+  expiresAt: string; // the session ends then; every call answers 401 after it
+  step: "DONE" | "TOTP" | "TOTP_SETUP"; // what sign-in still needs: nothing, the code, or setting up two-factor
+};
+
+/** POST /api/auth/totp {} at step TOTP_SETUP: the new secret for the authenticator app. */
+export type TotpSetup = { secret: string; otpauthUri: string };
+
 /* ---------- errors (contract §11.1) ---------- */
 export type ApiErrorBody = { error: { code: string; message: string; details?: unknown } };

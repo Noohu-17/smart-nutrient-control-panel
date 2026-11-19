@@ -1,31 +1,14 @@
 // T2-17 · VITE_DEMO_MODE: on, the role picker and the "Demo · simulated farm" banner; off, neither
-import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
-import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { SessionProvider } from "../auth/SessionProvider";
 import { isDemoMode } from "../config/demo";
 import { renderAt } from "../test/render";
-import { makeQueryClient } from "./queryClient";
-import { routes } from "./routes";
 
 const BANNER = /Demo · simulated farm/;
 
 afterEach(() => {
   vi.unstubAllEnvs();
-  localStorage.clear();
 });
-
-/** The real app with the session read from browser storage, as main.tsx starts it. */
-function renderFromStorage(path: string) {
-  return render(
-    <SessionProvider>
-      <QueryClientProvider client={makeQueryClient({ retry: false })}>
-        <RouterProvider router={createMemoryRouter(routes, { initialEntries: [path] })} />
-      </QueryClientProvider>
-    </SessionProvider>,
-  );
-}
 
 describe("isDemoMode", () => {
   it("is on only with VITE_DEMO_MODE=true in a build, and on in development unless set to false", () => {
@@ -64,12 +47,13 @@ describe("demo mode on", () => {
 });
 
 describe("demo mode off", () => {
-  it("has no picker and says real sign-in is coming", async () => {
+  it("has no picker: email and password instead (T2-27)", async () => {
     vi.stubEnv("VITE_DEMO_MODE", "false");
     renderAt("/sign-in", { role: null });
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
-    expect(screen.getByText(/Sign-in with your own account is coming soon/)).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Owner/ })).not.toBeInTheDocument();
     expect(screen.queryByText(BANNER)).not.toBeInTheDocument();
   });
 
@@ -78,13 +62,6 @@ describe("demo mode off", () => {
     renderAt("/", { role: null });
     expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Owner/ })).not.toBeInTheDocument();
-  });
-
-  it("doesn't let a role saved by a demo build sign anyone in", async () => {
-    localStorage.setItem("snm.role", "Owner");
-    vi.stubEnv("VITE_DEMO_MODE", "false");
-    renderFromStorage("/");
-    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   });
 
   it("shows no banner on the app screens", async () => {

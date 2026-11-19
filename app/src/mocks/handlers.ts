@@ -30,6 +30,7 @@ import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
 import { DoseInputError, runDoseChecks, validateLines } from "./dosing";
 import { currentScenario } from "./scenario";
+import { demoLogin, gate, login, signedInName, signOut, twoFactor, whoAmI } from "./session";
 import {
   hold,
   release,
@@ -135,6 +136,27 @@ const doseRequests = new Map<string, DoseRequest>();
 const confirmed = new Map<string, DoseConfirmed>();
 
 export const handlers = [
+  // T2-27 · first: 401 without a session, the CSRF token, two-factor and the role rules (T1-35).
+  // It answers only to refuse; otherwise MSW goes on to the route's own handler.
+  http.all("/api/*", ({ request }) => gate(request)),
+
+  // Sign-in (contract §11.1, §11.2, T1-35: backend/app/auth/README.md)
+  http.post("/api/auth/login", async ({ request }) => {
+    await networkDelay();
+    return login((await request.json()) as { email?: string; password?: string });
+  }),
+  http.post("/api/auth/demo", async ({ request }) => {
+    await networkDelay();
+    return demoLogin((await request.json()) as { role?: string });
+  }),
+  http.post("/api/auth/totp", async ({ request }) => {
+    await networkDelay();
+    return twoFactor((await request.json()) as { code?: string });
+  }),
+  http.post("/api/auth/logout", signOut),
+  http.post("/api/auth/logout-all", signOut),
+  http.get("/api/me", whoAmI),
+
   // GET /api/health · uptime check (contract §11.2, public)
   http.get("/api/health", () =>
     currentScenario() === "api-degraded"
@@ -352,10 +374,9 @@ export const handlers = [
   }),
 
   // POST /api/alerts/{id}/ack · everyone but a Viewer (§13)
-  http.post("/api/alerts/:alertId/ack", async ({ params, request }) => {
+  http.post("/api/alerts/:alertId/ack", async ({ params }) => {
     await networkDelay();
-    const answer = acknowledge(zoneStatus, String(params.alertId), request.headers.get("X-Demo-Role"));
-    if (answer === "viewer") return apiError(403, "FORBIDDEN", "Viewers can’t acknowledge alerts");
+    const answer = acknowledge(zoneStatus, String(params.alertId), signedInName());
     if (answer === null) return apiError(404, "NOT_FOUND", `There is no alert ${params.alertId}`);
     return HttpResponse.json(answer);
   }),

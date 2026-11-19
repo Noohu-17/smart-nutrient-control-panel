@@ -4,11 +4,12 @@ import { describe, expect, it } from "vitest";
 import type { FailureDrill, ZoneStatus } from "../api/types";
 import { farmLayout } from "./data/layout";
 import { scenarioOptions } from "./sim";
+import { csrfHeaders } from "./session";
 
 const send = (method: string, path: string, body?: unknown) =>
   fetch(`/api${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...csrfHeaders() }, // signed in by test/setup.ts
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 const zone = async (id = "Z1") => (await (await send("GET", `/zones/${id}`)).json()) as ZoneStatus;

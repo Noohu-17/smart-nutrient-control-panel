@@ -57,14 +57,14 @@ export function currentAlerts(zoneStatus: (zoneId: string) => ZoneStatus): Serve
   return alerts;
 }
 
-/** Acknowledge: the alert, 404 if it isn't current, "viewer" if a Viewer asked (§13). */
+/** Acknowledge as `by` (the signed-in user's name): the alert, or null if it isn't current. A
+    Viewer never gets here: the gate answers 403 first (session.ts, §13). */
 export function acknowledge(
   zoneStatus: (zoneId: string) => ZoneStatus,
   id: string,
-  role: string | null,
-): ServerAlert | "viewer" | null {
-  if (role?.toLowerCase() === "viewer") return "viewer";
+  by: string | null,
+): ServerAlert | null {
   if (!currentAlerts(zoneStatus).some((a) => a.id === id)) return null;
-  if (!acked.has(id)) acked.set(id, { at: new Date().toISOString(), by: role });
+  if (!acked.has(id)) acked.set(id, { at: new Date().toISOString(), by });
   return currentAlerts(zoneStatus).find((a) => a.id === id)!;
 }

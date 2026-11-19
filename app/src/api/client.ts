@@ -17,15 +17,21 @@ export class ApiError extends Error {
   }
 }
 
-// The role picked at sign-in, sent as X-Demo-Role on every write so the back end can record who did
-// what. Demo sites only: real accounts come later and replace it.
-let demoRole: string | null = null;
+// The session itself is an HttpOnly cookie the browser sends (T1-35); the app never sees it. What
+// the app keeps is the CSRF token from sign-in or GET /me, sent on every request that isn't a GET.
+let csrfToken: string | null = null;
+let onSignedOut: () => void = () => {};
 
-export function setDemoRole(role: string | null) {
-  demoRole = role;
+export function setCsrfToken(token: string | null) {
+  csrfToken = token;
 }
 
-const writeHeaders = (): Record<string, string> => (demoRole ? { "X-Demo-Role": demoRole } : {});
+/** Called on any 401: the session has ended (expired, signed out elsewhere, a new role). */
+export function setOnSignedOut(listener: () => void) {
+  onSignedOut = listener;
+}
+
+const writeHeaders = (): Record<string, string> => (csrfToken ? { "X-CSRF-Token": csrfToken } : {});
 
 const isJson = (response: Response) => (response.headers.get("content-type") ?? "").includes("json");
 
@@ -39,6 +45,7 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
 
 async function send<T>(path: string, init?: RequestInit): Promise<T> {
   let response = await request(path, init);
+  if (response.status === 204) return undefined as T; // sign-out answers with no body
 
   // Development: an HTML page instead of JSON means the fake API worker went to sleep and
   // Vite answered with index.html. Wake the worker and ask once more.
@@ -54,6 +61,7 @@ async function send<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   if (!response.ok) {
+    if (response.status === 401) onSignedOut();
     const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
     throw new ApiError(
       body?.error?.message ?? `Request failed (${response.status})`,
