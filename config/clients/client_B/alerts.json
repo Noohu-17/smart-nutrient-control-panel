@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "zones.*.alarms.solTempMaxC is the farm details form's (R-1, section 8). ecMaxMsCm is set to limits.json ecCeiling, the top of the form's target range. There is no circulation flow sensor, so no circFlowMinLpm. The events are client_A's, proposed for the team to check, with two changes for a real farm: RESERVOIR_LOW is the low level, 20 % of each zone's 90 L main tank = 18 L (review of #82), and waits 60 s so a ripple doesn't flap it. DAYTANK_LOW never fires: the drums have no level sensors. Phase A alerts are in the app only.",
+    "placeholderKeys": ["events"]
+  },
+  "delivery": ["IN_APP"],
+  "zones": {
+    "Z1": { "alarms": { "ecMaxMsCm": 1.2, "solTempMaxC": 24.0 } },
+    "Z2": { "alarms": { "ecMaxMsCm": 1.8, "solTempMaxC": 22.0 } }
+  },
+  "events": {
+    "ESTOP_PRESSED": { "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 5 },
+    "ESTOP_RELEASED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
+    "MODE_CHANGED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
+    "LEAK_DETECTED": { "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 5 },
+    "LEAK_CLEARED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
+    "CIRC_NO_FLOW": { "delayS": 30, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 5 },
+    "CIRC_FLOW_RESTORED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
+    "SENSOR_FAULT": { "delayS": 60, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 30 },
+    "SENSOR_RECOVERED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
+    "RESERVOIR_LOW": { "thresholdPct": 20, "delayS": 60, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": 60 },
+    "DAYTANK_LOW": { "thresholdPct": 20, "delayS": 60, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": 60 },
+    "PUMP_FAULT": { "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 10 },
+    "CHILLER_FAULT": { "delayS": 0, "notifyRoles": ["OWNER", "AGRONOMIST", "OPERATOR"], "escalationMin": 15 },
+    "CLIMATE_MODE_REVERTED": { "delayS": 0, "notifyRoles": ["OWNER", "OPERATOR"], "escalationMin": null },
+    "REBOOTED": { "delayS": 0, "notifyRoles": ["OWNER"], "escalationMin": 30 }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "client_B is a real farm: Zone A runs on the prototype rig (io_map.json, the zone controller service), never on the simulator, and simulator work is paused this round. So there is no farm model or demoStart for client_B, and the simulator does not start with this pack. speedOptions is real time only: a live farm never runs faster (T1-33 makes zones LIVE or SIMULATED)."
+  },
+  "speedOptions": [1],
+  "minRealReadingIntervalS": 5
+}

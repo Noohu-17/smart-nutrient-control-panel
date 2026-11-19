@@ -9,10 +9,10 @@ Every farm-specific value lives here: layout, equipment, limits, targets, alert 
 ```
 config/clients/
 ├── client_A/      first demo pack (SIET Polyhouse 1)
-└── client_B/      the next client, same 11 files
+└── client_B/      the prototype-extension rig farm (Hydroponic polyhouse, Coimbatore), same files
 ```
 
-Each folder has the 11 files listed in contract §2.5: `layout.json`, `limits.json`, `recipes.json`, `alerts.json`, `climate.json`, `features.json`, `users.json`, `simulator.json`, `hardware.json`, `io_map.json` and `scenarios.json`.
+Each folder has the 12 files listed in contract §2.5: `layout.json`, `limits.json`, `recipes.json`, `nutrients.json`, `alerts.json`, `climate.json`, `features.json`, `users.json`, `simulator.json`, `hardware.json`, `io_map.json` and `scenarios.json`.
 
 To add a client, copy an existing folder, change the values, run the validator, then load it. Collect their layout, equipment, crops and targets, limits and alert contacts first (contract §2.5, "New client").
 
@@ -42,6 +42,18 @@ JSON has no comments, so placeholder status is written into the files:
 
 Before loading a pack for a real farm, every `"placeholder": true` must be gone.
 
+## client_B
+
+client_B is the farm with the prototype-extension rig (T1-31), from the farm details form the team filled in (R-1). Its `_meta` notes say which values are the form's and which are proposed for the team to check. In short:
+
+- **Two NFT zones**, `Z1` and `Z2` ("NFT Zone A" and "B"): 4 NFT structures each (3 channels, 2.1 m, 45 plant sites), each with its own 90 L main tank, and lettuce and spinach at the seedling stage. The low level is 20 % of the main tank, 18 L.
+- **Dose lines `N`, `P` and `K`**, each from a 10 L tank (confirmed at the farm). The form's phosphoric acid has no pump (IN4 is the water inlet on both controllers), so it isn't a dose line.
+- **Zone A (`ZC1`) runs on the rig** (`io_map.json`): the actuator box, N, P and K on relay1–relay3, TDS at the 0.5 factor, no drum level sensors. Its pumps are calibrated at 15 mL/min (`hardware.json`).
+- **Zone B (`ZC2`) joins the rig with per-zone pump rates** (T1-31's pump-rate PR): `hardware.json` has one rate per dose line, and Zone B's pumps run 1 L/min.
+- **Not fitted:** any climate equipment (`CC1`) and a power monitor (`PM1`). The layout format needs them, so they are listed with nothing on them, and the app shows them as not available.
+- **No playground** (`features.json`) and no simulator model: the simulator refuses to start with this pack, so it can never play the rig's zones.
+- **Proposed in `layout.json`**, which has no `_meta`: the site ID `coimbatore-ph1`, the zone names' capital letters, `nursery.tables` 0, and `power` `generator` and `ups` false (the form's UPS answer is "?").
+
 Some other conventions:
 
 - A value that follows another file is a reference, not a copy. `"maxStageFrom": "layout.climate.fans"` means the top fan stage is the number of fans in the layout. Never write 4.
@@ -56,7 +68,7 @@ python scripts/validate_config.py
 
 The validator needs Python 3 and no extra packages. It parses every `config/clients/*/*.json` (duplicate keys count as an error) and checks:
 
-- every client has all 11 files;
+- every client has all 12 files;
 - `layout.json`: `v` is 1; zone IDs are unique and match `Z{n}`; bench IDs match `{zone}-B{n}`; each zone's controller is a `ZONE_CONTROLLER` in `devices`; `doseLines` match the `dayTanks` keys; chillers are keyed by zone IDs that exist; the climate controller and power monitor are in `devices`; client_A lists exactly `GW1`, `ZC1`, `ZC2`, `CC1` and `PM1`;
 - every other file except `features.json` has `"v": 1` and `_meta.placeholder`;
 - `limits.json` and `alerts.json` are keyed by the layout's zone IDs, and the per-line limits are keyed by that zone's `doseLines`.

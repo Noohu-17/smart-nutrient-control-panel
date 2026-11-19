@@ -1,0 +1,45 @@
+{
+  "v": 1,
+  "site": "coimbatore-ph1",
+  "name": "Hydroponic polyhouse - Coimbatore",
+  "timezone": "Asia/Kolkata",
+  "zones": [
+    {
+      "id": "Z1", "name": "NFT Zone A", "controller": "ZC1",
+      "reservoir": { "id": "R1", "usableL": 90 },
+      "dosingCabinet": "D1",
+      "doseLines": ["N", "P", "K"],
+      "sensors": { "dissolvedOxygen": false },
+      "dayTanks": { "N": { "usableL": 10 }, "P": { "usableL": 10 }, "K": { "usableL": 10 } },
+      "benches": [
+        { "id": "Z1-B1", "channels": 3, "lengthM": 2.1 },
+        { "id": "Z1-B2", "channels": 3, "lengthM": 2.1 },
+        { "id": "Z1-B3", "channels": 3, "lengthM": 2.1 },
+        { "id": "Z1-B4", "channels": 3, "lengthM": 2.1 }
+      ]
+    },
+    {
+      "id": "Z2", "name": "NFT Zone B", "controller": "ZC2",
+      "reservoir": { "id": "R2", "usableL": 90 },
+      "dosingCabinet": "D2",
+      "doseLines": ["N", "P", "K"],
+      "sensors": { "dissolvedOxygen": false },
+      "dayTanks": { "N": { "usableL": 10 }, "P": { "usableL": 10 }, "K": { "usableL": 10 } },
+      "benches": [
+        { "id": "Z2-B1", "channels": 3, "lengthM": 2.1 },
+        { "id": "Z2-B2", "channels": 3, "lengthM": 2.1 },
+        { "id": "Z2-B3", "channels": 3, "lengthM": 2.1 },
+        { "id": "Z2-B4", "channels": 3, "lengthM": 2.1 }
+      ]
+    }
+  ],
+  "nursery": { "tables": 0 },
+  "climate": { "controller": "CC1", "fans": [], "padPumps": [], "chillers": {}, "shade": [], "haf": [], "foggers": [], "airSensors": [] },
+  "power": { "monitor": "PM1", "generator": false, "ups": false },
+  "devices": [
+    { "id": "ZC1", "kind": "ZONE_CONTROLLER", "zone": "Z1" },
+    { "id": "ZC2", "kind": "ZONE_CONTROLLER", "zone": "Z2" },
+    { "id": "CC1", "kind": "CLIMATE_CONTROLLER" },
+    { "id": "PM1", "kind": "POWER_MONITOR" }
+  ]
+}

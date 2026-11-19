@@ -26,8 +26,9 @@ so Compose (`restart: on-failure`) leaves it stopped.
 
 ## Config
 
-Which zones run on the rig comes from the config pack's `io_map.json`. client_A has none; T1-31
-fills client_B's. `scripts/validate_config.py` and the service check it.
+Which zones run on the rig comes from the config pack's `io_map.json`. client_A has none;
+client_B (T1-31) puts Zone A, `ZC1`, on the rig's Zone 1. `scripts/validate_config.py` and the
+service check it.
 
 ```json
 "controllers": {

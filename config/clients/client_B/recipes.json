@@ -1,0 +1,33 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "EC/pH targets from the farm details form (R-1), section 8; crops and stages from section 3. EC is the form's TDS ppm / 500 (the probes' 0.5 factor). The form gives one range per crop, so GROWING and READY reuse it, for the team to check. Varieties (Grand Rapids, Ooty 1), planting dates and days to harvest wait for T1-38's crop fields.",
+    "placeholderKeys": ["crops.*.stages.GROWING", "crops.*.stages.READY"]
+  },
+  "zones": {
+    "Z1": { "crop": "LETTUCE", "stage": "SEEDLING" },
+    "Z2": { "crop": "SPINACH", "stage": "SEEDLING" }
+  },
+  "crops": [
+    {
+      "id": "LETTUCE",
+      "name": "Lettuce",
+      "stages": [
+        { "id": "SEEDLING", "ecTarget": { "min": 0.8, "max": 1.2 }, "phTarget": { "min": 5.8, "max": 6.2 }, "source": "FARM_FORM" },
+        { "id": "GROWING", "ecTarget": { "min": 0.8, "max": 1.2 }, "phTarget": { "min": 5.8, "max": 6.2 }, "source": "FARM_FORM" },
+        { "id": "READY", "ecTarget": { "min": 0.8, "max": 1.2 }, "phTarget": { "min": 5.8, "max": 6.2 }, "source": "FARM_FORM" }
+      ]
+    },
+    {
+      "id": "SPINACH",
+      "name": "Spinach",
+      "stages": [
+        { "id": "SEEDLING", "ecTarget": { "min": 1.2, "max": 1.8 }, "phTarget": { "min": 6.0, "max": 6.5 }, "source": "FARM_FORM" },
+        { "id": "GROWING", "ecTarget": { "min": 1.2, "max": 1.8 }, "phTarget": { "min": 6.0, "max": 6.5 }, "source": "FARM_FORM" },
+        { "id": "READY", "ecTarget": { "min": 1.2, "max": 1.8 }, "phTarget": { "min": 6.0, "max": 6.5 }, "source": "FARM_FORM" }
+      ]
+    }
+  ]
+}

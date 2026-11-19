@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "pumps.doseLines: Zone A's calibrated pump rate, 15 mL/min = 0.25 mL/s for N, P and K (farm details form, R-1, section 5: average of three 60 s runs). This file has one rate per dose line, and Zone B's pumps run 1 L/min, 67 times faster, so only Zone A (ZC1) runs on the rig until per-zone pump rates come in T1-31's pump-rate PR."
+  },
+  "sensors": {},
+  "pumps": {
+    "doseLines": {
+      "N": { "flowMlPerS": 0.25 },
+      "P": { "flowMlPerS": 0.25 },
+      "K": { "flowMlPerS": 0.25 }
+    }
+  },
+  "valves": {},
+  "fans": {}
+}

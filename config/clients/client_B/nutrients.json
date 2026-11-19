@@ -1,0 +1,22 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "What each dose line's stock does to the nutrient solution, so the dose review can estimate EC and pH after a dose (contract 11.3). ecChangePerMlPerL: the EC rise in mS/cm from 1 mL of stock in 1 L of solution; phChangePerMlPerL: the pH change from the same. Stocks (farm details form, R-1, section 5): N City Greens Grow (24%), P City Greens Grow Flora (26%), K City Greens Grow Thrive (19%), each in a 10 L tank (confirmed at the farm, review of #82). The form's phosphoric acid (pH down, 1 L) has no dose pump: IN4 on both controllers is the water inlet, so it is not a dose line.",
+    "placeholderKeys": ["doseLines"],
+    "sources": {
+      "doseLines.N.ecChangePerMlPerL": "PLACEHOLDER: client_A's contract-example stock (0.47), until a jar test: 1 mL of the N stock in 1 L of the farm's water, read the EC rise. On the high side on purpose: the review then stops short of the EC ceiling rather than past it.",
+      "doseLines.P.ecChangePerMlPerL": "PLACEHOLDER: as doseLines.N.ecChangePerMlPerL, for the P stock.",
+      "doseLines.K.ecChangePerMlPerL": "PLACEHOLDER: as doseLines.N.ecChangePerMlPerL, for the K stock.",
+      "doseLines.N.phChangePerMlPerL": "PLACEHOLDER: treated as pH-neutral until the jar test also reads the pH.",
+      "doseLines.P.phChangePerMlPerL": "PLACEHOLDER: as doseLines.N.phChangePerMlPerL.",
+      "doseLines.K.phChangePerMlPerL": "PLACEHOLDER: as doseLines.N.phChangePerMlPerL."
+    }
+  },
+  "doseLines": {
+    "N": { "ecChangePerMlPerL": 0.47, "phChangePerMlPerL": 0.0 },
+    "P": { "ecChangePerMlPerL": 0.47, "phChangePerMlPerL": 0.0 },
+    "K": { "ecChangePerMlPerL": 0.47, "phChangePerMlPerL": 0.0 }
+  }
+}

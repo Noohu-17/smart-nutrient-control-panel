@@ -148,6 +148,21 @@ def test_a_line_whose_largest_dose_needs_over_600_s_is_refused(tmp_path):
     assert zone.pump_ml_per_s["A"] == 0.5
 
 
+def test_client_b_runs_zone_a_on_the_rigs_zone_1():
+    """T1-31: client_B's Zone A is the rig's actuator box. Zone B joins with per-zone pump rates,
+    and the simulator never plays a live farm's zones: it refuses the pack."""
+    from pathlib import Path
+
+    from sim.farm import load_farm
+
+    client_b = Path(__file__).parents[3] / "config" / "clients" / "client_B"
+    [zone] = load_rig_zones(client_b)
+    assert (zone.device_id, zone.zone_id, zone.target) == ("ZC1", "Z1", "zone:1")
+    assert zone.pumps == {"N": "relay1", "P": "relay2", "K": "relay3"}
+    with pytest.raises(ValueError, match=r"simulator\.json: model"):
+        load_farm(client_b)
+
+
 def test_client_a_runs_nothing_on_the_rig():
     from sim.settings import load_settings
 

@@ -1,0 +1,8 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "client_B has no playground (features.json playground false), so it has no scenarios, drills, holdable values or presets."
+  }
+}
