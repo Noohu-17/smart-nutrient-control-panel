@@ -1011,7 +1011,7 @@ Like the zone answer, it carries no message envelope.
 
 ```json
 { "items": [ {
-  "id": "3c2e…", "kind": "EC_HIGH", "severity": "WARNING", "status": "OPEN", "zone": "Z1",
+  "id": "3c2e…", "kind": "EC_HIGH", "severity": "CRITICAL", "status": "OPEN", "zone": "Z1",
   "message": "EC in Zone A is 2.6 mS/cm, above the 2.4 alarm limit",
   "systemAction": "No automatic action: the farm keeps running as it was",
   "nextStep": "Don't add nutrients; dilute with fresh water and check the EC probe",
@@ -1020,7 +1020,7 @@ Like the zone answer, it carries no message envelope.
 } ] }
 ```
 
-`status` is `CLEARED` once the condition is over, else `ACKNOWLEDGED` once someone has acknowledged it, else `OPEN`. `POST /alerts/{alertId}/ack` records who saw it and answers the alert; it doesn't clear it, and acknowledging again changes nothing. A Viewer gets 403 `FORBIDDEN` (13).
+`status` is `CLEARED` once the condition is over, else `ACKNOWLEDGED` once someone has acknowledged it, else `OPEN`. While a reading's alert is open, its severity, message, systemAction and nextStep follow the newest reading. `POST /alerts/{alertId}/ack` records who saw it and answers the alert; it doesn't clear it, and acknowledging again changes nothing. A Viewer gets 403 `FORBIDDEN` (13).
 
 ### 11.3 Dose request: example
 
@@ -1339,6 +1339,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, dose limits | `GET /zones/{zoneId}/dose-limits` (11.2): the limits and what is left of the 24 h limit, per line, for the dose form (T1-37). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, rig zones | `io_map.json` (2.5): a zone controller with `"link": "SF_GATEWAY"` runs on the prototype rig through the zone controller service, which speaks this contract for it: the same messages and rules as any zone controller (T1-32). The rig's own sf messages stay outside this contract. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, broker TLS | Transport (3): the broker's TLS port 8883 is open for the farm's gateway, the real farm devices' own logins only; plain 1883 stays inside the server. `GW1`'s permissions are listed topic by topic as in 4, with no wildcards (T1-36). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
+| v1.0, EC_HIGH critical | `GET /alerts` (11.2): `EC_HIGH` is `CRITICAL`, and an open reading alert's severity, message, systemAction and nextStep follow the newest reading (C 18, #81). MQTT messages don't change, so they keep `"v": 1` (16). | Track 2 |
 
 ### v1.0 section review
 

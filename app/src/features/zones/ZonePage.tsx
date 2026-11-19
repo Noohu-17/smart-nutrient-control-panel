@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useFarm } from "../../api/hooks";
 import type { FarmZone } from "../../api/types";
+import { zonePath } from "../../config/readings";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusChip } from "../../components/StatusChip";
 import { AlertStrip } from "../alerts/AlertStrip";
@@ -13,17 +14,26 @@ import { ResumeZone } from "./ResumeZone";
 import { ZoneReadings, ZoneStatusChip } from "./ZoneLive";
 import { useZoneStatus } from "./useZoneStatus";
 
-/** The zone's alerts, Resume in the stopped or E-STOP one, then the live readings. */
-function ZoneLive({ zone }: { zone: FarmZone }) {
+/** Every alert, as on any other page (Resume in this zone's stopped or E-STOP one, a link to the
+    zone for another zone's), then the live readings. */
+function ZoneLive({ zone, zones }: { zone: FarmZone; zones: FarmZone[] }) {
   const status = useZoneStatus(zone.id);
-  const alerts = useZoneAlerts([zone]);
+  const alerts = useZoneAlerts(zones, { site: true });
   return (
     <>
       <AlertStrip
         alerts={alerts}
         action={(alert) =>
-          (alert.kind === "stopped" || alert.kind === "estop") && (
-            <ResumeZone zoneId={zone.id} status={status} />
+          alert.zoneId !== zone.id ? (
+            alert.zoneId ? (
+              <Link to={zonePath(alert.zoneId)}>Open {alert.zoneName}</Link>
+            ) : (
+              <Link to="/alerts">Alerts</Link>
+            )
+          ) : (
+            (alert.kind === "stopped" || alert.kind === "estop") && (
+              <ResumeZone zoneId={zone.id} status={status} />
+            )
           )
         }
       />
@@ -69,7 +79,7 @@ export function ZonePage() {
         <EmptyState title="Zone not found">There is no zone called "{zoneId}".</EmptyState>
       ) : (
         <>
-          <ZoneLive key={`live-${zone.id}`} zone={zone} />
+          <ZoneLive key={`live-${zone.id}`} zone={zone} zones={farm.data.zones} />
 
           <DoseCard key={zone.id} zone={zone} />
 

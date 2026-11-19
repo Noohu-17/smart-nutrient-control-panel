@@ -87,7 +87,7 @@ def test_ec_above_the_alarm_limit_raises_an_alert_in_plain_words(api, readings):
     readings.send({"ec": 2.61})
     found = only(api)
     assert {k: found[k] for k in ("kind", "severity", "status", "zone")} == {
-        "kind": "EC_HIGH", "severity": "WARNING", "status": "OPEN", "zone": "Z1",
+        "kind": "EC_HIGH", "severity": "CRITICAL", "status": "OPEN", "zone": "Z1",
     }
     assert found["message"] == "EC in Zone 1 is 2.61 mS/cm, above the 2.4 alarm limit"
     assert found["systemAction"] and found["nextStep"]
@@ -106,6 +106,21 @@ def test_a_condition_that_lasts_gives_one_alert(api, readings):
     for ec in (2.5, 2.6, 2.7):
         readings.send({"ec": ec})
     assert len(alerts(api)) == 1
+
+
+def test_a_lasting_alert_says_the_latest_value(api, readings):
+    readings.send({"ec": 2.51})
+    readings.send({"ec": 2.8})
+    assert only(api)["message"] == "EC in Zone 1 is 2.8 mS/cm, above the 2.4 alarm limit"
+
+
+def test_an_alert_raised_as_a_warning_before_turns_critical_on_the_next_reading(api, readings, seeded):
+    readings.send({"ec": 2.51})
+    with seeded.begin() as connection:  # as an EC alert opened before EC_HIGH was CRITICAL
+        connection.execute(update(Alert).values(severity="WARNING"))
+    assert only(api)["severity"] == "WARNING"
+    readings.send({"ec": 2.6})
+    assert only(api)["severity"] == "CRITICAL"
 
 
 def test_warm_solution_raises_its_own_alert(api, readings):
@@ -207,7 +222,7 @@ def test_a_viewer_cant_acknowledge_and_an_unknown_alert_is_a_404(api, readings):
 
 
 def test_filters_by_severity_and_zone(api, readings, worker):
-    readings.send({"ec": 2.61})
+    readings.send({"solTempC": 27.5})
     handle(worker, event(msgId=str(uuid.uuid4())), EVENTS)
     assert [a["kind"] for a in alerts(api, severity="CRITICAL")] == ["ESTOP_PRESSED"]
     assert len(alerts(api, zone="Z1")) == 2 and alerts(api, zone="Z2") == []

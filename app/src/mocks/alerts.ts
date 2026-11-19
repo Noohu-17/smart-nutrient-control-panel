@@ -31,12 +31,12 @@ export function currentAlerts(zoneStatus: (zoneId: string) => ZoneStatus): Serve
     const t = lastSeen.get(zone.id) ?? zoneStatus(zone.id);
     const alarms = (limits.zones as Zones)[zone.id]?.alarms ?? {};
     const ok = (key: keyof ZoneStatus["quality"]) => (t.quality[key] === "OK" ? t.readings[key] : null);
-    const add = (kind: string, message: string, nextStep: string) => {
+    const add = (kind: string, message: string, nextStep: string, severity: ServerAlert["severity"] = "WARNING") => {
       const id = `${zone.id}-${kind}`;
       if (!firstSeen.has(id)) firstSeen.set(id, new Date().toISOString());
       const ack = acked.get(id);
       alerts.push({
-        id, kind, severity: "WARNING", status: ack ? "ACKNOWLEDGED" : "OPEN", zone: zone.id,
+        id, kind, severity, status: ack ? "ACKNOWLEDGED" : "OPEN", zone: zone.id,
         message, systemAction: NO_ACTION, nextStep, raisedAt: firstSeen.get(id)!, simTs: t.simTs ?? null,
         clearedAt: null, acknowledgedAt: ack?.at ?? null, acknowledgedBy: ack?.by ?? null,
       });
@@ -44,7 +44,7 @@ export function currentAlerts(zoneStatus: (zoneId: string) => ZoneStatus): Serve
     const ec = ok("ec");
     if (alarms.ecMaxMsCm !== undefined && ec !== null && ec > alarms.ecMaxMsCm)
       add("EC_HIGH", `EC in ${zone.name} is ${ec} mS/cm, above the ${alarms.ecMaxMsCm} alarm limit`,
-        "Don't add nutrients; dilute with fresh water and check the EC probe");
+        "Don't add nutrients; dilute with fresh water and check the EC probe", "CRITICAL");
     const temp = ok("solTempC");
     if (alarms.solTempMaxC !== undefined && temp !== null && temp > alarms.solTempMaxC)
       add("SOL_TEMP_HIGH", `Solution in ${zone.name} is ${temp} °C, above the ${alarms.solTempMaxC} °C alarm limit`,

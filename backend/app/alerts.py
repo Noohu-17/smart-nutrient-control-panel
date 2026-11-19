@@ -14,8 +14,9 @@ Two sources, both in the worker, in the same transaction that stores the message
   clears MODE_CHANGED. Other INFO events raise nothing.
 
 One alert per condition: `key` names it (kind, zone and line, metric or equipment), and while an
-alert with that key is not cleared, no second one is raised. Acknowledging records who saw it;
-it doesn't clear it. A playground reset clears every alert (POST /api/sim/reset, T1-25).
+alert with that key is not cleared, no second one is raised; a reading rule's alert takes the
+words of each new reading, so it says the value now, not the one it started at. Acknowledging
+records who saw it; it doesn't clear it. A playground reset clears every alert (POST /api/sim/reset, T1-25).
 """
 
 import uuid
@@ -120,7 +121,7 @@ def zone_conditions(message: ZoneTelemetry, rules: AlertRules) -> list[Condition
 
     if limits.ec_max is not None and (ec := ok("ec")) is not None:
         found.append(Condition(
-            "EC_HIGH", f"EC_HIGH:{zone}", ec > limits.ec_max, "WARNING",
+            "EC_HIGH", f"EC_HIGH:{zone}", ec > limits.ec_max, "CRITICAL",
             f"EC in {limits.name} is {_number(ec)} mS/cm, above the {_number(limits.ec_max)} alarm limit",
             NO_ACTION,
             "Don't add nutrients; dilute with fresh water and check the EC probe",
@@ -204,8 +205,16 @@ def judge(
     found = _open(connection, org_id, site_id, condition.key)
     if found is None:
         _raise(connection, org_id, site_id, zone, condition, now, sim_ts, raised=delay <= timedelta(0))
-    elif found.raised_at is None and now - found.first_seen_at >= delay:
-        connection.execute(update(Alert).where(Alert.alert_id == found.alert_id).values(raised_at=now))
+    else:
+        words = {  # the newest reading's, and its severity, so one raised as WARNING before turns red
+            "severity": condition.severity,
+            "message": condition.message,
+            "system_action": condition.system_action,
+            "next_step": condition.next_step,
+        }
+        if found.raised_at is None and now - found.first_seen_at >= delay:
+            words["raised_at"] = now
+        connection.execute(update(Alert).where(Alert.alert_id == found.alert_id).values(**words))
 
 
 def _event_key(kind: str, event: Event) -> str:

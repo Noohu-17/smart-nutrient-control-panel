@@ -9,7 +9,7 @@ import { renderAt } from "../../test/render";
 const EC_HIGH: ServerAlert = {
   id: "a1",
   kind: "EC_HIGH",
-  severity: "WARNING",
+  severity: "CRITICAL",
   status: "OPEN",
   zone: "Z1",
   message: "EC in Zone A is 2.8 mS/cm, above the 2.4 alarm limit",
@@ -32,12 +32,21 @@ describe("server alerts in the app (T2-22)", () => {
     const alert = await (await strip()).findByRole("alert");
     expect(alert).toHaveTextContent("EC in Zone A is 2.8 mS/cm, above the 2.4 alarm limit.");
     expect(alert).toHaveTextContent("dilute with fresh water and check the EC probe.");
+    expect(alert).toHaveClass("crit");
   });
 
   it("shows it on its zone's page", async () => {
     serve([EC_HIGH]);
     renderAt("/zone/Z1");
     expect(await (await strip()).findByText(/EC in Zone A is 2.8/)).toBeInTheDocument();
+  });
+
+  it("shows it on another zone's page too, with a link to its zone", async () => {
+    serve([EC_HIGH]);
+    renderAt("/zone/Z2");
+    const s = await strip();
+    expect(await s.findByText(/EC in Zone A is 2.8/)).toBeInTheDocument();
+    expect(s.getByRole("link", { name: "Open Zone A" })).toHaveAttribute("href", "/zone/Z1");
   });
 
   it("shows it on pages with no strip of their own, with a link to the zone", async () => {
