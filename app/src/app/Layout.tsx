@@ -4,6 +4,7 @@ import { useSession } from "../auth/session";
 import { DemoBanner } from "../components/DemoBanner";
 import { SimBanner } from "../components/SimBanner";
 import { SiteAlerts } from "../features/alerts/SiteAlerts";
+import { AlertToasts } from "../features/notifications/AlertToasts";
 import { BottomTabs } from "./BottomTabs";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -45,6 +46,7 @@ export function Layout() {
           </div>
         </main>
       </div>
+      <AlertToasts />
       <BottomTabs moreOpen={menuOpen} onMore={() => setMenuOpen((o) => !o)} />
     </>
   );

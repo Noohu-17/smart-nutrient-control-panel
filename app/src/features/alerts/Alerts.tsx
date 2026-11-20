@@ -3,6 +3,7 @@ import type { ServerAlert } from "../../api/types";
 import { EmptyState } from "../../components/EmptyState";
 import { RoleButton } from "../../components/RoleButton";
 import { StatusChip } from "../../components/StatusChip";
+import { NotificationSettings } from "../notifications/NotificationSettings";
 import { AlertStrip } from "./AlertStrip";
 import { isCurrent } from "./serverAlerts";
 import { useZoneAlerts } from "./useZoneAlerts";
@@ -112,6 +113,8 @@ export function Alerts() {
           </ul>
         </section>
       )}
+
+      <NotificationSettings />
     </>
   );
 }

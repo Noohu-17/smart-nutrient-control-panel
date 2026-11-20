@@ -58,13 +58,15 @@ function usePollMs(slow: number) {
   return farm.data?.features.playground ? PLAYGROUND_POLL_MS : slow;
 }
 
-/** GET /api/alerts · the server's alerts, newest first (T1-24). As often as the zones. */
+/** GET /api/alerts · the server's alerts, newest first (T1-24). As often as the zones, and on
+    while the tab is in the background too, so a new alert can still notify. */
 export function useAlerts() {
   const pollMs = usePollMs(ONE_MINUTE);
   return useQuery({
     queryKey: ["alerts"],
     queryFn: () => getJson<{ items: ServerAlert[] }>("/alerts").then((answer) => answer.items),
     refetchInterval: pollMs,
+    refetchIntervalInBackground: true,
   });
 }
 
