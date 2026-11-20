@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from .api.alerts import add_alert_api
 from .api.commands import add_command_api
 from .api.dose_requests import add_dose_api
+from .api.operations import add_operations_api
 from .api.routes import _engine_for, add_read_api, get_pack
 from .api.sim import add_sim_api
 from .auth.access import gate
@@ -67,6 +68,7 @@ add_dose_api(app)
 add_command_api(app)
 add_sim_api(app)
 add_alert_api(app)
+add_operations_api(app)
 
 
 @app.get("/api/health")

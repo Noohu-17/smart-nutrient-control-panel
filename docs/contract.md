@@ -1109,6 +1109,32 @@ Like the zone answer, it carries no message envelope.
 
 `status` is `CLEARED` once the condition is over, else `ACKNOWLEDGED` once someone has acknowledged it, else `OPEN`. While a reading's alert is open, its severity, message, systemAction and nextStep follow the newest reading. `POST /alerts/{alertId}/ack` records who saw it and answers the alert; it doesn't clear it, and acknowledging again changes nothing. A Viewer gets 403 `FORBIDDEN` (13).
 
+**Operations: `GET /operations`.** Every action a person took, newest first: each dose, stop and resume the back end sent once the broker had it, and each alert acknowledgement, with who did it, when and what came of it (T1-28). Every role may read it. It takes `kind` (`DOSE`, `STOP`, `RESUME`, `ACK`), `zone`, `limit` (1 to 500, default 100) and `before`, and answers:
+
+```json
+{ "items": [ {
+  "kind": "DOSE", "at": "2026-11-09T04:55:00.000Z",
+  "by": { "id": "u-operator", "name": "Ravi Operator", "role": "OPERATOR" },
+  "zone": "Z1", "target": { "zone": "Z1" }, "cmdId": "6f1c2a90-3d1e-4c7b-9f52-2b8f0e6a1c44",
+  "result": { "state": "COMPLETED", "reason": null },
+  "lines": [ { "line": "A", "requestedMl": 120, "deliveredMl": 119, "state": "DONE" } ],
+  "before": { "ec": 1.51, "ph": 6.21 }, "after": { "ec": 1.63, "ph": 6.02 },
+  "alert": null
+} ], "next": "2026-11-09T04:55:00.000000Z~6f1c2a90-3d1e-4c7b-9f52-2b8f0e6a1c44" }
+```
+
+| Field | Rule |
+|---|---|
+| `at` | When the person did it: a command's `issuedAt` (7.1), or when the alert was acknowledged. |
+| `by` | The user the command names in `issuedBy`, or who acknowledged the alert: `id`, `name` (`null` if the user isn't known any more) and the `role` they had then. A stop's session is checked without the database (8.3 rule 9), so for a `STOP` it is the role they have now. `by` is `null` for a command sent before sign-in existed. |
+| `zone`, `target` | The command's zone and `target` as sent (7); `zone` is `null` for a site-wide stop or a climate resume. For an `ACK`, the alert's zone and `target` `null`. |
+| `result` | A command's `state` and `reason` as `GET /commands/{cmdId}` shows them: `DISPATCHED` until the first `CMD_STATE`, then that state, or `UNKNOWN` `TIMED_OUT` (8.4). An `ACK` is `ACKNOWLEDGED`. |
+| `lines`, `before`, `after` | A `DOSE`'s requested and delivered mL and EC and pH before and after, from its newest `CMD_STATE` (6.6); `null` for the other kinds and until reported. |
+| `alert` | An `ACK`'s alert: `id`, `kind`, `severity`, `message`. `null` for the other kinds. |
+| `next` | Where the next, older page starts: pass it as `before`. `null` on the last page. `before` may also be a time (actions before it). |
+
+`zone` keeps the actions on that zone, site-wide stops included, as they stop it too. A dose the broker never took isn't listed (it wasn't sent: the person got `503`), nor a stop sent while the database was down (it wasn't recorded).
+
 ### 11.3 Dose request: example
 
 Request:
@@ -1434,6 +1460,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, sign-in | Sign-in, two-factor and users answers (11.2), `POST /auth/demo` for demo mode's role picker (11.2), and `429` `RATE_LIMITED` for too many wrong passwords or codes (11.1), from T1-35. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, offline and stale alerts | `GET /alerts` (11.2): `SENSOR_FAULT` from a reading's `FAULT` quality, `DEVICE_OFFLINE` from a last will or no message for `events.DEVICE_OFFLINE.thresholdS`, and `READING_STALE` from a `STALE` quality or no new telemetry for `events.READING_STALE.thresholdS` while the controller is online; each clears when it recovers (T1-34). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, settings in the database | The config pack is stored in the database per organisation and versioned; the version is `configVersion`, and `DEVICE_CONFIG` (7.7) is built from the stored version and sent retained when a new one is imported (2.5 note, T1-39). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
+| v1.0, operations | `GET /operations` (11.2): every dose, stop, resume and alert acknowledgement, newest first, with who did it, when and the result; `kind`, `zone`, `limit` and `before` (T1-28). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 
 ### v1.0 section review
 

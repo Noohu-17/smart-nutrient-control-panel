@@ -18,6 +18,8 @@ from ..contract.farm_messages import (
     ClimateMode,
     ClimateOutput,
     ClimateReadings,
+    CommandLine,
+    EcPh,
     GeneratorState,
     Mains,
     Phases,
@@ -371,6 +373,56 @@ class AlertInfo(ContractModel):
 
 class AlertList(ContractModel):
     items: list[AlertInfo]
+
+
+# --- GET /api/operations (§11.2, T1-28) ------------------------------------------------------
+
+
+class OperationBy(ContractModel):
+    """Who did it: the user's ID, their name, and their role when they did it."""
+
+    id: str
+    name: str | None  # null for a user the database doesn't have (any more)
+    role: str | None  # OWNER, AGRONOMIST, OPERATOR or VIEWER; null if it wasn't recorded
+
+
+class OperationResult(ContractModel):
+    """What came of it: a command's state as GET /commands/{cmdId} shows it, or ACKNOWLEDGED."""
+
+    state: str
+    reason: str | None
+
+
+class OperationAlert(ContractModel):
+    """The alert an ACK was for."""
+
+    id: str
+    kind: str
+    severity: str
+    message: str
+
+
+class Operation(ContractModel):
+    """One action a person took (§11.2): a dose, a stop, a resume or an alert acknowledgement."""
+
+    kind: Literal["DOSE", "STOP", "RESUME", "ACK"]
+    at: ApiTime  # when the person did it: the command's issuedAt, or when the alert was acknowledged
+    by: OperationBy | None  # null for a command sent before sign-in existed
+    zone: str | None  # null for a site-wide stop, a climate resume or an alert of no zone
+    target: dict[str, Any] | None  # the command's target as sent (§7); null for an ACK
+    cmd_id: str | None  # DOSE, STOP and RESUME
+    result: OperationResult
+    lines: list[CommandLine] | None  # DOSE only: requested and delivered mL per line
+    before: EcPh | None  # DOSE only: EC and pH when the first line started
+    after: EcPh | None  # DOSE only: EC and pH after the mix wait
+    alert: OperationAlert | None  # ACK only
+
+
+class OperationList(ContractModel):
+    items: list[Operation]
+    # The next, older page: pass it back as `before`. Microseconds, so no action in the same
+    # millisecond as the last one listed is skipped. Null when this page was the last.
+    next: str | None
 
 
 class DeviceInfo(ContractModel):

@@ -12,6 +12,7 @@ The routes in `routes.py`, as listed in `docs/contract.md` §11.2. The full sche
 | `GET /api/devices` | `{ "items": [ … ], "nextCursor": … }`, with `?limit=` (max 200) and `?cursor=` | The database |
 | `POST /api/dose-requests` | The §11.3 review of a dose: every check, `projected`, `estimate`, `canConfirm`; `201` whatever the checks say. Saved for the confirm step; nothing goes to the farm | The config pack and the database |
 | `GET /api/zones/{zoneId}/dose-limits` | Per line: `maxPerDoseMl`, `max24hMl`, `dosed24hMl` (last 24 h, counted as `LIMIT_24H` counts) and `left24hMl`, for the dose form while typing (T1-37); and what the line doses, `name`, `compound`, `strengthPct`, `drum`, `purpose` (`nutrients.json`), with `pumpMlPerMin` (`hardware.json`), `null` where the pack doesn't say (T1-38) | The config pack and the database |
+| `GET /api/operations` | `{ "items": [ … ], "next": … }`: every dose, stop, resume and alert acknowledgement, newest first, with `by` (who, their name and their role then), `at`, `result` (as `GET /api/commands/{cmdId}` shows it), and a dose's `lines`, `before` and `after`; `?kind=`, `?zone=`, `?limit=` (max 500) and `?before=` (a page's `next`, or a time) (T1-28, `operations.py`) | `sent_command` with `command_report`, `alert`, `app_user` and `audit_log` |
 
 Every query is scoped by `org_id` and `site_id` (OPEN-11). They come from the config pack: `org_id` is the client's folder name, as in the seed.
 
