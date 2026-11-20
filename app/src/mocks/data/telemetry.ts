@@ -4,6 +4,7 @@
 // Device IDs, capacities, dose lines and equipment IDs all come from the layout, never from here.
 import type { DoseLine, FarmZone, ZoneStatus } from "../../api/types";
 import { farmLayout } from "./layout";
+import { zoneDetails } from "./zoneDetails";
 
 type Chemistry = {
   ec: number;
@@ -115,5 +116,7 @@ export function buildZoneStatus(zoneId: string): ZoneStatus | null {
     operation: null,
     latches: [],
     configVersion: 7,
+    source: zone.source ?? "SIMULATED", // the fake API is a playground site (§2.4)
+    ...zoneDetails(zone), // profile and crop, from the config pack (T1-38)
   };
 }

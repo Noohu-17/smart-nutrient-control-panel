@@ -4,7 +4,6 @@ import { delay, http, HttpResponse } from "msw";
 import type {
   ApiErrorBody,
   DoseConfirmed,
-  DoseLimits,
   DoseRequest,
   DoseRequestBody,
   Farm,
@@ -28,6 +27,7 @@ import { buildClimateStatus, buildPowerStatus } from "./data/climatePower";
 import { zoneDosing } from "./data/dosing";
 import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
+import { doseLimits } from "./data/zoneDetails";
 import { DoseInputError, runDoseChecks, validateLines } from "./dosing";
 import { currentScenario } from "./scenario";
 import { demoLogin, gate, login, signedInName, signOut, twoFactor, whoAmI } from "./session";
@@ -232,25 +232,15 @@ export const handlers = [
     return HttpResponse.json(zoneStatus(zoneId));
   }),
 
-  // GET /api/zones/:zoneId/dose-limits · limits.json and the same 24 h totals the review counts (T1-37)
+  // GET /api/zones/:zoneId/dose-limits · limits.json, the same 24 h totals the review counts (T1-37)
+  // and what each line doses (T1-38)
   http.get("/api/zones/:zoneId/dose-limits", async ({ params }) => {
     await networkDelay();
     const zoneId = String(params.zoneId);
     const zone = findZone(zoneId);
     const dosing = zoneDosing(zoneId);
     if (!zone || !dosing) return apiError(404, "NOT_FOUND", `There is no zone ${zoneId}`);
-    const { maxPerDoseMl, max24hMl } = dosing.limits;
-    const limits: DoseLimits = {
-      zone: zoneId,
-      lines: zone.doseLines.map((line) => ({
-        line,
-        maxPerDoseMl: maxPerDoseMl[line],
-        max24hMl: max24hMl[line],
-        dosed24hMl: dosing.dosed24hMl[line],
-        left24hMl: Math.max(0, max24hMl[line] - dosing.dosed24hMl[line]),
-      })),
-    };
-    return HttpResponse.json(limits);
+    return HttpResponse.json(doseLimits(zone, dosing));
   }),
 
   // POST /api/dose-requests · run the safety checks; nothing is sent to the farm (contract §11.3)
@@ -360,7 +350,8 @@ export const handlers = [
   // POST /api/resume { zone } · a person has checked the zone; nothing restarts by itself (§7.8)
   http.post("/api/resume", async ({ request }) => {
     const body = (await request.json()) as { zone?: string };
-    if (!body.zone || !findZone(body.zone)) return apiError(404, "NOT_FOUND", `There is no zone ${body.zone}`);
+    if (!body.zone || !findZone(body.zone))
+      return apiError(404, "NOT_FOUND", `There is no zone ${body.zone}`);
     if (zoneStatus(body.zone).estop)
       return apiError(409, "ESTOP", "The E-STOP is still pressed. Release it first");
     resumeZone(body.zone);

@@ -4,20 +4,25 @@ import configFeatures from "../../../config/clients/client_A/features.json";
 import configLayout from "../../../config/clients/client_A/layout.json";
 import configAlerts from "../../../config/clients/client_A/alerts.json";
 import configLimits from "../../../config/clients/client_A/limits.json";
+import configNutrients from "../../../config/clients/client_A/nutrients.json";
+import configRecipes from "../../../config/clients/client_A/recipes.json";
 import configScenarios from "../../../config/clients/client_A/scenarios.json";
-import type { ClimateStatus, Farm, PowerStatus, ServerRole, ZoneStatus } from "../api/types";
+import type { ClimateStatus, DoseLimits, Farm, PowerStatus, ServerRole, ZoneStatus } from "../api/types";
 import { csrfHeaders, fakeSignIn } from "./session";
 import { hold } from "./sim";
 import mockAlerts from "./data/alerts.json";
 import mockFeatures from "./data/features.json";
 import mockLayout from "./data/layout.json";
 import mockLimits from "./data/limits.json";
+import mockNutrients from "./data/nutrients.json";
+import mockRecipes from "./data/recipes.json";
 import mockScenarios from "./data/scenarios.json";
 
 // Fields of the zone response example under GET /zones/{zoneId} in docs/contract.md §11.2 (T1-10),
 // which the real back end (T1-12) answers. simTs is left out: playground readings only.
 const ZONE_FIELDS = [
   "zone",
+  "source", // LIVE or SIMULATED, from the layout (§2.4, T1-33)
   "online",
   "lastSeen",
   "ts",
@@ -32,6 +37,8 @@ const ZONE_FIELDS = [
   "operation",
   "latches",
   "configVersion",
+  "profile", // what the zone is and grows, from the config pack (T1-38)
+  "crop",
 ];
 const READING_FIELDS = [
   "ec",
@@ -95,6 +102,43 @@ describe("fake API (MSW)", () => {
     expect(mockLimits).toEqual(configLimits);
   });
 
+  it("the mock recipes and nutrients are exact copies of config/clients/client_A's", () => {
+    expect(mockRecipes).toEqual(configRecipes);
+    expect(mockNutrients).toEqual(configNutrients);
+  });
+
+  it("GET /api/zones/Z2 says what the zone is and grows, as the back end does (T1-38)", async () => {
+    const t = (await (await get("/zones/Z2")).json()) as ZoneStatus;
+    expect(t.profile).toMatchObject({
+      name: "Zone B",
+      growingSystem: "NFT",
+      plantSites: 4 * 252,
+      tank: { id: "R2", volumeL: 1300, usableL: 1200 },
+      controller: "ZC2",
+      link: "MQTT",
+    });
+    expect(t.crop).toEqual({
+      crop: "BASIL",
+      name: "Basil",
+      variety: "Genovese",
+      stage: "SEEDLING",
+      plantedOn: "2026-11-08",
+    });
+  });
+
+  it("GET /api/zones/Z1/dose-limits says what each line doses (T1-38)", async () => {
+    const answer = (await (await get("/zones/Z1/dose-limits")).json()) as DoseLimits;
+    expect(answer.lines.map((l) => l.line)).toEqual(["A", "B", "ACID"]);
+    expect(answer.lines[2]).toMatchObject({
+      name: "Acid (pH down)",
+      compound: "Phosphoric acid",
+      strengthPct: 10,
+      purpose: "Lowers pH",
+      maxPerDoseMl: 100,
+    });
+    expect((await get("/zones/Z9/dose-limits")).status).toBe(404);
+  });
+
   it("the mock scenarios are an exact copy of config/clients/client_A/scenarios.json", () => {
     expect(mockScenarios).toEqual(configScenarios);
   });
@@ -150,7 +194,17 @@ describe("fake API (MSW)", () => {
     const c = (await res.json()) as ClimateStatus;
     expect(c).toMatchObject({ online: true, mode: "MANUAL", manualUntil: null, stopped: false, latches: [] });
     // §11.2: the answer carries no message envelope
-    for (const key of ["v", "type", "msgId", "site", "device", "bootId", "seq", "runTimeTodayMin", "setpoints"])
+    for (const key of [
+      "v",
+      "type",
+      "msgId",
+      "site",
+      "device",
+      "bootId",
+      "seq",
+      "runTimeTodayMin",
+      "setpoints",
+    ])
       expect(c).not.toHaveProperty(key);
     // first answer is the contract example
     expect(c.readings).toEqual({
@@ -184,7 +238,8 @@ describe("fake API (MSW)", () => {
       ups: { onBattery: false, batteryPct: 100, runtimeMin: 42 },
       quality: {},
     });
-    for (const key of ["v", "type", "msgId", "site", "device", "bootId", "seq"]) expect(p).not.toHaveProperty(key);
+    for (const key of ["v", "type", "msgId", "site", "device", "bootId", "seq"])
+      expect(p).not.toHaveProperty(key);
   });
 
   it("GET /api/zones/Z9 is a 404 with the contract error body", async () => {

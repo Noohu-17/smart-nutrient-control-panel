@@ -8,8 +8,10 @@ import { StatusChip } from "../../components/StatusChip";
 import { AlertStrip } from "../alerts/AlertStrip";
 import { useZoneAlerts } from "../alerts/useZoneAlerts";
 import { DoseCard } from "../dosing/DoseCard";
+import { ZoneTags } from "./ZoneTags";
 import { DOSE_CARD, goToDoseCard } from "./doseCard";
 import { ZoneActions } from "./ZoneActions";
+import { ZoneDetails } from "./ZoneDetails";
 import { ResumeZone } from "./ResumeZone";
 import { ZoneReadings, ZoneStatusChip } from "./ZoneLive";
 import { useZoneStatus } from "./useZoneStatus";
@@ -42,6 +44,7 @@ function ZoneLive({ zone, zones }: { zone: FarmZone; zones: FarmZone[] }) {
           <h2 id="readings-title">Readings</h2>
           <ZoneStatusChip status={status} />
         </header>
+        <ZoneTags zone={zone} status={status} />
         <ZoneReadings status={status} />
         <ZoneActions zoneId={zone.id} full />
       </section>
@@ -80,6 +83,8 @@ export function ZonePage() {
       ) : (
         <>
           <ZoneLive key={`live-${zone.id}`} zone={zone} zones={farm.data.zones} />
+
+          <ZoneDetails key={`details-${zone.id}`} zone={zone} />
 
           <DoseCard key={zone.id} zone={zone} />
 

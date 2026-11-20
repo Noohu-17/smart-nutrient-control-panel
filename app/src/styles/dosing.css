@@ -78,6 +78,18 @@
   margin-right: auto;
 }
 
+/* what a dose line doses (T2-30), under its amount and in the review */
+.nutrient-note {
+  font-size: var(--text-caption-size);
+  font-weight: var(--weight-regular);
+  line-height: var(--text-label-line);
+  color: var(--text-muted);
+}
+.dose-summary-line {
+  display: flex;
+  flex-direction: column;
+}
+
 /* ---------- review */
 .dose-summary,
 .checks {

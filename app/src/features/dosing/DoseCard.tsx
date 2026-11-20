@@ -1,11 +1,12 @@
 import { useId, useState } from "react";
 import { useConfirmDose, useDoseLimits, useDoseReview, useZone } from "../../api/hooks";
-import type { DoseLineAmount, DoseRequest, FarmZone } from "../../api/types";
+import type { DoseLineAmount, DoseLineLimit, DoseRequest, FarmZone } from "../../api/types";
 import { can, WHY } from "../../auth/roles";
 import { useSession } from "../../auth/session";
 import { LockedButton } from "../../components/LockedButton";
 import { StatusChip } from "../../components/StatusChip";
 import { checkTitle, limitHint, lineName, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
+import { nutrientText } from "../../config/zoneText";
 import { DOSE_CARD } from "../zones/doseCard";
 import { CommandStatus } from "./CommandStatus";
 
@@ -18,6 +19,20 @@ const toLines = (zone: FarmZone, amounts: Amounts): DoseLineAmount[] =>
   }));
 
 const isWholeMl = (v: string | undefined) => v === undefined || v === "" || /^\d+$/.test(v);
+
+type LineInfo = DoseLineLimit[] | undefined;
+const infoFor = (info: LineInfo, line: string) => info?.find((l) => l.line === line);
+
+/** The short line describing what a dose line doses (nutrients.json, T2-30); nothing if the pack
+    doesn't say. */
+function NutrientNote({ info, id }: { info: DoseLineLimit | undefined; id?: string }) {
+  const text = nutrientText(info);
+  return text ? (
+    <small className="nutrient-note" id={id}>
+      {text}
+    </small>
+  ) : null;
+}
 
 /** Manual dose on the Zone page: amounts per line → safety checks (§11.3) → confirm → sent. */
 export function DoseCard({ zone }: { zone: FarmZone }) {
@@ -33,8 +48,9 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
   const review = useDoseReview();
   const confirm = useConfirmDose();
   const telemetry = useZone(zone.id);
-  // only a hint while typing: if it can't load, the form works as before and the review checks
-  const limits = useDoseLimits(zone.id);
+  // only a hint while typing, and what each line doses (T2-30): if it can't load, the form works
+  // as before and the review checks
+  const lineInfo = useDoseLimits(zone.id).data?.lines;
   const idBase = useId();
 
   const allowed = role !== null && can(role, "operate");
@@ -76,6 +92,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
       ) : dr ? (
         <Review
           dr={dr}
+          lineInfo={lineInfo}
           ticked={ticked}
           setTicked={setTicked}
           sending={confirm.isPending}
@@ -95,10 +112,12 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
         >
           <div className="dose-lines">
             {zone.doseLines.map((line) => {
-              const limit = limits.data?.lines.find((l) => l.line === line);
+              const info = infoFor(lineInfo, line);
               const ml = lines.find((l) => l.line === line)?.ml ?? 0;
-              const hint = limit && limitHint(limit, ml);
+              const hint = info && limitHint(info, ml);
               const hintId = `${idBase}-${line}-limit`;
+              const aboutId = `${idBase}-${line}-about`;
+              const describedBy = [hint && hintId, nutrientText(info) && aboutId].filter(Boolean).join(" ");
               return (
                 <div key={line} className="dose-line">
                   <label htmlFor={`${idBase}-${line}`}>{lineName(line)}</label>
@@ -112,7 +131,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
                       value={amounts[line] ?? ""}
                       disabled={!allowed}
                       aria-invalid={!isWholeMl(amounts[line]) || Boolean(hint?.over)}
-                      aria-describedby={hint ? hintId : undefined}
+                      aria-describedby={describedBy || undefined}
                       onChange={(e) => setAmounts({ ...amounts, [line]: e.target.value })}
                     />
                     <small>mL</small>
@@ -122,6 +141,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
                       {hint.text}
                     </small>
                   )}
+                  <NutrientNote info={info} id={aboutId} />
                 </div>
               );
             })}
@@ -145,6 +165,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
 
 type ReviewProps = {
   dr: DoseRequest;
+  lineInfo: LineInfo;
   ticked: boolean;
   setTicked: (v: boolean) => void;
   sending: boolean;
@@ -157,6 +178,7 @@ type ReviewProps = {
 
 function Review({
   dr,
+  lineInfo,
   ticked,
   setTicked,
   sending,
@@ -175,7 +197,10 @@ function Review({
           .filter((l) => l.ml > 0)
           .map((l) => (
             <li key={l.line}>
-              <span>{lineName(l.line)}</span>
+              <span className="dose-summary-line">
+                {lineName(l.line)}
+                <NutrientNote info={infoFor(lineInfo, l.line)} />
+              </span>
               <b>{l.ml} mL</b>
             </li>
           ))}

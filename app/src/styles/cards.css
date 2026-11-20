@@ -35,6 +35,25 @@
   text-decoration: underline;
 }
 
+/* what the zone is (T2-30): NFT · 4 benches · Lettuce · Seedling · day 9 · 10 L tank · LIVE */
+.zone-tags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1-5);
+}
+.zone-tags li {
+  padding: var(--space-half) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--status-neutral-bg);
+  color: var(--status-neutral-fg);
+  font-size: var(--text-caption-size);
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+
 /* no data from the zone: dashed and muted, values show "--" */
 .zone-card.offline {
   border-style: dashed;
@@ -155,4 +174,32 @@
   font-size: var(--text-section-size);
   line-height: var(--text-section-line);
   font-weight: var(--weight-bold);
+}
+
+/* ---------- zone details panel (T2-30) */
+.zone-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--reading-min)), 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.zone-details div {
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-tile);
+  background: var(--color-surface-subtle);
+}
+.zone-details dt {
+  font-size: var(--text-label-size);
+  color: var(--text-secondary);
+}
+.zone-details dd {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+  overflow-wrap: anywhere;
+}
+.zone-details-line {
+  display: block;
+  font-size: var(--text-caption-size);
+  font-weight: var(--weight-regular);
+  color: var(--text-muted);
 }

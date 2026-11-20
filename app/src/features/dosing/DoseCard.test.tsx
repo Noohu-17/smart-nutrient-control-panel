@@ -76,10 +76,10 @@ describe("Manual dose and review", () => {
     await card.findByText("Max 100 mL per dose · 340 mL left today");
     for (const label of ["Stock A", "Stock B"])
       expect(card.getByLabelText(label)).toHaveAccessibleDescription(
-        "Max 300 mL per dose · 1,260 mL left today",
+        /^Max 300 mL per dose · 1,260 mL left today /,
       );
     expect(card.getByLabelText("Acid")).toHaveAccessibleDescription(
-      "Max 100 mL per dose · 340 mL left today",
+      "Max 100 mL per dose · 340 mL left today Acid (pH down) · Phosphoric acid 10% · Lowers pH",
     );
   });
 
@@ -91,7 +91,7 @@ describe("Manual dose and review", () => {
     expect(stockA).toHaveAttribute("aria-invalid", "false");
     await user.type(stockA, "1"); // 3001
     expect(stockA).toHaveAttribute("aria-invalid", "true");
-    expect(stockA).toHaveAccessibleDescription("Over the 300 mL per-dose limit");
+    expect(stockA).toHaveAccessibleDescription(/^Over the 300 mL per-dose limit /);
     // only a hint: the review is still the one that decides
     expect(card.getByRole("button", { name: "Review dose" })).toBeEnabled();
   });
@@ -110,7 +110,7 @@ describe("Manual dose and review", () => {
     await card.findByText("Max 300 mL per dose · 100 mL left today");
     await user.type(stockA, "150");
     expect(stockA).toHaveAttribute("aria-invalid", "true");
-    expect(stockA).toHaveAccessibleDescription("Over what's left today: 100 mL");
+    expect(stockA).toHaveAccessibleDescription("Over what's left today: 100 mL"); // a back end from before T1-38: no nutrient line
   });
 
   it("works as before, without hints, when the limits can't be loaded", async () => {

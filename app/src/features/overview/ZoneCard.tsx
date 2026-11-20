@@ -3,10 +3,11 @@ import type { FarmZone } from "../../api/types";
 import { zonePath } from "../../config/readings";
 import { ZoneActions } from "../zones/ZoneActions";
 import { ZoneReadings, ZoneStatusChip } from "../zones/ZoneLive";
+import { ZoneTags } from "../zones/ZoneTags";
 import { useZoneStatus } from "../zones/useZoneStatus";
 
-/** Overview card for one zone: its latest readings and how fresh they are. Its alerts are in the
-    strip at the top of the Overview. */
+/** Overview card for one zone: what it is, its latest readings and how fresh they are. Its alerts
+    are in the strip at the top of the Overview. */
 export function ZoneCard({ zone }: { zone: FarmZone }) {
   const status = useZoneStatus(zone.id);
 
@@ -18,6 +19,7 @@ export function ZoneCard({ zone }: { zone: FarmZone }) {
         </h2>
         <ZoneStatusChip status={status} />
       </header>
+      <ZoneTags zone={zone} status={status} />
       <ZoneReadings status={status} />
       <ZoneActions zoneId={zone.id} />
     </section>

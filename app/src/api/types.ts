@@ -1,21 +1,51 @@
 // src/api/types.ts · shapes of the API answers (contract §2.4 layout, §6.1 zone, §6.2 climate, §6.3 power)
 // Later these are generated from OpenAPI (npm run gen:api); until then we keep them by hand.
 
-export type DoseLine = "A" | "B" | "ACID";
+/** A dose line ID from the config pack: A, B and ACID at client_A, N, P and K at client_B. */
+export type DoseLine = string;
 
 export type Quality = "OK" | "STALE" | "OUT_OF_RANGE" | "FAULT" | "UNCALIBRATED";
 
+/** Where a zone's readings and controller come from (§2.4, T1-33): real hardware or the simulator. */
+export type ZoneSource = "LIVE" | "SIMULATED";
+
 /* ---------- GET /api/farm (contract §2.4, layout.json) ---------- */
 export type Bench = { id: string; channels: number; lengthM: number };
+
+/** One kind of growing unit (T1-38). The size keys follow the type: channels and lengthM for an
+    NFT_BENCH, widthM for a raft, volumeL for a bucket or bag, heightM for a tower. */
+export type GrowingUnit = {
+  type: string; // NFT_BENCH, DWC_RAFT, DUTCH_BUCKET, GROW_BAG, VERTICAL_TOWER
+  count: number;
+  plantSitesEach: number;
+  channels?: number;
+  lengthM?: number;
+  widthM?: number;
+  volumeL?: number;
+  heightM?: number;
+};
+
+export type Tank = { id: string; volumeL?: number; usableL: number };
+
+export type ZoneSize = { lengthM: number; widthM: number };
+
+export type ZonePosition = { xM: number; yM: number; label?: string | null };
 
 export type FarmZone = {
   id: string; // "Z1"
   name: string; // "Zone A" (what the screen shows)
   controller: string; // "ZC1"
-  reservoir: { id: string; usableL: number };
+  source?: ZoneSource; // GET /api/farm always fills it in (§2.4); a back end from before T1-33 doesn't
+  // what the zone is (T1-38); a pack from before it leaves them out
+  growingSystem?: string; // NFT, DWC, DUTCH_BUCKET, DRIP, VERTICAL, MIXED
+  growingUnits?: GrowingUnit[];
+  size?: ZoneSize;
+  position?: ZonePosition;
+  notes?: string;
+  reservoir: Tank;
   dosingCabinet: string;
   doseLines: DoseLine[];
-  sensors?: { dissolvedOxygen: boolean };
+  sensors?: Record<string, boolean>; // each sensor, fitted (true) or not
   dayTanks: Record<DoseLine, { usableL: number }>;
   benches: Bench[];
 };
@@ -55,6 +85,7 @@ export type Farm = {
 /* ---------- GET /api/zones/{zoneId} (contract §11.2, zone response; readings from §6.1) ---------- */
 export type ZoneStatus = {
   zone: string;
+  source?: ZoneSource; // from the layout (§2.4); left out by a back end from before T1-33
   online: boolean; // false once the controller has been silent 3 minutes; the last values still come
   lastSeen: string | null; // newest ts of any message from the controller; null if never heard from
   ts: string | null; // when the latest reading was taken
@@ -82,6 +113,35 @@ export type ZoneStatus = {
   operation: { cmdId: string; kind: "DOSE" | "REFILL"; state: string; line?: string | null } | null;
   latches: string[];
   configVersion: number | null;
+  // from the config pack (T1-38); left out by a back end from before it
+  profile?: ZoneProfile;
+  crop?: ZoneCrop | null; // null: no recipe applied to the zone
+};
+
+/** What the zone is (contract §11.2 `profile`): the layout zone, with its controller's link. */
+export type ZoneProfile = {
+  name: string;
+  growingSystem: string | null;
+  growingUnits: GrowingUnit[];
+  plantSites: number | null; // every unit's plant sites added up
+  size: ZoneSize | null;
+  position: ZonePosition | null;
+  tank: Tank;
+  sensors: Record<string, boolean>;
+  controller: string;
+  link: string; // MQTT, or SF_GATEWAY for a zone on the prototype rig
+  doseLines: DoseLine[];
+  notes: string | null;
+};
+
+/** What the zone grows (contract §11.2 `crop`, recipes.json zones). */
+export type ZoneCrop = {
+  crop: string; // LETTUCE
+  name: string | null; // Lettuce
+  variety: string | null;
+  stage: string; // SEEDLING, GROWING …
+  plantedOn: string | null; // the farm's calendar day, YYYY-MM-DD
+  daysToHarvest?: number | null; // not in the config pack yet
 };
 
 /* ---------- GET /api/climate (contract §11.2, climate answer; readings from §6.2) ---------- */
@@ -148,10 +208,18 @@ export type DoseRequest = {
 /* ---------- POST /api/dose-requests/{id}/confirm (contract §11.3, states §8.1) ---------- */
 export type DoseConfirmed = { cmdId: string; state: "DISPATCHED" };
 
-/* ---------- GET /api/zones/{zoneId}/dose-limits (contract §11.2, T1-37) ---------- */
-/** One line's limits and what is left of its 24 h limit, for the dose form while typing. */
+/* ---------- GET /api/zones/{zoneId}/dose-limits (contract §11.2, T1-37, T1-38) ---------- */
+/** One line's limits and what is left of its 24 h limit, for the dose form while typing, and what
+    the line doses (nutrients.json, T1-38). */
 export type DoseLineLimit = {
   line: string;
+  // what the line doses; null where the pack doesn't say, left out by a back end from before T1-38
+  name?: string | null;
+  compound?: string | null;
+  strengthPct?: number | null;
+  drum?: { id: string; volumeL: number } | null;
+  purpose?: string | null;
+  pumpMlPerMin?: number | null;
   maxPerDoseMl: number;
   max24hMl: number;
   dosed24hMl: number; // delivered in the last 24 h, as the LIMIT_24H check counts it
