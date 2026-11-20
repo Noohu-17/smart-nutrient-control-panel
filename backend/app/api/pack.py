@@ -1,5 +1,8 @@
 """Reading the client's config pack (contract §2.5): the farm, which site this API serves, and what
-the dose review needs to know about each zone."""
+the dose review needs to know about each zone.
+
+Each reader takes the Pack that app.packs.load_pack gives (its folder in dev, its newest version in
+the database on a server, T1-39), or a bare folder path."""
 
 import json
 import logging
@@ -7,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..packs import Pack, PackError, as_pack
 from .schemas import Drum, Farm, FarmZone, ZoneCrop, ZoneProfile
 
 log = logging.getLogger("api")
@@ -14,8 +18,7 @@ log = logging.getLogger("api")
 DIRECT_LINK = "MQTT"  # a controller on the farm's broker (§3); io_map.json names any other link
 
 
-class PackError(Exception):
-    """The config pack can't be read: the server's problem, so a 500 from app.errors."""
+__all__ = ["Pack", "PackError"]  # PackError is still imported from here
 
 
 @dataclass(frozen=True)
@@ -44,12 +47,16 @@ def _read_json(path: Path) -> Any:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def read_farm(client_dir: Path) -> Farm:
+PackLike = Pack | Path
+
+
+def read_farm(source: PackLike) -> Farm:
     """layout.json with one more field, features, the contents of features.json (§11.2), and
     every zone's source filled in (§2.4)."""
+    pack = as_pack(source)
     try:
-        layout = _read_json(client_dir / "layout.json")
-        features = _read_json(client_dir / "features.json")
+        layout = pack.json("layout.json")
+        features = pack.json("features.json")
         default = default_zone_source(features)
         zones = [
             {"source": default, **zone} if isinstance(zone, dict) else zone
@@ -67,17 +74,9 @@ def default_zone_source(features: Any) -> str:
     return "SIMULATED" if playground else "LIVE"
 
 
-def zone_sources(client_dir: Path) -> dict[str, str]:
+def zone_sources(source: PackLike) -> dict[str, str]:
     """Each zone's source, LIVE or SIMULATED, by zone ID."""
-    return {zone.id: zone.source for zone in read_farm(client_dir).zones}
-
-
-def _read_optional(path: Path) -> Any:
-    """A pack file that an older or smaller pack may not have: None if it isn't there."""
-    try:
-        return _read_json(path)
-    except FileNotFoundError:
-        return None
+    return {zone.id: zone.source for zone in read_farm(source).zones}
 
 
 def _profile(zone: FarmZone, links: dict[str, Any]) -> ZoneProfile:
@@ -113,23 +112,26 @@ def _crop(recipes: dict[str, Any], zone_id: str) -> ZoneCrop | None:
     )
 
 
-def read_zone_details(client_dir: Path) -> dict[str, tuple[ZoneProfile, ZoneCrop | None]]:
+def read_zone_details(source: PackLike) -> dict[str, tuple[ZoneProfile, ZoneCrop | None]]:
     """Each zone's profile (layout.json, and its controller's link from io_map.json) and crop
     (recipes.json), keyed by zone ID (T1-38). A pack without io_map.json or recipes.json gives
     MQTT links and no crops."""
+    pack = as_pack(source)
     try:
-        farm = read_farm(client_dir)
-        links = (_read_optional(client_dir / "io_map.json") or {}).get("controllers") or {}
-        recipes = _read_optional(client_dir / "recipes.json") or {}
+        farm = read_farm(pack)
+        links = (pack.optional("io_map.json") or {}).get("controllers") or {}
+        recipes = pack.optional("recipes.json") or {}
         return {zone.id: (_profile(zone, links), _crop(recipes, zone.id)) for zone in farm.zones}
     except (OSError, KeyError, TypeError, ValueError) as exc:
         raise _cannot_load(exc) from exc
 
 
-def site_of(client_dir: Path) -> SiteRef:
-    """org_id is the client's folder name until organisations exist (OPEN-11), as in the seed."""
+def site_of(source: PackLike) -> SiteRef:
+    """The pack's organisation (ORG_ID, or the client's folder name until organisations exist,
+    OPEN-11, as in the seed) and its layout.json site."""
+    pack = as_pack(source)
     try:
-        return SiteRef(client_dir.name, _read_json(client_dir / "layout.json")["site"])
+        return SiteRef(pack.org_id, pack.json("layout.json")["site"])
     except (OSError, KeyError, TypeError, ValueError) as exc:
         raise _cannot_load(exc) from exc
 
@@ -193,18 +195,19 @@ def _target(recipes: dict[str, Any], zone_id: str) -> Target | None:
     return Target(ec["min"], ec["max"], ph["min"], ph["max"])
 
 
-def read_dosing(client_dir: Path, zone_id: str) -> ZoneDosing | None:
+def read_dosing(source: PackLike, zone_id: str) -> ZoneDosing | None:
     """The zone's dosing settings, or None if limits.json has no such zone."""
+    pack = as_pack(source)
     try:
-        zone = _read_json(client_dir / "limits.json")["zones"].get(zone_id)
+        zone = pack.json("limits.json")["zones"].get(zone_id)
         if zone is None:
             return None
-        recipes = _read_json(client_dir / "recipes.json")
-        pumps = _read_json(client_dir / "hardware.json")["pumps"]["doseLines"]
-        stock = _read_json(client_dir / "nutrients.json")["doseLines"]
-        alerts = _read_json(client_dir / "alerts.json")
-        features = _read_json(client_dir / "features.json")
-        source = zone_sources(client_dir).get(zone_id)
+        recipes = pack.json("recipes.json")
+        pumps = pack.json("hardware.json")["pumps"]["doseLines"]
+        stock = pack.json("nutrients.json")["doseLines"]
+        alerts = pack.json("alerts.json")
+        features = pack.json("features.json")
+        zone_source = zone_sources(pack).get(zone_id)
         return ZoneDosing(
             limits=zone["limits"],
             mix_wait_s=zone["dose"]["mixWaitS"],
@@ -213,8 +216,25 @@ def read_dosing(client_dir: Path, zone_id: str) -> ZoneDosing | None:
             day_tank_warn_pct=alerts["events"]["DAYTANK_LOW"]["thresholdPct"],
             ec_per_ml_per_l={line: entry["ecChangePerMlPerL"] for line, entry in stock.items()},
             ph_per_ml_per_l={line: entry["phChangePerMlPerL"] for line, entry in stock.items()},
-            simulated_time=features.get("playground") is True and source == "SIMULATED",
+            simulated_time=features.get("playground") is True and zone_source == "SIMULATED",
             stock={line: _stock(entry) for line, entry in stock.items()},
         )
     except (OSError, KeyError, TypeError, ValueError, StopIteration) as exc:
+        raise _cannot_load(exc) from exc
+
+
+def run_settings(source: PackLike, zone_id: str, keys: tuple[str, ...]) -> dict[str, Any]:
+    """The zone's limits.json dose settings named by keys (§2.5, §7.2)."""
+    try:
+        dose = as_pack(source).json("limits.json")["zones"][zone_id]["dose"]
+        return {key: dose[key] for key in keys}
+    except (OSError, KeyError, TypeError, ValueError) as exc:
+        raise _cannot_load(exc) from exc
+
+
+def pack_file(source: PackLike, name: str) -> Any:
+    """Any pack file, parsed, such as scenarios.json or users.json."""
+    try:
+        return as_pack(source).json(name)
+    except (OSError, TypeError, ValueError) as exc:
         raise _cannot_load(exc) from exc

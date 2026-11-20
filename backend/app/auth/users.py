@@ -26,6 +26,7 @@ from ..api.pack import SiteRef, site_of
 from ..config import load_settings
 from ..db.engine import create_db_engine
 from ..db.models import Site, User, UserSession
+from ..packs import load_pack
 from . import audit
 from .access import OWNER
 from .passwords import hash_password, new_password
@@ -92,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     settings = load_settings()
     engine = create_db_engine(settings)
     try:
-        site = site_of(settings.client_dir)
+        site = site_of(load_pack(settings, engine))
         if args.command == "reset-two-factor":
             reset_two_factor(engine, site, args.email)
             print(f"Two-factor is off for {args.email.strip().lower()}; they set it up again at the next sign-in.")

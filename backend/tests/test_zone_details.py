@@ -5,7 +5,6 @@ The pack tests read client_A's and client_B's own files and need no database. Th
 copy of client_A into a throwaway database, as the other read API tests do.
 """
 
-import dataclasses
 import json
 import shutil
 from datetime import date
@@ -16,9 +15,9 @@ from test_read_api import api_client, contract_zone_example
 
 from app.api.pack import read_dosing, read_zone_details
 from app.api.routes import _zone_details
-from app.config import load_settings
 from app.db.seed import seed
 from app.main import app
+from app.packs import FolderPack
 
 CLIENTS = Path(__file__).resolve().parents[2] / "config" / "clients"
 CLIENT_A, CLIENT_B = CLIENTS / "client_A", CLIENTS / "client_B"
@@ -112,8 +111,7 @@ def broken_pack(tmp_path, name):
 
 @pytest.mark.parametrize("name", ["recipes.json", "io_map.json"])
 def test_a_broken_recipes_or_io_map_leaves_out_the_details_and_says_why(tmp_path, caplog, name):
-    settings = dataclasses.replace(load_settings(), client_dir=broken_pack(tmp_path, name))
-    assert _zone_details(settings) == {}
+    assert _zone_details(FolderPack(broken_pack(tmp_path, name))) == {}
     assert any("cannot load the config pack" in m for m in caplog.messages)
     assert any("without profile and crop" in m for m in caplog.messages)
 

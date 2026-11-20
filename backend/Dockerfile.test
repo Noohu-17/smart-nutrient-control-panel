@@ -1,5 +1,6 @@
-# Runs the back-end tests, including the contract-model tests, which read docs/contract.md.
-# Build from the repo root, so the contract is in the build context:
+# Runs the back-end tests, including the contract-model tests, which read docs/contract.md, and
+# the config-pack tests, which read config/clients/.
+# Build from the repo root, so the contract and the packs are in the build context:
 #   docker build -f backend/Dockerfile.test -t sna-backend-test .
 #   docker run --rm sna-backend-test
 # To test against a locally edited contract without rebuilding, mount docs/ over the copy:
@@ -18,6 +19,8 @@ COPY backend/requirements.txt backend/requirements-dev.txt ./
 RUN pip install -r requirements-dev.txt
 
 COPY docs/contract.md /repo/docs/contract.md
+# the client packs, for the tests that import, export and read them (T1-39)
+COPY config/clients /repo/config/clients
 COPY backend/pytest.ini ./
 COPY backend/app ./app
 COPY backend/tests ./tests

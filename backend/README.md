@@ -60,6 +60,28 @@ docker compose -f infra/docker-compose.dev.yml exec db psql -U sna -d sna -c "SE
 
 To check the messages themselves, use the watch tool above: it shows `FAIL` with the fields that break the contract.
 
+## Client settings in the database (T1-39)
+
+Each organisation's config pack (`config/clients/<client>/`, contract §2.5) is stored in the database, versioned: `config_version` has one row per version, `config_file` each file's text. `app.db.config_store` imports a pack folder, checking it first with the very checks `scripts/validate_config.py` runs (`app/packcheck.py`), and exports a stored version back to a folder, file for file as it was imported.
+
+| Command, from `backend/` | What it does |
+|---|---|
+| `python -m app.db.config_store import ../config/clients/client_B` | Check the pack and store it. A pack that differs in any file from the newest version is the next version (`configVersion`, from 1); the same pack again changes nothing. A pack with a problem is refused and nothing is stored. Also loads the farm's site, zones, benches and devices from its `layout.json`, as `app.db.seed` does. |
+| `python -m app.db.config_store export client_B ../exported/client_B [--version N]` | Write the newest version, or version N, back out as a pack folder. |
+| `python -m app.db.config_store versions client_B` | Every version: when and from where it was imported, and when its `DEVICE_CONFIG` went out. |
+| `python -m app.db.config_store send-device-config client_B` | Send the newest version's `DEVICE_CONFIG` again. |
+
+The organisation is `ORG_ID`, or the pack folder's name until organisations exist (OPEN-11).
+
+**Where the API, auth and worker read the settings from** is `CONFIG_SOURCE`:
+
+- `database`, the default on a server: the organisation's newest version. Nothing imported is a `503`; there is never a fallback to the folder. A new version is read once and kept in memory; if the database stops answering, the API carries on with the version it has, so Stop never needs the database (§8.3 rule 9). The worker reads it at start-up: restart it after an import.
+- `pack`, the default in dev: the folder `CLIENT_DIR` itself, read as it changes, so a laptop and the tests need no import.
+
+**`DEVICE_CONFIG`** (contract §7.7): controllers still get their limits this way. The first time the API reads a new stored version it sends each zone controller its `DEVICE_CONFIG`, retained, with `configVersion` the stored version: `limits` from `limits.json`, the `alarms` a controller acts on from `alerts.json`, and `autoRefill` (`{"enabled": false}` until the pack has auto-refill settings). It keeps trying in the background until the broker has taken it, then records when in `config_version`.
+
+On staging the `migrate` service imports `CLIENT_DIR` on every `up` (`infra/docker-compose.staging.yml`).
+
 ## Tests
 
 The tests read every JSON example of these messages straight from `docs/contract.md`, so they fail when the contract and the models drift apart.

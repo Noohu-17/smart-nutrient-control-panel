@@ -23,7 +23,7 @@ from fastapi import Depends, Request
 from sqlalchemy import select
 
 from ..api.pack import site_of
-from ..api.routes import EngineDep, SettingsDep, SiteDep, _database
+from ..api.routes import EngineDep, SettingsDep, SiteDep, _database, get_pack
 from ..db.models import User, UserSession
 from ..errors import ApiError
 from .sessions import COOKIE, CSRF_HEADER, FULL, Token, csrf_ok, read_token
@@ -113,7 +113,7 @@ def gate(request: Request, settings: SettingsDep, engine: EngineDep) -> None:
     path = request.url.path
     if path in OPEN or path == STOP:
         return
-    caller = signed_in(request, settings, engine, site_of(settings.client_dir))
+    caller = signed_in(request, settings, engine, site_of(get_pack(settings, engine)))
     if caller.stage != FULL and path not in BEFORE_TWO_FACTOR:
         raise ApiError(403, "TWO_FACTOR_REQUIRED", TWO_FACTOR_FIRST)
     _check_csrf(request, settings.session_secret, caller.token)

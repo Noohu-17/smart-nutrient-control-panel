@@ -8,6 +8,8 @@ The database then matches the file: rows are added or updated, and zones, benche
 devices no longer in the file are removed. Running it twice changes nothing. Every value
 comes from layout.json; org_id is the client folder name until the organisation layer
 exists (OPEN-11). Check the pack first with scripts/validate_config.py.
+
+On a server, app.db.config_store's import does this too, with the rest of the pack (T1-39).
 """
 
 import argparse
@@ -73,13 +75,18 @@ def seed(engine: Engine, client_dir: Path) -> Rows:
         rows = layout_rows(layout, org_id=client_dir.name)
     except (KeyError, TypeError) as exc:
         raise ValueError(f"{path}: missing or malformed field {exc}") from exc
-    org_id, site_id = rows[Site][0]["org_id"], rows[Site][0]["site_id"]
     with engine.begin() as connection:
-        for model in (Site, Zone, Bench, Device):  # parents first
-            _upsert(connection, model, rows[model])
-        for model in (Bench, Device, Zone):  # children first
-            _remove_missing(connection, model, rows[model], org_id, site_id)
+        write_rows(connection, rows)
     return rows
+
+
+def write_rows(connection: Connection, rows: Rows) -> None:
+    """Make the site's rows match `rows` (layout_rows), in the caller's transaction."""
+    org_id, site_id = rows[Site][0]["org_id"], rows[Site][0]["site_id"]
+    for model in (Site, Zone, Bench, Device):  # parents first
+        _upsert(connection, model, rows[model])
+    for model in (Bench, Device, Zone):  # children first
+        _remove_missing(connection, model, rows[model], org_id, site_id)
 
 
 def _upsert(connection: Connection, model: type[Base], rows: list[dict[str, Any]]) -> None:

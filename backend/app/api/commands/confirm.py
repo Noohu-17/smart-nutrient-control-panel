@@ -13,12 +13,10 @@ that one command and its cmdId whatever fails afterwards:
 Confirms of one dose request wait for each other, sending included, so two at once send it once.
 """
 
-import json
 import logging
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException
@@ -27,12 +25,11 @@ from sqlalchemy.exc import IntegrityError
 
 from ...auth import audit
 from ...auth.access import Caller
-from ...config import Settings
 from ...db.models import DoseRequest, SentCommand
 from ...errors import ApiError
 from .. import queries
 from ..dosing import DoseInputError, review, validate_lines
-from ..pack import PackError, SiteRef, read_dosing, read_farm
+from ..pack import Pack, SiteRef, read_dosing, read_farm, run_settings
 from ..routes import DATABASE_NOT_READY, _database, _not_loaded, _zone
 from ..schemas import DoseCheck, DoseLineAmount
 from . import messages, sent
@@ -46,7 +43,7 @@ RUN_SETTINGS = ("mixWaitS", "maxDurationS", "tolerancePct")  # limits.json zones
 
 
 def confirm(
-    settings: Settings,
+    pack: Pack,
     engine: Engine,
     site: SiteRef,
     publisher: Publisher,
@@ -59,7 +56,7 @@ def confirm(
     with _database(engine) as connection, _one_at_a_time(connection, site, request_id):
         command = _command_of(connection, site, request_id)
         if command is None:
-            dose = _checked_dose(connection, settings, site, request_id, caller.issued_by)
+            dose = _checked_dose(connection, pack, site, request_id, caller.issued_by)
             _save(connection, site, request_id, key, dose, caller)
             command = _command_of(connection, site, request_id)
         elif key is None or key != command.idempotency_key:
@@ -121,7 +118,7 @@ def _refuse_if_blocked(checks: Iterable[DoseCheck]) -> None:
 
 
 def _checked_dose(
-    connection: Connection, settings: Settings, site: SiteRef, request_id: str, issued_by: str
+    connection: Connection, pack: Pack, site: SiteRef, request_id: str, issued_by: str
 ) -> messages.Command:
     """The DOSE for a dose request, once both its review and a new one of the zone as it is now pass."""
     saved = connection.execute(
@@ -135,8 +132,8 @@ def _checked_dose(
         raise ApiError(404, "NOT_FOUND", f"There is no dose request {request_id}")
     _refuse_if_blocked(DoseCheck.model_validate(check) for check in saved.checks)  # what the person saw
 
-    zone = next((z for z in read_farm(settings.client_dir).zones if z.id == saved.zone_id), None)
-    dosing = None if zone is None else read_dosing(settings.client_dir, zone.id)
+    zone = next((z for z in read_farm(pack).zones if z.id == saved.zone_id), None)
+    dosing = None if zone is None else read_dosing(pack, zone.id)
     if zone is None or dosing is None:
         raise ApiError(404, "NOT_FOUND", f"There is no zone {saved.zone_id}")
     lines = [DoseLineAmount(line=line["line"], ml=line["ml"]) for line in saved.lines]
@@ -164,20 +161,10 @@ def _checked_dose(
         lines=saved.lines,
         order=[line for line in zone.dose_lines if line in requested],  # the layout's order (§2.4)
         limits=saved.limits,  # the snapshot the review used (§7.2)
-        run=_run_settings(settings.client_dir, zone.id),
+        run=run_settings(pack, zone.id, RUN_SETTINGS),
         now=now,
         issued_by=issued_by,
     )
-
-
-def _run_settings(client_dir: Path, zone_id: str) -> dict[str, Any]:
-    """mixWaitS, maxDurationS and tolerancePct for the zone, from limits.json (§2.5, §7.2)."""
-    try:
-        dose = json.loads((client_dir / "limits.json").read_text(encoding="utf-8"))["zones"][zone_id]["dose"]
-        return {key: dose[key] for key in RUN_SETTINGS}
-    except (OSError, KeyError, TypeError, ValueError) as exc:
-        log.error("cannot load the config pack: %s", exc)
-        raise PackError("The farm layout could not be loaded") from exc
 
 
 def _save(

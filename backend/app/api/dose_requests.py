@@ -17,13 +17,12 @@ from sqlalchemy import Connection, insert
 
 from ..auth import audit
 from ..auth.access import STAFF, Caller, allowed
-from ..config import Settings
 from ..db.models import DoseRequest
 from ..errors import ApiError
 from . import queries
 from .dosing import DoseInputError, review, validate_lines
-from .pack import SiteRef, ZoneDosing, read_dosing, read_farm
-from .routes import ZONE_ID, EngineDep, SettingsDep, SiteDep, _database, _errors, _not_loaded, _zone
+from .pack import Pack, SiteRef, ZoneDosing, read_dosing, read_farm
+from .routes import ZONE_ID, EngineDep, PackDep, SiteDep, _database, _errors, _not_loaded, _zone
 from .schemas import (
     DoseLimits,
     DoseLineLimit,
@@ -40,13 +39,13 @@ may_dose = allowed(*STAFF, why="Viewers can’t dose")  # §11.2: Owner, Agronom
 MayDose = Annotated[Caller, Depends(may_dose)]
 
 
-def _zone_and_dosing(settings: Settings, zone_id: str) -> tuple[FarmZone, ZoneDosing]:
+def _zone_and_dosing(pack: Pack, zone_id: str) -> tuple[FarmZone, ZoneDosing]:
     """The zone's layout and dosing settings from the config pack; 404 if it has no such zone."""
     no_such_zone = ApiError(404, "NOT_FOUND", f"There is no zone {zone_id}")
-    zone = next((z for z in read_farm(settings.client_dir).zones if z.id == zone_id), None)
+    zone = next((z for z in read_farm(pack).zones if z.id == zone_id), None)
     if zone is None or not ZONE_ID.fullmatch(zone_id):
         raise no_such_zone
-    dosing = read_dosing(settings.client_dir, zone.id)
+    dosing = read_dosing(pack, zone.id)
     if dosing is None:
         raise no_such_zone
     return zone, dosing
@@ -80,11 +79,11 @@ def _dosed_24h(
 
 
 def create_dose_request(
-    body: DoseRequestBody, settings: SettingsDep, engine: EngineDep, site: SiteDep, caller: MayDose
+    body: DoseRequestBody, pack: PackDep, engine: EngineDep, site: SiteDep, caller: MayDose
 ) -> DoseReview:
     """Review a dose. 201 with every check, whatever they say; canConfirm tells if it may go on.
     403 for a Viewer (§13)."""
-    zone, dosing = _zone_and_dosing(settings, body.zone)
+    zone, dosing = _zone_and_dosing(pack, body.zone)
     try:
         validate_lines(zone, body.lines)
     except DoseInputError as exc:
@@ -128,11 +127,11 @@ def create_dose_request(
 
 
 def get_dose_limits(
-    zone_id: Annotated[str, Path(alias="zoneId")], settings: SettingsDep, engine: EngineDep, site: SiteDep
+    zone_id: Annotated[str, Path(alias="zoneId")], pack: PackDep, engine: EngineDep, site: SiteDep
 ) -> DoseLimits:
     """Each line's per-dose and 24 h limits from the config pack, and how much of the 24 h limit is
     left now: the same numbers the review checks LIMIT_DOSE and LIMIT_24H against."""
-    zone, dosing = _zone_and_dosing(settings, zone_id)
+    zone, dosing = _zone_and_dosing(pack, zone_id)
     per_dose = dosing.limits.get("maxPerDoseMl", {})
     per_day = dosing.limits.get("max24hMl", {})
     with _database(engine) as connection:

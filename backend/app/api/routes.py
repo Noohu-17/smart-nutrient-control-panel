@@ -15,12 +15,13 @@ from functools import cache
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query
-from sqlalchemy import Connection, Engine, create_engine
+from sqlalchemy import Connection, Engine
 from sqlalchemy.exc import InterfaceError, OperationalError, ProgrammingError
 from sqlalchemy.exc import TimeoutError as NoConnectionFree
 
 from ..config import Settings, load_settings
-from ..db.engine import database_url
+from ..db.engine import create_db_engine
+from ..packs import NotImported, Pack, kept_pack, load_pack, refresh_soon
 from . import queries
 from .pack import PackError, SiteRef, read_farm, read_zone_details, site_of, zone_sources
 from .schemas import (
@@ -54,12 +55,7 @@ def get_settings() -> Settings:
 
 @cache
 def _engine_for(settings: Settings) -> Engine:
-    return create_engine(
-        database_url(settings),
-        pool_pre_ping=True,  # after a database restart, reconnect rather than fail one request
-        pool_timeout=5,  # all connections busy: answer 503 soon rather than make the app wait
-        connect_args={"connect_timeout": max(1, round(settings.health_timeout_s))},
-    )
+    return create_db_engine(settings)  # connect_timeout and pool_timeout: a 503 soon, not a long wait
 
 
 def get_engine(settings: Annotated[Settings, Depends(get_settings)]) -> Engine:
@@ -70,8 +66,42 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 EngineDep = Annotated[Engine, Depends(get_engine)]
 
 
-def get_site(settings: SettingsDep) -> SiteRef:
-    return site_of(settings.client_dir)
+def get_pack(settings: SettingsDep, engine: EngineDep) -> Pack:
+    """The farm's settings (T1-39): the pack folder in dev, the newest imported version on a server.
+    A new stored version also has its DEVICE_CONFIG sent to the zone controllers (§7.7)."""
+    try:
+        pack = load_pack(settings, engine)
+    except NotImported as exc:
+        log.error("%s", exc)
+        raise HTTPException(503, "The farm settings have not been imported into the database yet") from exc
+    from .device_config import send_soon  # here, as it needs this module's settings and engine
+
+    send_soon(settings, engine, pack)
+    return pack
+
+
+PackDep = Annotated[Pack, Depends(get_pack)]
+
+
+def get_stop_pack(settings: SettingsDep, engine: EngineDep) -> Pack:
+    """Stop's pack (§8.3 rule 9): the version already in memory, without asking the database; a
+    newer one is looked for in the background. Only when none has been loaded yet (the API has just
+    started) is the database asked, and if it can't answer that is a 503, not a 500."""
+    pack = kept_pack(settings, engine)
+    if pack is not None:
+        refresh_soon(settings, engine)
+        return pack
+    try:
+        return get_pack(settings, engine)
+    except PackError as exc:
+        raise HTTPException(503, "The farm settings could not be loaded; try Stop again") from exc
+
+
+StopPackDep = Annotated[Pack, Depends(get_stop_pack)]
+
+
+def get_site(pack: PackDep) -> SiteRef:
+    return site_of(pack)
 
 
 SiteDep = Annotated[SiteRef, Depends(get_site)]
@@ -98,15 +128,15 @@ def _errors(*statuses: int) -> dict[int | str, dict[str, Any]]:
     return {status: {"model": ErrorBody} for status in statuses}
 
 
-def get_farm(settings: SettingsDep) -> Farm:
-    """The site's layout and feature switches (§11.2). Needs no database."""
-    return read_farm(settings.client_dir)
+def get_farm(pack: PackDep) -> Farm:
+    """The site's layout and feature switches (§11.2). From a pack folder, needs no database."""
+    return read_farm(pack)
 
 
-def list_zones(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> ZoneList:
+def list_zones(pack: PackDep, engine: EngineDep, site: SiteDep) -> ZoneList:
     """The latest readings and state of every zone, with what each zone is (§11.2, T1-38)."""
-    details = _zone_details(settings)
-    sources = zone_sources(settings.client_dir)
+    details = _zone_details(pack)
+    sources = zone_sources(pack)
     with _database(engine) as connection:
         rows = queries.zones(connection, site)
         if not rows and not queries.site_is_loaded(connection, site):
@@ -118,7 +148,7 @@ def list_zones(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> ZoneL
 
 def get_zone(
     zone_id: Annotated[str, Path(alias="zoneId")],
-    settings: SettingsDep,
+    pack: PackDep,
     engine: EngineDep,
     site: SiteDep,
 ) -> ZoneStatus:
@@ -126,8 +156,8 @@ def get_zone(
     no_such_zone = HTTPException(404, f"There is no zone {zone_id}")
     if not ZONE_ID.fullmatch(zone_id):
         raise no_such_zone
-    sources = zone_sources(settings.client_dir)
-    details = _zone_details(settings)
+    sources = zone_sources(pack)
+    details = _zone_details(pack)
     with _database(engine) as connection:
         rows = queries.zones(connection, site, zone_id)
         if rows:
@@ -142,11 +172,11 @@ def _source(sources: dict[str, str], row: Any) -> str:
     return sources.get(row.zone_id, "LIVE")
 
 
-def _zone_details(settings: Settings) -> dict[str, tuple[ZoneProfile, ZoneCrop | None]]:
+def _zone_details(pack: Pack) -> dict[str, tuple[ZoneProfile, ZoneCrop | None]]:
     """Each zone's profile and crop, or none at all if the pack can't give them: a mistake in
     recipes.json or io_map.json must not cost the farm its readings. The cause is logged."""
     try:
-        return read_zone_details(settings.client_dir)
+        return read_zone_details(pack)
     except PackError:
         log.warning("zones answered without profile and crop: the config pack could not be read")
         return {}
@@ -194,9 +224,9 @@ def _seen(connection: Connection, site: SiteRef, device_id: str) -> Any:
     return row
 
 
-def get_climate(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> ClimateStatus:
+def get_climate(pack: PackDep, engine: EngineDep, site: SiteDep) -> ClimateStatus:
     """The climate controller's latest readings and state. 200 even when offline (§11.2)."""
-    climate = read_farm(settings.client_dir).climate
+    climate = read_farm(pack).climate
     with _database(engine) as connection:
         row = _seen(connection, site, climate.controller)
         rows = queries.latest_climate_telemetry(connection, site, climate.controller)
@@ -211,9 +241,9 @@ def get_climate(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> Clim
     )
 
 
-def get_power(settings: SettingsDep, engine: EngineDep, site: SiteDep) -> PowerStatus:
+def get_power(pack: PackDep, engine: EngineDep, site: SiteDep) -> PowerStatus:
     """The power monitor's latest POWER_STATE. 200 even when offline (§11.2)."""
-    power = read_farm(settings.client_dir).power
+    power = read_farm(pack).power
     with _database(engine) as connection:
         row = _seen(connection, site, power.monitor)
         latest = queries.latest_message(connection, site, power.monitor, "POWER_STATE")

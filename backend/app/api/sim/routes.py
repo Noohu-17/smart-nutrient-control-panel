@@ -37,8 +37,8 @@ from ...auth import audit
 from ...auth.access import OWNER, STAFF, Caller, allowed
 from ...db.models import PlaygroundReset
 from ...errors import ApiError, _error
-from ..pack import PackError, SiteRef, _read_json, _without_meta, read_farm
-from ..routes import EngineDep, SettingsDep, SiteDep, _errors
+from ..pack import PackError, SiteRef, _without_meta, read_farm
+from ..routes import EngineDep, PackDep, SettingsDep, SiteDep, _errors
 from ..schemas import Farm
 from .client import BadAnswer, HttpSimulator, SimAnswer, Simulator, SimulatorDown, SimulatorTimedOut
 from .schemas import FaultBody, HoldBody, SimId, SpeedBody
@@ -55,9 +55,9 @@ NOT_AVAILABLE = "The simulator is not available right now"
 SERVER_ERROR = "Something went wrong on the server"  # §11.1 INTERNAL: no detail
 
 
-def playground_only(request: Request, settings: SettingsDep) -> None:
+def playground_only(request: Request, pack: PackDep) -> None:
     """404 on a site without the playground, before the body's fields are checked."""
-    if read_farm(settings.client_dir).features.get("playground") is not True:
+    if read_farm(pack).features.get("playground") is not True:
         log.info("%s %s refused: this site has no playground", request.method, _one_line(request.url.path))
         raise HTTPException(404, "This site has no simulator")
 
@@ -73,9 +73,9 @@ def _live_zone_of(farm: Farm, target: str) -> str | None:
     return next((zone.id for zone in live.values() if zone.controller == target), None)
 
 
-def refuse_live_target(settings: SettingsDep, target: str, what: str) -> None:
+def refuse_live_target(pack: PackDep, target: str, what: str) -> None:
     """409 LIVE_ZONE for a hold or drill on a live zone: the simulator doesn't play it (T1-33)."""
-    zone_id = _live_zone_of(read_farm(settings.client_dir), target)
+    zone_id = _live_zone_of(read_farm(pack), target)
     if zone_id is not None:
         log.info("%s on %s refused: %s is a live zone", what, _one_line(target), zone_id)
         raise ApiError(409, "LIVE_ZONE", f"{zone_id} is a live zone: real hardware runs it, not the simulator")
@@ -221,12 +221,12 @@ def record_reset(engine: Engine, site: SiteRef, at: datetime) -> None:
 
 
 def post_reset(
-    settings: SettingsDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayReset
+    pack: PackDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayReset
 ) -> Response:
     """Back to the start of the current scenario: all drills off, levels and readings reset, and
     the 24-hour totals start again. Owner only (§11.4). Refused while any zone is live: a reset is
     for the whole site, and a live zone's totals and alerts are real (T1-33)."""
-    live = [zone.id for zone in read_farm(settings.client_dir).zones if zone.source == "LIVE"]
+    live = [zone.id for zone in read_farm(pack).zones if zone.source == "LIVE"]
     if live:
         log.info("POST /reset refused: live zones %s", ", ".join(live))
         raise ApiError(409, "LIVE_ZONE", f"This site has live zones ({', '.join(live)}): a reset is only for a simulated farm")
@@ -238,19 +238,19 @@ def post_reset(
 
 
 def post_fault(
-    body: FaultBody, settings: SettingsDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayPlay
+    body: FaultBody, pack: PackDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayPlay
 ) -> Response:
     """Trigger ("on": true) or Fix ("on": false) a failure drill (§11.4.3); never on a live zone."""
-    refuse_live_target(settings, body.target, f"POST /faults {body.kind}")
+    refuse_live_target(pack, body.target, f"POST /faults {body.kind}")
     sent = _body(body)
     return _audited(_forward(simulator, "POST", "/faults", sent), engine, site, caller, "SIM_FAULT", detail=sent)
 
 
 def post_hold(
-    body: HoldBody, settings: SettingsDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayPlay
+    body: HoldBody, pack: PackDep, simulator: SimulatorDep, engine: EngineDep, site: SiteDep, caller: MayPlay
 ) -> Response:
     """Set a value and hold it (§11.4.2); never on a live zone."""
-    refuse_live_target(settings, body.target, "POST /holds")
+    refuse_live_target(pack, body.target, "POST /holds")
     sent = _body(body)
     return _audited(_forward(simulator, "POST", "/holds", sent), engine, site, caller, "SIM_HOLD", detail=sent)
 
@@ -258,14 +258,14 @@ def post_hold(
 def delete_hold(
     target: Annotated[SimId, Path()],
     metric: Annotated[SimId, Path()],
-    settings: SettingsDep,
+    pack: PackDep,
     simulator: SimulatorDep,
     engine: EngineDep,
     site: SiteDep,
     caller: MayPlay,
 ) -> Response:
     """Release one held value; a live zone has none."""
-    refuse_live_target(settings, target, "DELETE /holds")
+    refuse_live_target(pack, target, "DELETE /holds")
     answer = _forward(simulator, "DELETE", f"/holds/{quote(target, safe='')}/{quote(metric, safe='')}")
     return _audited(answer, engine, site, caller, "SIM_RELEASE", detail={"target": target, "metric": metric})
 
@@ -275,10 +275,10 @@ def post_release_all(simulator: SimulatorDep, engine: EngineDep, site: SiteDep, 
     return _audited(_forward(simulator, "POST", "/holds/release-all"), engine, site, caller, "SIM_RELEASE_ALL")
 
 
-def get_scenario_options(settings: SettingsDep) -> dict[str, Any]:
+def get_scenario_options(pack: PackDep) -> dict[str, Any]:
     """scenarios.json without its file header: the drills, holdable ranges and setup options."""
     try:
-        options = _read_json(settings.client_dir / "scenarios.json")
+        options = pack.json("scenarios.json")
         if not isinstance(options, dict):
             raise TypeError("scenarios.json is not a JSON object")
     except (OSError, TypeError, ValueError) as exc:

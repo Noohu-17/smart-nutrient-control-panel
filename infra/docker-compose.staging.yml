@@ -102,12 +102,16 @@ services:
     restart: unless-stopped
     <<: *logging
 
-  # Builds or updates the database, loads the client's layout.json, then exits. It runs on every
-  # `up`; both steps change nothing when the database is already current.
+  # Builds or updates the database, imports the client's config pack (CLIENT_DIR) into it, then
+  # exits (T1-39). It runs on every `up`; both steps change nothing when the database is already
+  # current. A changed pack becomes the next config version: the import checks it first and stores
+  # nothing if it has a problem, so `up` stops here. The api and worker read the settings from the
+  # database only (APP_ENV staging: CONFIG_SOURCE database), and the api sends the new version's
+  # DEVICE_CONFIG to the zone controllers.
   migrate:
     build: ../backend
     image: sna-backend:staging
-    command: ["sh", "-c", "alembic upgrade head && python -m app.db.seed"]
+    command: ["sh", "-c", "alembic upgrade head && python -m app.db.config_store import"]
     environment:
       <<: *backend-env
     volumes:

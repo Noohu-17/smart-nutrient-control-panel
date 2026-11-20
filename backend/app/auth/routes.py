@@ -20,7 +20,6 @@ user, in LIMIT_WINDOW, sign-in answers 429 RATE_LIMITED with Retry-After until t
 is LIMIT_WINDOW old, the right password or code included. The tries are the audit log's rows.
 """
 
-import json
 import math
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal
@@ -31,7 +30,7 @@ from sqlalchemy import func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from ..api.pack import read_farm
-from ..api.routes import EngineDep, SettingsDep, SiteDep, _database, _errors
+from ..api.routes import EngineDep, PackDep, SettingsDep, SiteDep, _database, _errors
 from ..api.schemas import ApiTime
 from ..contract import ContractModel
 from ..db.models import AuditLog, User, UserSession
@@ -214,16 +213,18 @@ class DemoBody(ContractModel):
     role: Literal["OWNER", "AGRONOMIST", "OPERATOR", "VIEWER"]
 
 
-def demo_login(body: DemoBody, response: Response, settings: SettingsDep, engine: EngineDep, site: SiteDep) -> Me:
+def demo_login(
+    body: DemoBody, response: Response, settings: SettingsDep, engine: EngineDep, site: SiteDep, pack: PackDep
+) -> Me:
     """Demo sign-in: the demo user of `role` from users.json, with no password and no two-factor.
     Only on a site whose features.json has both "demoFarm" and "playground" on, so it can never act
     on a real farm; 404 anywhere else. The demo user is added to the database the first time,
     without a password, so it can't sign in through /api/auth/login. A turned-off one can't sign in."""
-    features = read_farm(settings.client_dir).features
+    features = read_farm(pack).features
     if features.get("demoFarm") is not True or features.get("playground") is not True:
         raise ApiError(404, "NOT_FOUND", "This site has no demo sign-in")
     try:
-        users = json.loads((settings.client_dir / "users.json").read_text(encoding="utf-8"))["users"]
+        users = pack.json("users.json")["users"]
         demo = next(u for u in users if u["role"] == body.role)
     except (OSError, ValueError, KeyError, TypeError, StopIteration) as exc:
         raise ApiError(404, "NOT_FOUND", f"users.json has no demo {body.role.title()}") from exc

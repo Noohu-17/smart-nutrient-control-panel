@@ -37,7 +37,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import Connection, delete, select, update
 from sqlalchemy.dialects.postgresql import insert
@@ -45,6 +45,9 @@ from sqlalchemy.dialects.postgresql import insert
 from .contract import Envelope, Event, ZoneTelemetry
 from .db.models import Alert
 from .timing import FRESH_FOR, OFFLINE_AFTER
+
+if TYPE_CHECKING:
+    from .packs import Pack
 
 # An event that clears the alert another event raised (§6.5).
 CLEARS = {
@@ -92,16 +95,18 @@ class AlertRules:
         return timedelta(seconds=self.delay_s.get(kind, 0) or 0)
 
     @classmethod
-    def from_pack(cls, client_dir: Path) -> "AlertRules":
-        from .api.pack import _read_json, read_farm  # the API's pack reader, without its routes
+    def from_pack(cls, source: "Pack | Path") -> "AlertRules":
+        """From a Pack (app.packs) or a pack folder."""
+        from .api.pack import read_farm  # the API's pack reader, without its routes
+        from .packs import as_pack
 
-        path = client_dir / "alerts.json"
-        if not path.exists():  # a pack without alerts.json raises no alerts
+        pack = as_pack(source)
+        alerts = pack.optional("alerts.json")
+        if alerts is None:  # a pack without alerts.json raises no alerts
             return cls(zones={}, reservoir_low_pct=None, daytank_low_pct=None, delay_s={})
-        alerts = _read_json(path)
         events = alerts.get("events") or {}
         zones = {}
-        for zone in read_farm(client_dir).zones:
+        for zone in read_farm(pack).zones:
             limits = ((alerts.get("zones") or {}).get(zone.id) or {}).get("alarms") or {}
             zones[zone.id] = ZoneLimits(
                 zone.name, limits.get("ecMaxMsCm"), limits.get("solTempMaxC"), limits.get("circFlowMinLpm")

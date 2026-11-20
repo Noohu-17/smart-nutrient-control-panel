@@ -16,6 +16,8 @@ Each folder has the 12 files listed in contract §2.5: `layout.json`, `limits.js
 
 To add a client, copy an existing folder, change the values, run the validator, then load it. Collect their layout, equipment, crops and targets, limits and alert contacts first (contract §2.5, "New client").
 
+**Loading it** means importing it into the database, where a server reads it from (T1-39): `python -m app.db.config_store import ../config/clients/<client>` from `backend/`. The import runs the validator's checks again and refuses the pack if any fails; each change is a new version, and any version exports back to a folder (`backend/README.md`, "Client settings in the database"). These folders stay where settings are written and reviewed.
+
 ## Real values and placeholders
 
 JSON has no comments, so placeholder status is written into the files:

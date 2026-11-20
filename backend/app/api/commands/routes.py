@@ -17,13 +17,21 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Path
 from sqlalchemy import select
 
 from ...auth.access import STAFF, Caller, StopCaller, allowed
-from ...config import Settings
 from ...db.models import CommandReport, Device
 from ...errors import ApiError
 from .. import queries
 from ..dose_requests import MayDose
-from ..pack import read_farm
-from ..routes import EngineDep, SettingsDep, SiteDep, _database, _errors, _not_loaded
+from ..pack import Pack, read_farm, site_of
+from ..routes import (
+    EngineDep,
+    PackDep,
+    SettingsDep,
+    SiteDep,
+    StopPackDep,
+    _database,
+    _errors,
+    _not_loaded,
+)
 from ..status import is_online
 from . import messages, sent, stuck
 from .confirm import confirm
@@ -55,8 +63,8 @@ def _send(publisher: Publisher, command: Command) -> CommandSent:
     return CommandSent(cmd_id=command.cmd_id, state="DISPATCHED")
 
 
-def _no_such_zone(settings: Settings, zone_id: str) -> bool:
-    return all(zone.id != zone_id for zone in read_farm(settings.client_dir).zones)
+def _no_such_zone(pack: Pack, zone_id: str) -> bool:
+    return all(zone.id != zone_id for zone in read_farm(pack).zones)
 
 
 def get_command(
@@ -87,12 +95,13 @@ def get_command(
 
 
 def post_stop(
-    body: StopBody, settings: SettingsDep, engine: EngineDep, site: SiteDep, publisher: PublisherDep,
-    session: StopCaller,
+    body: StopBody, pack: StopPackDep, engine: EngineDep, publisher: PublisherDep, session: StopCaller,
 ) -> CommandSent:
     """Stop (§7.4): always allowed, for every signed-in role, Viewer included (§13), with no check
-    and no confirmation. The session is checked without the database (app.auth.access.stop_caller)."""
-    if body.zone is not None and _no_such_zone(settings, body.zone):
+    and no confirmation. The session is checked without the database (app.auth.access.stop_caller),
+    and the farm's settings are the version kept in memory (app.api.routes.get_stop_pack)."""
+    site = site_of(pack)
+    if body.zone is not None and _no_such_zone(pack, body.zone):
         raise HTTPException(404, f"There is no zone {body.zone}")
     command = messages.stop(site.site_id, body.scope, body.zone, datetime.now(UTC), f"user:{session.user_id}")
     answer = _send(publisher, command)
@@ -101,12 +110,12 @@ def post_stop(
 
 
 def post_resume(
-    body: ResumeBody, settings: SettingsDep, engine: EngineDep, site: SiteDep, publisher: PublisherDep,
+    body: ResumeBody, pack: PackDep, engine: EngineDep, site: SiteDep, publisher: PublisherDep,
     caller: MayOperate,
 ) -> CommandSent:
     """Resume (§7.8) a zone or climate after a stop, once its controller is online (§8.3 rule 9).
     403 for a Viewer (§13)."""
-    farm = read_farm(settings.client_dir)
+    farm = read_farm(pack)
     now = datetime.now(UTC)
     if body.zone is not None:
         zone = next((z for z in farm.zones if z.id == body.zone), None)
@@ -132,7 +141,7 @@ def post_resume(
 
 def post_confirm(
     request_id: Annotated[str, Path(alias="id")],
-    settings: SettingsDep,
+    pack: PackDep,
     engine: EngineDep,
     site: SiteDep,
     publisher: PublisherDep,
@@ -142,7 +151,7 @@ def post_confirm(
     """Send a reviewed dose (§11.3), once it passes its checks again. The same Idempotency-Key
     again gets the same cmdId, and never a second dose (§11.1). 403 for a Viewer (§13)."""
     key = None if idempotency_key is None else str(idempotency_key)
-    return confirm(settings, engine, site, publisher, request_id, key, caller)
+    return confirm(pack, engine, site, publisher, request_id, key, caller)
 
 
 def add_command_api(app: FastAPI) -> None:

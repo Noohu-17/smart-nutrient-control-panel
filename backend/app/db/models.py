@@ -1,5 +1,6 @@
 """Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message, command
-report, dose request, sent command, playground reset, alert, user, user session and audit log.
+report, dose request, sent command, playground reset, alert, user, user session, audit log, and
+the client's config pack, versioned (config version and config file, T1-39).
 
 Every table has org_id and site_id (OPEN-11), so more organisations and sites can share
 the database later. Rows are keyed by the contract's own IDs (§2.1, §2.2): siet-ph1, Z1,
@@ -361,3 +362,42 @@ class AuditLog(Base):
     action: Mapped[str] = mapped_column(String(32))  # SIGN_IN, DOSE_CONFIRM, STOP, SIM_RESET …
     target: Mapped[str | None] = mapped_column(Text)  # a cmdId, a dose request, an alert …
     detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+
+
+class ConfigVersion(Base):
+    """One version of an organisation's settings: its config pack as imported (contract §2.5, T1-39).
+
+    version counts up from 1 per organisation, and only when an import changes a file; it is the
+    configVersion controllers get in DEVICE_CONFIG (§7.7) and report back (§6.8). site_id is the
+    pack's own layout.json site. digest is the SHA-256 of every file's name and text, so an
+    identical pack is seen without comparing files. device_config_sent_at: when the broker took
+    this version's DEVICE_CONFIG for every zone controller; null until then. Rows are only added.
+    """
+
+    __tablename__ = "config_version"
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    version: Mapped[int] = mapped_column(primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID)
+    imported_at: Mapped[datetime] = mapped_column(Timestamp)
+    imported_from: Mapped[str | None] = mapped_column(Text)  # e.g. the pack folder it came from
+    digest: Mapped[str] = mapped_column(String(64))
+    device_config_sent_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class ConfigFile(Base):
+    """One file of a config version (layout.json, limits.json …), its text exactly as imported,
+    with Windows line endings made plain, so an export gives the same pack back (T1-39)."""
+
+    __tablename__ = "config_file"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "version"], ["config_version.org_id", "config_version.version"], ondelete="CASCADE"
+        ),
+    )
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    version: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(ID, primary_key=True)  # layout.json
+    site_id: Mapped[str] = mapped_column(ID)
+    content: Mapped[str] = mapped_column(Text)

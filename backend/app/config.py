@@ -2,7 +2,8 @@
 
 Only infrastructure settings live here (hosts, ports, credentials, where the config
 pack is). Farm-specific values come from the client config packs (contract §0 and
-§2.5), never from code. The defaults match infra/docker-compose.dev.yml, so the app
+§2.5), never from code: from the database, where app.db.config_store imports them, on a
+server, and straight from the pack folder in dev (CONFIG_SOURCE, T1-39). The defaults match infra/docker-compose.dev.yml, so the app
 also runs on the host against the dev stack.
 
 On a server (APP_ENV anything but "dev") nothing falls back to a development value: the
@@ -21,6 +22,12 @@ DEV_DB_PASSWORD = "sna-dev-only"
 DEV_SIM_CONTROL_URL = "http://127.0.0.1:8100"  # the simulator's control API on the laptop (T4-9)
 DEV_SESSION_SECRET = "sna-dev-only-session-secret-not-for-a-server"
 MIN_SESSION_SECRET = 32  # characters: `openssl rand -hex 32` gives 64
+
+# Where the farm's settings are read from (T1-39): the latest version imported into the database,
+# or the pack folder CLIENT_DIR itself. Never one falling back to the other.
+DATABASE = "database"
+PACK = "pack"
+CONFIG_SOURCES = (DATABASE, PACK)
 
 
 @dataclass(frozen=True)
@@ -44,6 +51,15 @@ class Settings:
     # Signs the session cookie and the CSRF token (app.auth.sessions). Changing it signs everyone out.
     session_secret: str = DEV_SESSION_SECRET
     session_hours: float = 12.0  # a session ends this long after sign-in, used or not
+    # Where the farm's settings come from (T1-39): DATABASE or PACK, above.
+    config_source: str = PACK
+    # The organisation whose settings these are. Left out: the pack folder's name, as the seed has
+    # always used (OPEN-11), so client_A's database rows stay client_A's.
+    org: str | None = None
+
+    @property
+    def org_id(self) -> str:
+        return self.org or self.client_dir.name
 
 
 def _db_password(app_env: str, password: str | None) -> str:
@@ -63,6 +79,14 @@ def _session_secret(app_env: str, secret: str | None) -> str:
             " and not to the dev secret"
         )
     return secret
+
+
+def _config_source(app_env: str, source: str | None) -> str:
+    """The database on a server; the pack folder in dev, so a laptop and the tests need no import."""
+    chosen = (source or (PACK if app_env == DEV else DATABASE)).strip().lower()
+    if chosen not in CONFIG_SOURCES:
+        raise ValueError(f"CONFIG_SOURCE must be {' or '.join(CONFIG_SOURCES)}, got {source!r}")
+    return chosen
 
 
 def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
@@ -87,4 +111,6 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         sim_control_url=env("SIM_CONTROL_URL") or (DEV_SIM_CONTROL_URL if app_env == DEV else None),
         session_secret=_session_secret(app_env, env("SESSION_SECRET")),
         session_hours=float(env("SESSION_HOURS", "12")),
+        config_source=_config_source(app_env, env("CONFIG_SOURCE")),
+        org=env("ORG_ID") or None,
     )

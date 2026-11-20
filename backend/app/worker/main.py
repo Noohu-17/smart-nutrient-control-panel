@@ -33,6 +33,7 @@ from ..alerts import AlertRules
 from ..config import Settings, load_settings
 from ..contract import DeviceStatusLastWill, Envelope, parse_farm_message
 from ..db.engine import create_db_engine
+from ..packs import load_pack
 from .silence import watch
 from .store import mark_offline, reading_rows, store_message
 from .stuck import guard
@@ -172,13 +173,14 @@ async def run(
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
 ) -> None:
     """Connect, subscribe and store messages until cancelled; reconnect whenever the link drops."""
-    layout = json.loads((settings.client_dir / "layout.json").read_text(encoding="utf-8"))
-    site = layout["site"]
-    topic = f"farm/{site}/#"  # CLOUD-* may subscribe to this and not to farm/# (contract §4)
     engine = create_db_engine(settings)
-    # As in the seed, org_id is the client's folder name until organisations exist (OPEN-11).
-    rules = AlertRules.from_pack(settings.client_dir)
-    worker = Worker(engine, settings.client_dir.name, site, sleep=sleep, rules=rules)
+    # The pack folder in dev, the newest version imported into the database on a server (T1-39),
+    # read once at start-up: restart the worker after an import.
+    pack = load_pack(settings, engine)
+    site = pack.json("layout.json")["site"]
+    topic = f"farm/{site}/#"  # CLOUD-* may subscribe to this and not to farm/# (contract §4)
+    rules = AlertRules.from_pack(pack)
+    worker = Worker(engine, pack.org_id, site, sleep=sleep, rules=rules)
     guarding = asyncio.create_task(guard(engine, worker.org_id, site))  # stuck commands (T1-23)
     watching = asyncio.create_task(watch(engine, worker.org_id, site, rules))  # silence (T1-34)
     attempt = 0

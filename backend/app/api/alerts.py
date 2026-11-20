@@ -17,7 +17,7 @@ from ..db.models import Alert, User
 from ..errors import ApiError
 from . import queries
 from .pack import read_farm
-from .routes import EngineDep, SettingsDep, SiteDep, _database, _errors
+from .routes import EngineDep, PackDep, SiteDep, _database, _errors
 from .schemas import AlertInfo, AlertList
 
 MAX_ALERTS = 200
@@ -56,7 +56,7 @@ def _info(row) -> AlertInfo:
 
 
 def list_alerts(
-    settings: SettingsDep,
+    pack: PackDep,
     engine: EngineDep,
     site: SiteDep,
     status: Annotated[Status | None, Query()] = None,
@@ -76,7 +76,7 @@ def list_alerts(
     elif status == "OPEN":
         which += [Alert.cleared_at.is_(None), Alert.acked_at.is_(None)]
     with _database(engine) as connection:
-        if read_farm(settings.client_dir).features.get("playground") is True:
+        if read_farm(pack).features.get("playground") is True:
             reset_at = queries.playground_reset_at(connection, site)
             if reset_at is not None:
                 which.append(Alert.raised_at > reset_at)

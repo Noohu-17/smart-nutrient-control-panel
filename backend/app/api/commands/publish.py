@@ -1,7 +1,7 @@
 """Sending a command to the farm as CLOUD-api (contract §3, §4).
 
 One connection per command: connect, publish at QoS 1, never retained, wait for the broker's
-PUBACK, disconnect. A command the broker hasn't confirmed is dropped with its connection, so it
+PUBACK, disconnect. DEVICE_CONFIG (§7.7) goes the same way, retained (app.api.device_config). A command the broker hasn't confirmed is dropped with its connection, so it
 is never sent later, after the person was told it failed.
 """
 
@@ -26,8 +26,9 @@ class NotSent(Exception):
 
 
 class Publisher(Protocol):
-    def publish(self, topic: str, body: dict[str, Any]) -> None:
-        """Send one command; raise NotSent unless the broker has confirmed it."""
+    def publish(self, topic: str, body: dict[str, Any], *, retain: bool = False) -> None:
+        """Send one command; raise NotSent unless the broker has confirmed it. Only DEVICE_CONFIG
+        is retained (§4, §7.7)."""
 
 
 class MqttPublisher:
@@ -37,12 +38,12 @@ class MqttPublisher:
         # the first one's session, and its command could be lost.
         self._lock = threading.Lock()
 
-    def publish(self, topic: str, body: dict[str, Any]) -> None:
+    def publish(self, topic: str, body: dict[str, Any], *, retain: bool = False) -> None:
         payload = json.dumps(body).encode()
         with self._lock:
-            self._publish(topic, payload)
+            self._publish(topic, payload, retain)
 
-    def _publish(self, topic: str, payload: bytes) -> None:
+    def _publish(self, topic: str, payload: bytes, retain: bool = False) -> None:
         settings = self._settings
         client = mqtt.Client(
             mqtt.CallbackAPIVersion.VERSION2,
@@ -72,7 +73,7 @@ class MqttPublisher:
                 raise NotSent("the broker did not answer the connection")
             if refused:
                 raise NotSent(f"the broker refused the connection: {refused[0]}")
-            sent = client.publish(topic, payload, qos=1, retain=False)  # commands are never retained (§4)
+            sent = client.publish(topic, payload, qos=1, retain=retain)  # commands never are (§4)
             sent.wait_for_publish(self._timeout_s)
             if not sent.is_published():
                 raise NotSent("the broker did not confirm the command in time")

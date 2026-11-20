@@ -237,6 +237,8 @@ config/clients/client_A/          ← first demo pack (SIET Polyhouse 1 values)
 
 **New client:** collect their settings (layout, equipment, crops and targets, limits, alert contacts), save them as a new folder (`client_B/`), validate, load, and only then let them try the control panel and playground.
 
+**Stored in the database (T1-39).** On a server the back end reads the farm's settings from the database, never from the folder: the pack is imported per organisation (`python -m app.db.config_store import <folder>`), checked first by the same checks as `scripts/validate_config.py` and refused whole if any fails. Each import that changes a file is the next version, counting from 1 per organisation; that version is the `configVersion` controllers get in `DEVICE_CONFIG` (7.7) and report back (6.8), and an identical pack changes nothing. Every version is kept, and any version exports back to a pack folder file for file. Controllers keep getting their limits only through `DEVICE_CONFIG`: the back end sends it, retained, to every zone controller when a new version is first read, with `limits` from `limits.json`, the `alarms` from `alerts.json`, and `autoRefill` `{"enabled": false}` until the pack has auto-refill settings. The folder stays the place settings are written and reviewed; in development the back end may read it directly.
+
 ---
 
 ## 3. Transport (MQTT)
@@ -1431,6 +1433,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, zones, crops and dose lines described | The config pack describes each zone (growing system, typed growing units with sizes and plant sites, size, position, tank volume, sensors fitted, notes; 2.4), each zone's crop variety and planted date (`recipes.json`), and each dose line's stock (name, compound, strength, drum, purpose; `nutrients.json`, 2.5). `GET /zones` answers them as `profile` and `crop`, and `GET /zones/{zoneId}/dose-limits` each line's stock and pump rate (11.2), T1-38. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, sign-in | Sign-in, two-factor and users answers (11.2), `POST /auth/demo` for demo mode's role picker (11.2), and `429` `RATE_LIMITED` for too many wrong passwords or codes (11.1), from T1-35. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, offline and stale alerts | `GET /alerts` (11.2): `SENSOR_FAULT` from a reading's `FAULT` quality, `DEVICE_OFFLINE` from a last will or no message for `events.DEVICE_OFFLINE.thresholdS`, and `READING_STALE` from a `STALE` quality or no new telemetry for `events.READING_STALE.thresholdS` while the controller is online; each clears when it recovers (T1-34). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
+| v1.0, settings in the database | The config pack is stored in the database per organisation and versioned; the version is `configVersion`, and `DEVICE_CONFIG` (7.7) is built from the stored version and sent retained when a new one is imported (2.5 note, T1-39). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 
 ### v1.0 section review
 
@@ -1438,7 +1441,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 |---|---|---|
 | 0 Scope | No change | |
 | 1 Conventions | Changed | `dayTankL` to 0.1 L, `reservoirL` whole litres |
-| 2 Identifiers and layout | Changed | 2.3 table separator fixed; `devices` noted in 2.4; two lines in the 2.5 file list |
+| 2 Identifiers and layout | Changed | 2.3 table separator fixed; `devices` noted in 2.4; two lines in the 2.5 file list; 2.5 note on settings stored in the database (T1-39) |
 | 3 Transport | Changed | The broker's TLS port 8883 for the farm's gateway, the real farm devices' own logins only; 1883 stays inside the server (T1-36) |
 | 4 Topics | Changed | `RESUME` and `CLEAR_FAULT` use the `cmd` topics; ACL unchanged |
 | 5 Envelope | No change | |
