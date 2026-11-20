@@ -13,7 +13,7 @@ import { DOSE_CARD, goToDoseCard } from "./doseCard";
 import { ZoneActions } from "./ZoneActions";
 import { ZoneDetails } from "./ZoneDetails";
 import { ResumeZone } from "./ResumeZone";
-import { ZoneReadings, ZoneStatusChip } from "./ZoneLive";
+import { ZoneReadings, ZoneSourceChip, ZoneStatusChip } from "./ZoneLive";
 import { useZoneStatus } from "./useZoneStatus";
 
 /** Every alert, as on any other page (Resume in this zone's stopped or E-STOP one, a link to the
@@ -70,7 +70,13 @@ export function ZonePage() {
           <nav className="crumbs" aria-label="Breadcrumb">
             <Link to="/">Overview</Link> / {zone?.name ?? zoneId}
           </nav>
-          <h1>{zone?.name ?? "Zone"}</h1>
+          <div className="title-row">
+            <h1>{zone?.name ?? "Zone"}</h1>
+            {zone && <ZoneSourceChip source={zone.source} />}
+          </div>
+          {zone?.source === "LIVE" && farm.data?.features.playground && (
+            <p>Real hardware, on real time. The simulator doesn’t change this zone.</p>
+          )}
         </div>
       </div>
 

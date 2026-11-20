@@ -34,8 +34,9 @@ export type ZonePosition = { xM: number; yM: number; label?: string | null };
 export type FarmZone = {
   id: string; // "Z1"
   name: string; // "Zone A" (what the screen shows)
+  // who runs the zone (§2.4): real hardware on real time, or the simulator. GET /farm always fills it.
+  source: ZoneSource;
   controller: string; // "ZC1"
-  source?: ZoneSource; // GET /api/farm always fills it in (§2.4); a back end from before T1-33 doesn't
   // what the zone is (T1-38); a pack from before it leaves them out
   growingSystem?: string; // NFT, DWC, DUTCH_BUCKET, DRIP, VERTICAL, MIXED
   growingUnits?: GrowingUnit[];

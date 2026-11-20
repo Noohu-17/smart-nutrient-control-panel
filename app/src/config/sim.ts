@@ -44,24 +44,36 @@ export function targetLabel(farm: Farm, target: string) {
   return `${zone.name} · ${part in METRICS ? metricLabel(part) : lineName(part)}`;
 }
 
+/** Zones run by real hardware (§2.4). The simulator refuses to touch them (409 LIVE_ZONE, §11.4),
+    so the playground controls leave them out. */
+export const liveZones = (farm: Farm) => farm.zones.filter((z) => z.source === "LIVE");
+
+const simulatedZones = (farm: Farm) => farm.zones.filter((z) => z.source !== "LIVE");
+
 /** Zone sensors a drill can fake (§11.4.2: "to fake only the sensor, use a failure drill"). */
 const ZONE_PROBES = ["ec", "ph", "solTempC"];
 
-/** What a drill can be aimed at on this farm. Zone parts are "Z1.ph" and "Z1.ACID". */
+/** What a drill can be aimed at on this farm: simulated zones only. Zone parts are "Z1.ph" and
+    "Z1.ACID". A live zone's controller is left out too; devices of no zone stay. */
 export function drillTargets(farm: Farm, drill: Pick<FailureDrill, "targetType">): string[] {
+  const zones = simulatedZones(farm);
   switch (drill.targetType) {
     case "ZONE":
-      return farm.zones.map((z) => z.id);
+      return zones.map((z) => z.id);
     case "ZONE_SENSOR":
-      return farm.zones.flatMap((z) =>
+      return zones.flatMap((z) =>
         [...ZONE_PROBES, ...(z.sensors?.dissolvedOxygen ? ["doMgL"] : [])].map((s) => `${z.id}.${s}`),
       );
     case "DOSE_LINE":
-      return farm.zones.flatMap((z) => z.doseLines.map((l) => `${z.id}.${l}`));
+      return zones.flatMap((z) => z.doseLines.map((l) => `${z.id}.${l}`));
     case "POLYHOUSE":
       return [POLYHOUSE];
-    case "DEVICE":
-      return (farm.devices ?? []).map((d) => d.id);
+    case "DEVICE": {
+      const live = liveZones(farm);
+      return (farm.devices ?? [])
+        .filter((d) => !live.some((z) => z.id === d.zone || z.controller === d.id))
+        .map((d) => d.id);
+    }
     default:
       return [];
   }
@@ -74,8 +86,8 @@ export const SWITCH_DRILLS: Record<string, { on: string; off: string; isOn: stri
   POWER_CUT: { on: "Cut power", off: "Restore power", isOn: "Power off" },
 };
 
-/** Where a value can be held: each zone, then the polyhouse air. */
-export const holdTargets = (farm: Farm) => [...farm.zones.map((z) => z.id), POLYHOUSE];
+/** Where a value can be held: each simulated zone, then the polyhouse air. */
+export const holdTargets = (farm: Farm) => [...simulatedZones(farm).map((z) => z.id), POLYHOUSE];
 
 /** The metrics a target can hold, with their allowed range. A `linesFrom` entry (day-tanks)
     becomes one metric per dosing line the zone has, e.g. "dayTankPct.ACID". */

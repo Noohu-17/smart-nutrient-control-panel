@@ -63,11 +63,32 @@ function commandEnding(): CommandEnding {
   return endings[currentScenario()] ?? "COMPLETED";
 }
 
-/** The layout this scenario's farm has: "no-generator" is a site without a generator or UPS. */
+/** The layout this scenario's farm has: "no-generator" is a site without a generator or UPS;
+    "no-playground" a real farm, where every zone is LIVE (§2.4); "live-zone" a playground site
+    with Zone B on real hardware. */
 function scenarioLayout(): Farm {
-  if (currentScenario() === "no-generator")
+  const scenario = currentScenario();
+  if (scenario === "no-generator")
     return { ...farmLayout, power: { ...farmLayout.power, generator: false, ups: false } };
+  if (scenario === "no-playground")
+    return {
+      ...farmLayout,
+      zones: farmLayout.zones.map((z) => ({ ...z, source: "LIVE" as const })),
+      features: { ...farmLayout.features, playground: false },
+    };
+  if (scenario === "live-zone")
+    return {
+      ...farmLayout,
+      zones: farmLayout.zones.map((z) => (z.id === "Z2" ? { ...z, source: "LIVE" as const } : z)),
+    };
   return farmLayout;
+}
+
+/** A hold or drill aimed at a live zone, a part of it ("Z2.ph") or its controller (§11.4). */
+function aimsAtLiveZone(target: string) {
+  return scenarioLayout().zones.some(
+    (z) => z.source === "LIVE" && (target.split(".")[0] === z.id || target === z.controller),
+  );
 }
 
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
@@ -118,10 +139,13 @@ function zoneStatus(zoneId: string): ZoneStatus {
 }
 
 /** Run a simulator action and answer with the new sim state; a refused value is 422 (§11.1).
-    A real farm has no simulator, so every /sim call is 404 there (§11.4: playground only). */
-async function simAction(act: () => void) {
+    A real farm has no simulator, so every /sim call is 404 there (§11.4: playground only). An
+    action that would touch a live zone (`touchesLive`) is 409 LIVE_ZONE. */
+async function simAction(act: () => void, touchesLive = false) {
   await networkDelay();
   if (currentScenario() === "no-playground") return apiError(404, "NOT_FOUND", "This site has no simulator");
+  if (touchesLive)
+    return apiError(409, "LIVE_ZONE", "That zone runs on real hardware: the simulator can't change it");
   try {
     act();
   } catch (e) {
@@ -169,8 +193,6 @@ export const handlers = [
     await networkDelay();
     if (currentScenario() === "farm-error")
       return apiError(500, "INTERNAL", "The farm layout could not be loaded");
-    if (currentScenario() === "no-playground")
-      return HttpResponse.json({ ...farmLayout, features: { ...farmLayout.features, playground: false } });
     return HttpResponse.json(scenarioLayout());
   }),
 
@@ -307,13 +329,13 @@ export const handlers = [
   // POST /api/sim/faults { kind, target, on } · Trigger or Fix a failure drill (§11.4.3)
   http.post("/api/sim/faults", async ({ request }) => {
     const body = (await request.json()) as SimFaultBody;
-    return simAction(() => setFault(body));
+    return simAction(() => setFault(body), aimsAtLiveZone(body.target));
   }),
 
   // POST /api/sim/holds { target, metric, value, gradual } · set a value and hold it (§11.4.2)
   http.post("/api/sim/holds", async ({ request }) => {
     const body = (await request.json()) as SimHold;
-    return simAction(() => hold(body));
+    return simAction(() => hold(body), aimsAtLiveZone(body.target));
   }),
 
   // POST /api/sim/holds/release-all
@@ -327,8 +349,14 @@ export const handlers = [
     return simAction(() => release(target, metric));
   }),
 
-  // POST /api/sim/reset · Owner only on the real back end; back to the start of the scenario
-  http.post("/api/sim/reset", () => simAction(resetSim)),
+  // POST /api/sim/reset · Owner only on the real back end; back to the start of the scenario.
+  // Refused while any zone is live: its totals and alerts are real (§11.4).
+  http.post("/api/sim/reset", () =>
+    simAction(
+      resetSim,
+      scenarioLayout().zones.some((z) => z.source === "LIVE"),
+    ),
+  ),
 
   // GET /api/commands/:cmdId · the command with its state and lines (contract §6.6, §8)
   http.get("/api/commands/:cmdId", async ({ params }) => {

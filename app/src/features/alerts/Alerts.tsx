@@ -14,13 +14,14 @@ const SEVERITY_TONE = { CRITICAL: "crit", WARNING: "warn", INFO: "neutral" } as 
 const clock = (iso: string) =>
   new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-/** "Raised 9 Nov, 10:42 (farm clock 9 Nov, 19:30)" on a playground site. */
-function when(alert: ServerAlert) {
-  const farm = alert.simTs ? ` (farm clock ${clock(alert.simTs)})` : "";
+/** "Raised 9 Nov, 10:42 (farm clock 9 Nov, 19:30)" on a playground site. A live zone runs on
+    real time (§2.4), so its alerts show the real time only. */
+function when(alert: ServerAlert, live: boolean) {
+  const farm = alert.simTs && !live ? ` (farm clock ${clock(alert.simTs)})` : "";
   return `Raised ${clock(alert.raisedAt)}${farm}`;
 }
 
-function AlertItem({ alert, zoneName }: { alert: ServerAlert; zoneName: string }) {
+function AlertItem({ alert, zoneName, live }: { alert: ServerAlert; zoneName: string; live: boolean }) {
   const ack = useAckAlert();
   return (
     <li>
@@ -33,7 +34,7 @@ function AlertItem({ alert, zoneName }: { alert: ServerAlert; zoneName: string }
           {alert.systemAction}. {alert.nextStep}.
         </span>
         <small>
-          {when(alert)}
+          {when(alert, live)}
           {alert.acknowledgedAt &&
             ` · Acknowledged${alert.acknowledgedBy ? ` by ${alert.acknowledgedBy}` : ""} at ${clock(alert.acknowledgedAt)}`}
           {alert.clearedAt && ` · Cleared ${clock(alert.clearedAt)}`}
@@ -64,6 +65,7 @@ export function Alerts() {
   const cleared = all.filter((alert) => !isCurrent(alert)).slice(0, CLEARED_SHOWN);
   const open = current.filter((alert) => alert.status === "OPEN");
   const zoneName = (alert: ServerAlert) => (alert.zone ? (names.get(alert.zone) ?? alert.zone) : "");
+  const liveZone = (alert: ServerAlert) => zones.some((z) => z.id === alert.zone && z.source === "LIVE");
 
   return (
     <>
@@ -92,7 +94,7 @@ export function Alerts() {
           </header>
           <ul className="sim-list" aria-label="Current alerts">
             {current.map((alert) => (
-              <AlertItem key={alert.id} alert={alert} zoneName={zoneName(alert)} />
+              <AlertItem key={alert.id} alert={alert} zoneName={zoneName(alert)} live={liveZone(alert)} />
             ))}
           </ul>
         </section>
@@ -105,7 +107,7 @@ export function Alerts() {
           </header>
           <ul className="sim-list" aria-label="Cleared alerts">
             {cleared.map((alert) => (
-              <AlertItem key={alert.id} alert={alert} zoneName={zoneName(alert)} />
+              <AlertItem key={alert.id} alert={alert} zoneName={zoneName(alert)} live={liveZone(alert)} />
             ))}
           </ul>
         </section>

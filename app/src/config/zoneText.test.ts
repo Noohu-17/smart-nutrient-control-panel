@@ -85,7 +85,7 @@ describe("zone tags", () => {
     const zone = zones[0]; // LIVE in client_B's layout
     expect(zoneSource(zone, "SIMULATED", false)).toBe("SIMULATED");
     expect(zoneSource(zone, undefined, true)).toBe("LIVE"); // a live zone on a playground site
-    const unsaid = { ...zone, source: undefined };
+    const unsaid = { ...zone, source: undefined } as unknown as FarmZone; // an older back end
     expect(zoneSource(unsaid, undefined, true)).toBe("SIMULATED");
     expect(zoneSource(unsaid, undefined, false)).toBe("LIVE");
   });

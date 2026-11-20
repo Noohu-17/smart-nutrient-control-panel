@@ -11,7 +11,9 @@ export const SCENARIOS = {
   "z1-estop": "E-STOP pressed on the Zone A dosing cabinet",
   "z1-leak": "Leak sensor wet in Zone A",
   "farm-error": "GET /api/farm fails (500)",
-  "no-playground": "A real farm: features.playground is false, so no Simulator",
+  "no-playground":
+    "A real farm (like client_B): features.playground is false, so no Simulator; every zone LIVE",
+  "live-zone": "Playground site with Zone B LIVE: the simulator leaves it out and refuses it (409 LIVE_ZONE)",
   "mains-lost": "Mains lost: the generator runs the farm, UPS on battery",
   "no-generator": "A site with no generator or UPS in its layout",
   "power-never": "The power monitor has never reported: every value null",

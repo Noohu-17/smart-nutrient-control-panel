@@ -1,6 +1,6 @@
 import { noSimulator, useFarm, useScenarioOptions, useSimState } from "../../api/hooks";
 import { Placeholder } from "../../components/Placeholder";
-import { SWITCH_DRILLS } from "../../config/sim";
+import { drillTargets, liveZones, SWITCH_DRILLS } from "../../config/sim";
 import { ClockCard } from "./ClockCard";
 import { FailureDrills } from "./FailureDrills";
 import { FarmPlan } from "./FarmPlan";
@@ -23,8 +23,10 @@ export function SimulatorPage() {
     return <Placeholder title="Simulator not available" note="The simulator is only on playground sites." />;
 
   const controlsError = sim.error ?? options.error;
-  const drills = options.data?.failureDrills ?? [];
+  // a drill with nothing left to aim at (every target in a live zone) isn't offered
+  const drills = (options.data?.failureDrills ?? []).filter((d) => drillTargets(farm.data, d).length > 0);
   const switches = drills.filter((d) => d.kind in SWITCH_DRILLS);
+  const live = liveZones(farm.data);
   return (
     <>
       <div className="phead">
@@ -32,12 +34,20 @@ export function SimulatorPage() {
         {sim.data && <p>{sim.data.scenario}</p>}
       </div>
 
+      {live.length > 0 && (
+        <p className="banner info" role="note">
+          {live.map((z) => z.name).join(", ")} {live.length === 1 ? "is" : "are"} live: real hardware, on real
+          time. The simulator can’t hold values, run drills or change the speed there, so{" "}
+          {live.length === 1 ? "it is" : "they are"} left out of these controls, and Reset is off.
+        </p>
+      )}
+
       {controlsError ? (
         <p className="banner crit">Could not reach the simulator: {controlsError.message}</p>
       ) : !sim.data || !options.data ? (
         <p className="empty-note">Loading the simulator…</p>
       ) : (
-        <ClockCard sim={sim.data} />
+        <ClockCard sim={sim.data} resetOff={live.length > 0} />
       )}
 
       <section className="zone-card" aria-labelledby="farm-view-title">

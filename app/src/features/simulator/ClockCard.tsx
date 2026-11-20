@@ -7,8 +7,9 @@ import { SPEEDS, speedLabel } from "../../config/sim";
 import { LockReason, SimButton } from "./SimButton";
 
 /** Speed (Pause, ×1, ×60, ×288) for Owner, Agronomist and Operator; Reset for the Owner (§11.4),
-    after "Reset the farm to the starting state?". */
-export function ClockCard({ sim }: { sim: SimState }) {
+    after "Reset the farm to the starting state?". No Reset while a zone is live (`resetOff`): the
+    server refuses it, as a live zone's totals and alerts are real (409 LIVE_ZONE). */
+export function ClockCard({ sim, resetOff = false }: { sim: SimState; resetOff?: boolean }) {
   const { role } = useSession();
   const speed = useSimSpeed();
   const reset = useSimReset();
@@ -41,7 +42,9 @@ export function ClockCard({ sim }: { sim: SimState }) {
       </div>
       <LockReason id={speedReasonId} reason={speedLocked} />
 
-      {asking ? (
+      {resetOff ? (
+        <p className="dose-note">Reset is off while a zone is live: its totals and alerts are real.</p>
+      ) : asking ? (
         <div className="sim-row" role="group" aria-labelledby={askId}>
           <b id={askId}>Reset the farm to the starting state?</b>
           <button
@@ -64,7 +67,7 @@ export function ClockCard({ sim }: { sim: SimState }) {
           <span className="dose-note">Back to the start of {sim.scenario}: drills off, values released.</span>
         </div>
       )}
-      <LockReason id={resetReasonId} reason={resetLocked} />
+      {!resetOff && <LockReason id={resetReasonId} reason={resetLocked} />}
 
       {error && <p className="banner crit">{error.message}</p>}
     </section>

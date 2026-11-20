@@ -1,7 +1,13 @@
+import type { ZoneSource } from "../../api/types";
 import { ReadingCard } from "../../components/ReadingCard";
 import { StatusChip } from "../../components/StatusChip";
 import { formatAge, ZONE_READINGS } from "../../config/readings";
 import type { ZoneStatus } from "./useZoneStatus";
+
+/** "Live" (real hardware, real time) or "Simulated" (played by the simulator), from GET /farm (§2.4). */
+export function ZoneSourceChip({ source }: { source: ZoneSource }) {
+  return source === "LIVE" ? <StatusChip tone="ok">Live</StatusChip> : <StatusChip>Simulated</StatusChip>;
+}
 
 /** How fresh the zone's readings are: Offline, Loading, Stale or "Updated 30 s ago". */
 export function ZoneStatusChip({ status }: { status: ZoneStatus }) {
