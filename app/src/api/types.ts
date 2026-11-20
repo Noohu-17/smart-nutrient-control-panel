@@ -325,6 +325,27 @@ export type ServerAlert = {
   acknowledgedBy: string | null;
 };
 
+/* ---------- operations (contract §11.2, T1-28) ---------- */
+export type OperationKind = "DOSE" | "STOP" | "RESUME" | "ACK";
+
+/** GET /api/operations: one action a person took, newest first. */
+export type Operation = {
+  kind: OperationKind;
+  at: string; // when the person did it: the command's issuedAt, or when the alert was acknowledged
+  by: { id: string; name: string | null; role: ServerRole | null } | null; // null before sign-in existed
+  zone: string | null; // null for a site-wide stop, a climate resume or an alert of no zone
+  target: { zone?: string; scope?: string } | null; // the command's target as sent (§7); null for an ACK
+  cmdId: string | null; // DOSE, STOP and RESUME
+  result: { state: CommandState | "ACKNOWLEDGED"; reason: string | null };
+  lines: CommandLine[] | null; // DOSE only, once the controller reports
+  before: EcPh | null; // DOSE only
+  after: EcPh | null; // DOSE only, after the mix wait
+  alert: { id: string; kind: string; severity: ServerAlert["severity"]; message: string } | null; // ACK only
+};
+
+/** `next`: pass it back as `before` for the next, older page; null on the last page. */
+export type OperationList = { items: Operation[]; next: string | null };
+
 /* ---------- sign-in (contract §11.1, §11.2, T1-35: backend/app/auth/README.md) ---------- */
 export type ServerRole = "OWNER" | "AGRONOMIST" | "OPERATOR" | "VIEWER";
 

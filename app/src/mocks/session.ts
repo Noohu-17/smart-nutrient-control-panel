@@ -126,6 +126,10 @@ function start(user: FakeUser, step: Me["step"]): Me {
 /** The signed-in user's name, for "Acknowledged by …". */
 export const signedInName = () => session?.user.name ?? null;
 
+/** Who is signed in, as GET /api/operations names them in `by` (T2-23). */
+export const signedInUser = () =>
+  session ? { id: session.user.id, name: session.user.name, role: session.user.role } : null;
+
 /** Tests: sign in as that role's demo user, as renderAt does, or sign out (null). */
 export function fakeSignIn(role: ServerRole | null): Me | null {
   if (!role) {

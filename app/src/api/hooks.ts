@@ -1,5 +1,5 @@
 // src/api/hooks.ts · TanStack Query hooks. Screens call these, never fetch.
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, deleteJson, getJson, postJson } from "./client";
 import { isFinalCommand, isMixing } from "../config/dosing";
 import type {
@@ -10,6 +10,8 @@ import type {
   DoseRequest,
   DoseRequestBody,
   Farm,
+  OperationKind,
+  OperationList,
   PowerStatus,
   ScenarioOptions,
   ServerAlert,
@@ -76,6 +78,29 @@ export function useAckAlert() {
   return useMutation({
     mutationFn: (alertId: string) => postJson<ServerAlert>(`/alerts/${encodeURIComponent(alertId)}/ack`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+  });
+}
+
+export type OperationFilter = { kind?: OperationKind; zone?: string };
+
+/** GET /api/operations · every dose, stop, resume and acknowledgement, newest first (T1-28), a
+    page at a time: the next, older page starts at the last page's `next`. As often as the alerts,
+    so a new action shows without a reload. */
+export function useOperations(filter: OperationFilter = {}) {
+  const pollMs = usePollMs(ONE_MINUTE);
+  return useInfiniteQuery({
+    queryKey: ["operations", filter.kind ?? null, filter.zone ?? null],
+    queryFn: ({ pageParam }) => {
+      const query = new URLSearchParams();
+      if (filter.kind) query.set("kind", filter.kind);
+      if (filter.zone) query.set("zone", filter.zone);
+      if (pageParam) query.set("before", pageParam);
+      const text = query.toString();
+      return getJson<OperationList>(`/operations${text ? `?${text}` : ""}`);
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next,
+    refetchInterval: pollMs,
   });
 }
 

@@ -8,6 +8,7 @@ import { resetCommands } from "../mocks/commands";
 import { resetClimatePower } from "../mocks/data/climatePower";
 import { resetTelemetry } from "../mocks/data/telemetry";
 import { server } from "../mocks/node";
+import { resetOperations } from "../mocks/operations";
 import { fakeSignIn, resetSession } from "../mocks/session";
 import { resetSim } from "../mocks/sim";
 
@@ -41,6 +42,7 @@ afterEach(() => {
   resetSim();
   resetCommands();
   resetAlerts();
+  resetOperations();
 });
 
 afterAll(() => server.close());

@@ -29,8 +29,9 @@ import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
 import { doseLimits } from "./data/zoneDetails";
 import { DoseInputError, runDoseChecks, validateLines } from "./dosing";
+import { ackEntry, listOperations, recordOperation } from "./operations";
 import { currentScenario } from "./scenario";
-import { demoLogin, gate, login, signedInName, signOut, twoFactor, whoAmI } from "./session";
+import { demoLogin, gate, login, signedInName, signedInUser, signOut, twoFactor, whoAmI } from "./session";
 import {
   hold,
   release,
@@ -306,6 +307,14 @@ export const handlers = [
       ending: commandEnding(),
       createdAt: Date.now(),
     });
+    recordOperation({
+      kind: "DOSE",
+      by: signedInUser(),
+      zone: dr.zone,
+      target: { zone: dr.zone },
+      cmdId: sent.cmdId,
+      alert: null,
+    });
     return HttpResponse.json(sent, { status: 202 });
   }),
 
@@ -372,7 +381,11 @@ export const handlers = [
     for (const zone of farmLayout.zones) {
       if (body.scope !== "ZONE" || body.zone === zone.id) stopZoneCommands(zone.id);
     }
-    return HttpResponse.json({ cmdId: crypto.randomUUID(), state: "DISPATCHED" }, { status: 202 });
+    const cmdId = crypto.randomUUID();
+    const zone = body.scope === "ZONE" ? (body.zone ?? null) : null;
+    const target = zone ? { scope: body.scope, zone } : { scope: body.scope };
+    recordOperation({ kind: "STOP", by: signedInUser(), zone, target, cmdId, alert: null });
+    return HttpResponse.json({ cmdId, state: "DISPATCHED" }, { status: 202 });
   }),
 
   // POST /api/resume { zone } · a person has checked the zone; nothing restarts by itself (§7.8)
@@ -383,7 +396,16 @@ export const handlers = [
     if (zoneStatus(body.zone).estop)
       return apiError(409, "ESTOP", "The E-STOP is still pressed. Release it first");
     resumeZone(body.zone);
-    return HttpResponse.json({ cmdId: crypto.randomUUID(), state: "DISPATCHED" }, { status: 202 });
+    const cmdId = crypto.randomUUID();
+    recordOperation({
+      kind: "RESUME",
+      by: signedInUser(),
+      zone: body.zone,
+      target: { zone: body.zone },
+      cmdId,
+      alert: null,
+    });
+    return HttpResponse.json({ cmdId, state: "DISPATCHED" }, { status: 202 });
   }),
 
   // GET /api/alerts · alerts from the fake readings and alerts.json (contract §11.2, T1-24)
@@ -395,8 +417,20 @@ export const handlers = [
   // POST /api/alerts/{id}/ack · everyone but a Viewer (§13)
   http.post("/api/alerts/:alertId/ack", async ({ params }) => {
     await networkDelay();
+    const before = currentAlerts(zoneStatus).find((a) => a.id === String(params.alertId));
     const answer = acknowledge(zoneStatus, String(params.alertId), signedInName());
     if (answer === null) return apiError(404, "NOT_FOUND", `There is no alert ${params.alertId}`);
+    // the first acknowledgement only: acknowledging again changes nothing (§11.2)
+    if (before && before.acknowledgedAt === null)
+      recordOperation({ ...ackEntry(answer), by: signedInUser() });
     return HttpResponse.json(answer);
+  }),
+
+  // GET /api/operations · every dose, stop, resume and acknowledgement, newest first (§11.2, T1-28)
+  http.get("/api/operations", async ({ request }) => {
+    await networkDelay();
+    const page = listOperations(new URL(request.url).searchParams);
+    if (page === null) return apiError(422, "VALIDATION_ERROR", "The request is not valid");
+    return HttpResponse.json(page);
   }),
 ];
