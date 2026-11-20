@@ -22,9 +22,13 @@
 # Zones on the prototype rig: --profile rig runs the zone controller service (T1-32), and
 # --profile fake-rig a stand-in for the rig; stop the simulator first (simulator/sim/rig/README.md).
 #
+# Web Push (T1-41): --profile push runs the notifier, with VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and
+# VAPID_SUBJECT in infra/.env (python -m app.push.keys makes the pair; backend/app/push/README.md).
+#
 # Defaults can be overridden with environment variables or an infra/.env file:
 #   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT, API_PORT,
-#   SIM_CONTROL_PORT, SIM_SPEED, RIG_TELEMETRY_TOPIC, RIG_COMMAND_TOPIC,
+#   SIM_CONTROL_PORT, SIM_SPEED, RIG_TELEMETRY_TOPIC, RIG_COMMAND_TOPIC, VAPID_PUBLIC_KEY,
+#   VAPID_PRIVATE_KEY, VAPID_SUBJECT,
 #   CLIENT (the config pack under config/clients/ that the api reads; default client_A),
 #   CONFIG_SOURCE (pack: the api reads that folder, the dev default; database: the newest
 #   version imported with app.db.config_store, as on a server)
@@ -76,6 +80,7 @@ services:
       CONFIG_SOURCE: ${CONFIG_SOURCE:-pack}
       # /api/sim forwards here (contract 11.4): the simulator below, with --profile sim
       SIM_CONTROL_URL: ${SIM_CONTROL_URL:-http://simulator:8100}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}  # Web Push (T1-41); empty: GET /api/push/key is 503
     volumes:
       - ../config:/config:ro  # the client config packs (contract 2.5), read only
     ports:
@@ -115,6 +120,35 @@ services:
         condition: service_healthy
       mqtt:
         condition: service_healthy
+    restart: unless-stopped
+
+  # Web Push for alerts (T1-41), only with --profile push: sends what the worker queues to the
+  # browsers' push services. Needs the VAPID keys in infra/.env (see the top of this file).
+  notifier:
+    build: ../backend
+    profiles: [push]
+    command: ["python", "-m", "app.push.notifier"]
+    stop_signal: SIGINT
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-sna}
+      DB_USER: ${POSTGRES_USER:-sna}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sna-dev-only}
+      CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+    volumes:
+      - ../config:/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; from app.push.notifier import healthy; sys.exit(0 if healthy() else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   # The farm simulator, only with --profile sim. Its control API is for the back end alone

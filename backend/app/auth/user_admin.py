@@ -6,7 +6,8 @@
     POST  /api/users/{id}/invite      a new random password, answered once, for the Owner to hand over
 
 There is no email: the Owner gives the invite's password to the person, who signs in with it.
-Changing someone's role or turning them off signs them out everywhere, and so does an invite.
+Changing someone's role or turning them off signs them out everywhere, and so does an invite; their
+browsers get no more pushes either (T1-41).
 The site always keeps one active Owner: the last one can't be turned off or given another role
 (409 LAST_OWNER). Every change is in the audit log.
 """
@@ -23,6 +24,7 @@ from ..api.routes import EngineDep, SiteDep, _database, _errors
 from ..contract import ContractModel
 from ..db.models import User, UserSession
 from ..errors import ApiError
+from ..push.rules import forget_user
 from . import audit
 from .access import OWNER, ROLES, Caller, allowed
 from .passwords import hash_password, new_password
@@ -89,6 +91,8 @@ def _the_user(connection, site, user_id: str):
 
 
 def _sign_out_everywhere(connection, site, user_id: str, now: datetime) -> None:
+    """Every session ends, and no browser of the user gets pushes any more (T1-41)."""
+    forget_user(connection, site.org_id, site.site_id, user_id)
     connection.execute(
         update(UserSession)
         .where(UserSession.org_id == site.org_id, UserSession.site_id == site.site_id,

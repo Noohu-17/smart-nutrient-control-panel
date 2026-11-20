@@ -30,6 +30,9 @@ One alert per condition: `key` names it (kind, zone and line, metric or equipmen
 alert with that key is not cleared, no second one is raised; a reading rule's alert takes the
 words of each new reading, so it says the value now, not the one it started at. Acknowledging
 records who saw it; it doesn't clear it. A playground reset clears every alert (POST /api/sim/reset, T1-25).
+
+Web Push (T1-41): raising an alert adds it to push_outbox in the same transaction, and so does an
+alert turning CRITICAL. The notifier (push/notifier.py) sends those and decides who gets them.
 """
 
 import uuid
@@ -43,7 +46,7 @@ from sqlalchemy import Connection, delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 
 from .contract import Envelope, Event, ZoneTelemetry
-from .db.models import Alert
+from .db.models import Alert, PushOutbox
 from .timing import FRESH_FOR, OFFLINE_AFTER
 
 if TYPE_CHECKING:
@@ -299,22 +302,33 @@ def silence_conditions(device: DeviceSeen, rules: AlertRules, now: datetime) -> 
 def _open(connection: Connection, org_id: str, site_id: str, key: str) -> Any:
     """The alert with this key that isn't cleared yet (raised or still waiting out its delay)."""
     return connection.execute(
-        select(Alert.alert_id, Alert.raised_at, Alert.first_seen_at).where(
+        select(Alert.alert_id, Alert.raised_at, Alert.first_seen_at, Alert.severity).where(
             Alert.org_id == org_id, Alert.site_id == site_id, Alert.key == key, Alert.cleared_at.is_(None)
         )
     ).first()
+
+
+def _queue_push(connection: Connection, org_id: str, site_id: str, alert_id: str, severity: str,
+                now: datetime) -> None:
+    """For the notifier (T1-41): this alert, at this severity, is to be pushed. Once only."""
+    connection.execute(insert(PushOutbox).values(
+        org_id=org_id, site_id=site_id, alert_id=alert_id, severity=severity, queued_at=now,
+    ).on_conflict_do_nothing())
 
 
 def _raise(
     connection: Connection, org_id: str, site_id: str, zone: str | None, condition: Condition,
     now: datetime, sim_ts: datetime | None, raised: bool,
 ) -> None:
+    alert_id = str(uuid.uuid4())
     connection.execute(insert(Alert).values(
-        org_id=org_id, site_id=site_id, alert_id=str(uuid.uuid4()), key=condition.key,
+        org_id=org_id, site_id=site_id, alert_id=alert_id, key=condition.key,
         kind=condition.kind, severity=condition.severity, zone_id=zone,
         message=condition.message, system_action=condition.system_action, next_step=condition.next_step,
         first_seen_at=now, raised_at=now if raised else None, sim_ts=sim_ts,
     ))
+    if raised:
+        _queue_push(connection, org_id, site_id, alert_id, condition.severity, now)
 
 
 def _clear(connection: Connection, org_id: str, site_id: str, key: str, now: datetime) -> None:
@@ -349,6 +363,9 @@ def judge(
         if found.raised_at is None and now - found.first_seen_at >= delay:
             words["raised_at"] = now
         connection.execute(update(Alert).where(Alert.alert_id == found.alert_id).values(**words))
+        turned_red = condition.severity == "CRITICAL" and found.severity != "CRITICAL"
+        if "raised_at" in words or (found.raised_at is not None and turned_red):
+            _queue_push(connection, org_id, site_id, found.alert_id, condition.severity, now)
 
 
 def _event_key(kind: str, event: Event) -> str:

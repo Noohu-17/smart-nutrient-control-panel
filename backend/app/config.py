@@ -56,6 +56,9 @@ class Settings:
     # The organisation whose settings these are. Left out: the pack folder's name, as the seed has
     # always used (OPEN-11), so client_A's database rows stay client_A's.
     org: str | None = None
+    # Web Push (T1-41): the VAPID public key the browsers subscribe with. The private key is the
+    # notifier's alone (push/notifier.py) and never in these settings. None: no pushes.
+    vapid_public_key: str | None = None
 
     @property
     def org_id(self) -> str:
@@ -113,4 +116,5 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         session_hours=float(env("SESSION_HOURS", "12")),
         config_source=_config_source(app_env, env("CONFIG_SOURCE")),
         org=env("ORG_ID") or None,
+        vapid_public_key=env("VAPID_PUBLIC_KEY") or None,
     )

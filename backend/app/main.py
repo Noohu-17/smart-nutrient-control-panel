@@ -24,6 +24,7 @@ from .config import DATABASE, load_settings
 from .errors import add_error_handlers
 from .health import UP, check_broker, check_database
 from .packs import PackError
+from .push.routes import add_push_api
 
 settings = load_settings()
 
@@ -63,6 +64,7 @@ app = FastAPI(
 )
 add_error_handlers(app)
 add_auth_api(app)
+add_push_api(app)
 add_read_api(app)
 add_dose_api(app)
 add_command_api(app)

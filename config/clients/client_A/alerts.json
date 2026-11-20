@@ -3,9 +3,9 @@
   "_meta": {
     "client": "client_A",
     "placeholder": true,
-    "note": "Placeholder values until the farm team and agronomy agree alert thresholds, delays and escalation. Do not use for a real farm. Phase A alerts are in the app only. ecMaxMsCm (T1-24) is a placeholder set to limits.json ecCeiling. RESERVOIR_LOW and DAYTANK_LOW delayS are 0 so the playground shows them within a reading (board demo); a real farm will want a delay against flapping. T1-34: SENSOR_FAULT is also raised from a reading's quality FAULT, after its delayS; DEVICE_OFFLINE once a device heard from before has sent nothing for thresholdS (contract 14: 180 s) or its last will came; READING_STALE once a zone's readings are older than thresholdS (contract 14: 120 s) while its controller is online, or a reading's quality is STALE. A paused playground stops its readings, so READING_STALE comes after its delay."
+    "note": "Placeholder values until the farm team and agronomy agree alert thresholds, delays and escalation. Do not use for a real farm. Phase A alerts are in the app, and pushed to the browsers that turned notifications on (WEB_PUSH, T1-41; notifyRoles says which roles get each kind, Owner, Agronomist and Operator for a kind not listed here). ecMaxMsCm (T1-24) is a placeholder set to limits.json ecCeiling. RESERVOIR_LOW and DAYTANK_LOW delayS are 0 so the playground shows them within a reading (board demo); a real farm will want a delay against flapping. T1-34: SENSOR_FAULT is also raised from a reading's quality FAULT, after its delayS; DEVICE_OFFLINE once a device heard from before has sent nothing for thresholdS (contract 14: 180 s) or its last will came; READING_STALE once a zone's readings are older than thresholdS (contract 14: 120 s) while its controller is online, or a reading's quality is STALE. A paused playground stops its readings, so READING_STALE comes after its delay."
   },
-  "delivery": ["IN_APP"],
+  "delivery": ["IN_APP", "WEB_PUSH"],
   "zones": {
     "Z1": { "alarms": { "ecMaxMsCm": 2.4, "solTempMaxC": 26.0, "circFlowMinLpm": 15.0 } },
     "Z2": { "alarms": { "ecMaxMsCm": 2.4, "solTempMaxC": 26.0, "circFlowMinLpm": 15.0 } }

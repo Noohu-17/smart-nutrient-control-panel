@@ -25,7 +25,7 @@ The back end's database tests run only when the dev stack is up (`docker compose
 
 ## Deploy to staging
 
-`infra/docker-compose.staging.yml` runs Caddy (HTTPS, the app and `/api`), the API, the worker, the database, the broker and the simulator. Published ports: Caddy's (80 and 443) and the broker's TLS port for the farm's gateway (8883). The database and the broker's plain port (1883) are internal only. On a server, the domain's DNS must point at it and ports 80, 443 and 8883 must be open. To try it on a laptop, keep `SITE_ADDRESS=localhost`.
+`infra/docker-compose.staging.yml` runs Caddy (HTTPS, the app and `/api`), the API, the worker, the notifier (Web Push for alerts), the database, the broker and the simulator. Published ports: Caddy's (80 and 443) and the broker's TLS port for the farm's gateway (8883). The database and the broker's plain port (1883) are internal only. On a server, the domain's DNS must point at it and ports 80, 443 and 8883 must be open. To try it on a laptop, keep `SITE_ADDRESS=localhost`.
 
 Before the farm's gateway can connect, the broker needs its certificate and the gateway its login: [infra/readme.md](infra/readme.md). Without the certificate the broker runs without 8883, and the rest of the stack works as before.
 
@@ -40,6 +40,12 @@ Before the farm's gateway can connect, the broker needs its certificate and the 
    Paste it into `SITE_PASSWORD_HASH` between single quotes, so its `$` signs stay as they are: `SITE_PASSWORD_HASH='$2a$14$...'`. Only the hash goes in the file. Give the password itself to people separately.
 
    `VITE_DEMO_MODE` (`true` or `false`) is built into the app; the app reads it from T2-17 on.
+
+   The first time only, make the Web Push key pair (T1-41). Put both lines in the file and in the password manager, and set `VAPID_SUBJECT` to `mailto:` and the team's mailbox. Keep the pair: with a new one, every browser has to turn notifications on again (`backend/app/push/README.md`):
+
+   ```
+   docker build -t sna-backend:staging backend && docker run --rm sna-backend:staging python -m app.push.keys
+   ```
 2. Start it from the repo root. The first `up` also creates the database. Every `up` runs the migrations and loads the client's `layout.json`, then starts the rest:
 
    ```

@@ -1,9 +1,14 @@
-# Staging stack: Caddy (HTTPS, the app and /api), the API, the worker, PostgreSQL with
-# TimescaleDB, the Mosquitto broker and the farm simulator. Steps: README.md, "Deploy to staging".
+# Staging stack: Caddy (HTTPS, the app and /api), the API, the worker, the notifier (Web Push),
+# PostgreSQL with TimescaleDB, the Mosquitto broker and the farm simulator. Steps: README.md,
+# "Deploy to staging".
 #
 # Published ports: Caddy (80, 443) and the broker's TLS port for the farm's gateway (8883).
 # The database and the broker's plain port 1883 are on a network with no route in or out, and
 # every MQTT client logs in with its own account (contract sections 3 and 4, infra/readme.md).
+# The notifier is the one back-end service with a route out, to the browsers' push services, on a
+# network of its own (outbound). It is also on internal, with the database, the API, the worker and
+# the broker, but calls only the database. It isn't on Caddy's network, publishes no port, and
+# nothing calls it (T1-41).
 #
 # Run from the repo root:
 #   docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml up -d --build
@@ -84,6 +89,7 @@ services:
       MQTT_USERNAME: CLOUD-api
       MQTT_PASSWORD: ${MQTT_PASSWORD_CLOUD_API:?set in infra/.env.staging}
       API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?set in infra/.env.staging}  # Web Push (T1-41); the private key is the notifier's
       SIM_CONTROL_URL: http://simulator:8100  # /api/sim forwards here, on the internal network
     volumes:
       - ../config:/config:ro  # the client config packs (contract 2.5), read only
@@ -141,6 +147,33 @@ services:
       mqtt:
         condition: service_healthy
     healthcheck: *broker-connected
+    restart: unless-stopped
+    <<: *logging
+
+  # Web Push for alerts (T1-41, backend/app/push/README.md): sends what the worker queues in the
+  # database to the browsers' push services. The only holder of the VAPID private key.
+  notifier:
+    build: ../backend
+    image: sna-backend:staging
+    command: ["python", "-m", "app.push.notifier"]
+    stop_signal: SIGINT
+    environment:
+      <<: *backend-env
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?set in infra/.env.staging}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?set in infra/.env.staging}
+    volumes:
+      - ../config:/config:ro
+    networks: [internal, outbound]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # A push round finished in the last 30 s (a file it touches; no port, nothing to reach).
+      test: ["CMD", "python", "-c", "import sys; from app.push.notifier import healthy; sys.exit(0 if healthy() else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
     <<: *logging
 
@@ -220,6 +253,7 @@ networks:
   edge:
   internal:
     internal: true  # no published ports and no route out
+  outbound:  # the notifier's route out to the push services, and nothing else on it
   broker-edge:  # the broker alone, for its TLS port
 
 volumes:

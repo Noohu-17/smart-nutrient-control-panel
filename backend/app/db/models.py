@@ -1,6 +1,7 @@
 """Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message, command
 report, dose request, sent command, playground reset, alert, user, user session, audit log, and
-the client's config pack, versioned (config version and config file, T1-39).
+the client's config pack, versioned (config version and config file, T1-39), and Web Push
+subscriptions and the push outbox (T1-41).
 
 Every table has org_id and site_id (OPEN-11), so more organisations and sites can share
 the database later. Rows are keyed by the contract's own IDs (§2.1, §2.2): siet-ph1, Z1,
@@ -401,3 +402,57 @@ class ConfigFile(Base):
     name: Mapped[str] = mapped_column(ID, primary_key=True)  # layout.json
     site_id: Mapped[str] = mapped_column(ID)
     content: Mapped[str] = mapped_column(Text)
+
+
+class PushSubscription(Base):
+    """A browser or phone that turned notifications on (Web Push, contract §11.2, T1-41): where the
+    push service takes a push for it (endpoint) and the keys that encrypt it, from the browser,
+    and which severities this user wants there (CRITICAL by default). One row per endpoint: a
+    browser that subscribes again, even as another user, replaces its row."""
+
+    __tablename__ = "push_subscription"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "site_id", "user_id"],
+            ["app_user.org_id", "app_user.site_id", "app_user.user_id"],
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("org_id", "site_id", "endpoint"),
+    )
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    subscription_id: Mapped[str] = mapped_column(ID, primary_key=True)  # a UUID
+    user_id: Mapped[str] = mapped_column(ID, index=True)
+    endpoint: Mapped[str] = mapped_column(Text)  # the push service's URL for this browser
+    p256dh: Mapped[str] = mapped_column(String(128))  # the browser's public key, base64url
+    auth: Mapped[str] = mapped_column(String(64))  # the browser's auth secret, base64url
+    severities: Mapped[list[str]] = mapped_column(ARRAY(String(16)))  # CRITICAL, WARNING
+    created_at: Mapped[datetime] = mapped_column(Timestamp)
+    updated_at: Mapped[datetime] = mapped_column(Timestamp)
+
+
+class PushOutbox(Base):
+    """An alert to push (T1-41): the worker adds a row in the transaction that raises the alert
+    (app/alerts.py), and the notifier (app/push/notifier.py) sends it and sets done_at. The key is
+    the alert and its severity, so an alert is pushed once, and once more if it turns CRITICAL.
+    outcome says what happened: SENT, or why nothing was sent (ACKNOWLEDGED, CLEARED, PUSH_OFF …);
+    SENDING while the pushes are going out, after the row is taken (done_at)."""
+
+    __tablename__ = "push_outbox"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "site_id", "alert_id"],
+            ["alert.org_id", "alert.site_id", "alert.alert_id"],
+            ondelete="CASCADE",
+        ),
+    )
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    alert_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    severity: Mapped[str] = mapped_column(String(16), primary_key=True)
+    queued_at: Mapped[datetime] = mapped_column(Timestamp, index=True)
+    done_at: Mapped[datetime | None] = mapped_column(Timestamp)
+    outcome: Mapped[str | None] = mapped_column(String(32))
+    sent: Mapped[int | None]  # how many browsers took it

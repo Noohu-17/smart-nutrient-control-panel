@@ -35,6 +35,7 @@ from ..api.schemas import ApiTime
 from ..contract import ContractModel
 from ..db.models import AuditLog, User, UserSession
 from ..errors import ApiError
+from ..push.rules import forget_user
 from . import audit, totp
 from .access import OWNER, Caller, SignedIn
 from .passwords import check_password
@@ -249,6 +250,8 @@ def _end_sessions(request: Request, response: Response, engine, site, caller: Ca
     which.append(UserSession.user_id == caller.user_id if every else UserSession.session_hash == caller.token.session_hash)
     with _database(engine) as connection:
         connection.execute(update(UserSession).where(*which).values(ended_at=datetime.now(UTC)))
+        if every:  # no browser of this user gets pushes any more (T1-41)
+            forget_user(connection, site.org_id, site.site_id, caller.user_id)
         audit.write(connection, site, caller.user_id, caller.role, "SIGN_OUT_ALL" if every else "SIGN_OUT")
         connection.commit()
     request.state.caller = None
