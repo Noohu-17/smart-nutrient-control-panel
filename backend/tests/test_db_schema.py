@@ -13,6 +13,7 @@ from conftest import run_alembic
 TABLES = {
     "site", "zone", "bench", "device", "reading", "latest_message", "command_report", "dose_request", "app_user",
     "sent_command", "playground_reset", "alert", "user_session", "audit_log", "config_version", "config_file",
+    "setup_draft", "setup_draft_file", "device_login",
     "push_subscription", "push_outbox",
 }
 

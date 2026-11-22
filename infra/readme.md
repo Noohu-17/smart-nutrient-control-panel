@@ -86,6 +86,10 @@ sh infra/mosquitto/add-device-login.sh GW1
 - It refuses a device with no block in `acl.conf`, and it refuses `CLOUD-*` accounts. The back end's passwords stay in `infra/.env.staging`.
 - Restart the broker afterwards, as above.
 
+A client set up through the API (contract 11.5, T1-40) gets its devices' logins when the setup is saved: the passwords are answered once, and the back end keeps their hashes in the same format. `python -m app.setup.logins <org>`, from `backend/`, prints the lines to add to `secrets/passwords`. The new site's devices also need their blocks in `acl.conf`; then restart the broker.
+
+**One broker per client.** The MQTT username is the device ID (contract 3), and every client uses the same device IDs (`ZC1`, `CC1`, `PM1` …). So the lines go into the **new client's own broker**, the one in its own deployment (its own `ORG_ID`, `secrets/passwords` and `acl.conf`), never into another client's: there client_C's `ZC1` would replace client_A's `ZC1` and could use client_A's topics.
+
 Only logins made by the script are accepted on 8883. The `MQTT_PASSWORD_<ID>` logins in `infra/.env.staging` are the simulator's and work on 1883 only, inside the server, so whoever holds one can't send readings from the internet.
 
 A login made by the script also replaces that device's `MQTT_PASSWORD_<ID>` on 1883. So once the real `GW1` has its login, the simulator can no longer log in as `GW1`: the two never share the account. Don't run the simulator's `GW1` while the real gateway is connected. The other devices keep their simulator logins until they get their own.

@@ -25,6 +25,7 @@ from .errors import add_error_handlers
 from .health import UP, check_broker, check_database
 from .packs import PackError
 from .push.routes import add_push_api
+from .setup.routes import add_setup_api
 
 settings = load_settings()
 
@@ -70,6 +71,7 @@ add_dose_api(app)
 add_command_api(app)
 add_sim_api(app)
 add_alert_api(app)
+add_setup_api(app)
 add_operations_api(app)
 
 

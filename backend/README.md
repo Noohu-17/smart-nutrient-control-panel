@@ -82,6 +82,18 @@ The organisation is `ORG_ID`, or the pack folder's name until organisations exis
 
 On staging the `migrate` service imports `CLIENT_DIR` on every `up` (`infra/docker-compose.staging.yml`).
 
+## Client setup through the API (T1-40)
+
+A new client can also be set up through `/api/setup` (contract §11.5) instead of a pack folder: an Owner or Agronomist starts a draft for a new organisation and site (empty, or a copy of this farm's settings), saves it one step at a time (`site`, `features`, `crops`, `nutrients`, `limits`, `alerts`, `climate`, `equipment`, `simulator`, `users`: each one or two of the pack's files), and sees each step's problems as it saves it. Only an Owner saves the `limits` step and the draft. The save runs the same import as `python -m app.db.config_store import` (`config_store.import_on`), in one transaction with the device logins: version 1 of the new organisation, its farm loaded, a login for each device in its layout. The code is in `app/setup/`.
+
+**Device logins.** The save answers each device's password once; `device_login` keeps only its hash, in Mosquitto's own format. To let the devices in, write the broker's password-file lines and add them to the new client's own broker's `secrets/passwords` (one broker per client: device IDs repeat between clients, so two clients' logins can't share a broker), give each device its block in `acl.conf` for the new site, and restart the broker (`infra/readme.md`, "Device logins"):
+
+```
+python -m app.setup.logins client_C
+```
+
+The API keeps serving its own `ORG_ID`. A deployment serves the new client once its `ORG_ID` is set to it.
+
 ## Tests
 
 The tests read every JSON example of these messages straight from `docs/contract.md`, so they fail when the contract and the models drift apart.

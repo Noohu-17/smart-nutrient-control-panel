@@ -1,7 +1,8 @@
 """Database models (SQLAlchemy 2): site, zone, bench, device, reading, latest message, command
 report, dose request, sent command, playground reset, alert, user, user session, audit log, and
-the client's config pack, versioned (config version and config file, T1-39), and Web Push
-subscriptions and the push outbox (T1-41).
+the client's config pack, versioned (config version and config file, T1-39), a new client's
+setup (setup draft, setup draft file and device login, T1-40), and Web Push subscriptions
+and the push outbox (T1-41).
 
 Every table has org_id and site_id (OPEN-11), so more organisations and sites can share
 the database later. Rows are keyed by the contract's own IDs (§2.1, §2.2): siet-ph1, Z1,
@@ -19,10 +20,12 @@ from sqlalchemy import (
     ARRAY,
     BigInteger,
     ForeignKeyConstraint,
+    Index,
     MetaData,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -402,6 +405,72 @@ class ConfigFile(Base):
     name: Mapped[str] = mapped_column(ID, primary_key=True)  # layout.json
     site_id: Mapped[str] = mapped_column(ID)
     content: Mapped[str] = mapped_column(Text)
+
+
+class SetupDraft(Base):
+    """A new client's settings while they are being set up (T1-40): a config pack filled in step by
+    step through /api/setup, then saved as the new organisation's first config version.
+
+    org_id and site_id are the new client's, chosen when the draft is started; layout.json's site
+    must be site_id. by_org_id and by_site_id are the site whose Owner or Agronomist set it up,
+    which is who may see it. status is OPEN until it is saved (SAVED, with saved_version) or
+    discarded (DISCARDED). One OPEN draft per new organisation, and per new site, at a time.
+    """
+
+    __tablename__ = "setup_draft"
+    __table_args__ = (
+        Index("uq_setup_draft_open_org", "org_id", unique=True, postgresql_where=text("status = 'OPEN'")),
+        Index("uq_setup_draft_open_site", "site_id", unique=True, postgresql_where=text("status = 'OPEN'")),
+    )
+
+    draft_id: Mapped[str] = mapped_column(ID, primary_key=True)  # a UUID
+    org_id: Mapped[str] = mapped_column(ID)
+    site_id: Mapped[str] = mapped_column(ID)
+    by_org_id: Mapped[str] = mapped_column(ID)
+    by_site_id: Mapped[str] = mapped_column(ID)
+    created_by: Mapped[str] = mapped_column(ID)  # the user_id
+    created_at: Mapped[datetime] = mapped_column(Timestamp)
+    updated_at: Mapped[datetime] = mapped_column(Timestamp)
+    status: Mapped[str] = mapped_column(String(16))  # OPEN, SAVED, DISCARDED
+    saved_version: Mapped[int | None] = mapped_column()
+    saved_at: Mapped[datetime | None] = mapped_column(Timestamp)
+
+
+class SetupDraftFile(Base):
+    """One file of a setup draft (layout.json, limits.json …), as its step last saved it."""
+
+    __tablename__ = "setup_draft_file"
+    __table_args__ = (
+        ForeignKeyConstraint(["draft_id"], ["setup_draft.draft_id"], ondelete="CASCADE"),
+    )
+
+    draft_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    name: Mapped[str] = mapped_column(ID, primary_key=True)
+    org_id: Mapped[str] = mapped_column(ID)  # the draft's
+    site_id: Mapped[str] = mapped_column(ID)
+    content: Mapped[str] = mapped_column(Text)
+    updated_by: Mapped[str] = mapped_column(ID)
+    updated_at: Mapped[datetime] = mapped_column(Timestamp)
+
+
+class DeviceLogin(Base):
+    """A farm device's MQTT login (contract §3), issued once when a client's setup is saved (T1-40).
+
+    Only the password's hash is kept, in Mosquitto's own format ($7$: PBKDF2-SHA512), so the
+    broker's password file can be written from it (python -m app.setup.logins); the password itself
+    is answered once and never stored. Rows are only added.
+    """
+
+    __tablename__ = "device_login"
+    __table_args__ = (_site_fk(),)
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    device_id: Mapped[str] = mapped_column(ID, primary_key=True)  # also the MQTT username (§3)
+    password_hash: Mapped[str] = mapped_column(Text)
+    issued_at: Mapped[datetime] = mapped_column(Timestamp)
+    issued_by: Mapped[str] = mapped_column(ID)  # the user_id
+    config_version: Mapped[int] = mapped_column()
 
 
 class PushSubscription(Base):

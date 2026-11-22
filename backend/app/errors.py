@@ -28,14 +28,18 @@ def _error(
 class ApiError(HTTPException):
     """An error with a code of its own, such as a reason code from §8.4 (INVALID_COMMAND)."""
 
-    def __init__(self, status: int, code: str, message: str, headers: dict[str, str] | None = None):
+    def __init__(
+        self, status: int, code: str, message: str, headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ):
         super().__init__(status, message, headers)
         self.code = code
+        self.details = details
 
 
 async def _http_error(_: Request, exc: HTTPException) -> JSONResponse:
     code = getattr(exc, "code", None) or HTTPStatus(exc.status_code).name
-    return _error(exc.status_code, code, str(exc.detail), headers=exc.headers)
+    return _error(exc.status_code, code, str(exc.detail), getattr(exc, "details", None), headers=exc.headers)
 
 
 async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:

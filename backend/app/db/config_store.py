@@ -79,6 +79,16 @@ def import_pack(
     now: datetime | None = None,
 ) -> Imported:
     """Check the pack, store it as the next version if it changed anything, and load its layout."""
+    with engine.begin() as connection:
+        return import_on(connection, files, org_id, imported_from=imported_from, now=now)
+
+
+def import_on(
+    connection: Connection, files: Mapping[str, str], org_id: str, *, imported_from: str | None = None,
+    now: datetime | None = None,
+) -> Imported:
+    """import_pack in the caller's transaction, so more can be stored with the version, all or
+    nothing (the client setup's device logins, T1-40). Refused before anything is written."""
     files = {name: _plain(text) for name, text in files.items()}
     problems = packcheck.validate_texts(org_id, files)
     if problems:
@@ -86,32 +96,31 @@ def import_pack(
     layout = json.loads(files["layout.json"])
     site_id = layout["site"]
     pack_digest = digest(files)
-    with engine.begin() as connection:
-        # One import at a time per organisation, so two can't both take the same next version.
-        connection.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"config:{org_id}"))))
-        newest = connection.execute(
-            select(ConfigVersion.version, ConfigVersion.digest)
-            .where(ConfigVersion.org_id == org_id)
-            .order_by(ConfigVersion.version.desc())
-            .limit(1)
-        ).first()
-        changed = newest is None or newest.digest != pack_digest
-        version = 1 if newest is None else newest.version + int(changed)
-        if changed:
-            connection.execute(
-                insert(ConfigVersion).values(
-                    org_id=org_id, version=version, site_id=site_id, imported_at=now or datetime.now(UTC),
-                    imported_from=imported_from, digest=pack_digest,
-                )
+    # One import at a time per organisation, so two can't both take the same next version.
+    connection.execute(select(func.pg_advisory_xact_lock(func.hashtext(f"config:{org_id}"))))
+    newest = connection.execute(
+        select(ConfigVersion.version, ConfigVersion.digest)
+        .where(ConfigVersion.org_id == org_id)
+        .order_by(ConfigVersion.version.desc())
+        .limit(1)
+    ).first()
+    changed = newest is None or newest.digest != pack_digest
+    version = 1 if newest is None else newest.version + int(changed)
+    if changed:
+        connection.execute(
+            insert(ConfigVersion).values(
+                org_id=org_id, version=version, site_id=site_id, imported_at=now or datetime.now(UTC),
+                imported_from=imported_from, digest=pack_digest,
             )
-            connection.execute(
-                insert(ConfigFile),
-                [
-                    {"org_id": org_id, "version": version, "name": name, "site_id": site_id, "content": text}
-                    for name, text in sorted(files.items())
-                ],
-            )
-        write_rows(connection, layout_rows(layout, org_id=org_id))
+        )
+        connection.execute(
+            insert(ConfigFile),
+            [
+                {"org_id": org_id, "version": version, "name": name, "site_id": site_id, "content": text}
+                for name, text in sorted(files.items())
+            ],
+        )
+    write_rows(connection, layout_rows(layout, org_id=org_id))
     return Imported(org_id, site_id, version, changed)
 
 
