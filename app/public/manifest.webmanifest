@@ -1,0 +1,11 @@
+{
+  "name": "Smart Nutrient Advisor",
+  "short_name": "Nutrients",
+  "description": "Dosing, readings and alerts for the polyhouse.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F3F7F5",
+  "theme_color": "#0C4E3A",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

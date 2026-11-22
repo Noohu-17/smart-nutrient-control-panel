@@ -346,6 +346,21 @@ export type Operation = {
 /** `next`: pass it back as `before` for the next, older page; null on the last page. */
 export type OperationList = { items: Operation[]; next: string | null };
 
+/* ---------- Web Push (contract §11.2, T1-41) ---------- */
+/** The severities a browser can be pushed: never INFO. CRITICAL always, WARNING if asked for. */
+export type PushSeverity = "CRITICAL" | "WARNING";
+
+/** GET /api/push/key: the server's VAPID public key, base64url, for PushManager.subscribe. */
+export type PushKey = { publicKey: string };
+
+/** POST /api/push/subscriptions: PushSubscription.toJSON() and the severities; the answer echoes them. */
+export type PushSubscriptionBody = {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+  severities: PushSeverity[];
+};
+export type PushSubscriptionAnswer = { endpoint: string; severities: PushSeverity[] };
+
 /* ---------- sign-in (contract §11.1, §11.2, T1-35: backend/app/auth/README.md) ---------- */
 export type ServerRole = "OWNER" | "AGRONOMIST" | "OPERATOR" | "VIEWER";
 

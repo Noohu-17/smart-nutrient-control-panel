@@ -30,6 +30,7 @@ import { buildZoneStatus, findZone } from "./data/telemetry";
 import { doseLimits } from "./data/zoneDetails";
 import { DoseInputError, runDoseChecks, validateLines } from "./dosing";
 import { ackEntry, listOperations, recordOperation } from "./operations";
+import { addSubscription, pushKey, removeSubscription } from "./push";
 import { currentScenario } from "./scenario";
 import { demoLogin, gate, login, signedInName, signedInUser, signOut, twoFactor, whoAmI } from "./session";
 import {
@@ -432,5 +433,21 @@ export const handlers = [
     const page = listOperations(new URL(request.url).searchParams);
     if (page === null) return apiError(422, "VALIDATION_ERROR", "The request is not valid");
     return HttpResponse.json(page);
+  }),
+
+  // Web Push (§11.2, T1-41): the key, and this browser's subscription. The fake never pushes.
+  http.get("/api/push/key", async () => {
+    await networkDelay();
+    return pushKey();
+  }),
+  http.post("/api/push/subscriptions", async ({ request }) => {
+    await networkDelay();
+    return addSubscription((await request.json().catch(() => ({}))) as Parameters<typeof addSubscription>[0]);
+  }),
+  http.delete("/api/push/subscriptions", async ({ request }) => {
+    await networkDelay();
+    return removeSubscription(
+      (await request.json().catch(() => ({}))) as Parameters<typeof removeSubscription>[0],
+    );
   }),
 ];

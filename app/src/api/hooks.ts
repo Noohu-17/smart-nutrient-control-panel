@@ -13,6 +13,7 @@ import type {
   OperationKind,
   OperationList,
   PowerStatus,
+  PushKey,
   ScenarioOptions,
   ServerAlert,
   SimFaultBody,
@@ -58,6 +59,17 @@ export function useFarm() {
 function usePollMs(slow: number) {
   const farm = useFarm();
   return farm.data?.features.playground ? PLAYGROUND_POLL_MS : slow;
+}
+
+/** GET /api/push/key · whether this site pushes alerts (404 if its alerts.json has no WEB_PUSH,
+    503 while the server has no key) and the key to subscribe with (§11.2, T1-41). It doesn't change. */
+export function usePushKey() {
+  return useQuery<PushKey, ApiError>({
+    queryKey: ["push-key"],
+    queryFn: () => getJson<PushKey>("/push/key"),
+    retry: false,
+    staleTime: Infinity,
+  });
 }
 
 /** GET /api/alerts · the server's alerts, newest first (T1-24). As often as the zones, and on

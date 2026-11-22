@@ -64,7 +64,11 @@ describe("getJson errors", () => {
     const error = await getJson("/zones/Z1").catch((e: unknown) => e);
 
     expect(error).toBeInstanceOf(ApiError);
-    expect(error).toMatchObject({ message: "Line A exceeds 300 mL per dose", status: 409, code: "LIMIT_DOSE" });
+    expect(error).toMatchObject({
+      message: "Line A exceeds 300 mL per dose",
+      status: 409,
+      code: "LIMIT_DOSE",
+    });
   });
 
   it("reports a failed request when the body has no error field, like FastAPI's 404", async () => {

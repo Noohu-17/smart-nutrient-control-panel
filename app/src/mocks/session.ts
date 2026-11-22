@@ -130,6 +130,17 @@ export const signedInName = () => session?.user.name ?? null;
 export const signedInUser = () =>
   session ? { id: session.user.id, name: session.user.name, role: session.user.role } : null;
 
+/** A demo user (picked from the role picker), whom everyone who picks that role shares. */
+export const signedInIsDemo = () => session?.user.password === null;
+
+/** Tests: sign in as an account with a password, by its ID ("u-owner", "u-agronomist" …). */
+export function fakeSignInAccount(id: string): Me {
+  return start(
+    USERS.find((u) => u.id === id && u.password !== null)!,
+    "DONE",
+  );
+}
+
 /** Tests: sign in as that role's demo user, as renderAt does, or sign out (null). */
 export function fakeSignIn(role: ServerRole | null): Me | null {
   if (!role) {
@@ -202,7 +213,13 @@ const OWNER_ONLY: [RegExp, string][] = [
   [/^\/api\/sim\/reset$/, "Only an Owner can reset the simulated farm"],
   [/^\/api\/users(\/|$)/, "Only an Owner manages users"],
 ];
-const ANY_ROLE = new Set(["/api/stop", ...BEFORE_TWO_FACTOR, "/api/auth/logout-all"]); // Stop: every role (§13)
+// Stop: every role (§13). Web Push: everyone signed in (§11.2), demo users get 403 from the route itself
+const ANY_ROLE = new Set([
+  "/api/stop",
+  ...BEFORE_TWO_FACTOR,
+  "/api/auth/logout-all",
+  "/api/push/subscriptions",
+]);
 
 /** Why a Viewer can't, in the server's words. */
 function viewerReason(path: string) {

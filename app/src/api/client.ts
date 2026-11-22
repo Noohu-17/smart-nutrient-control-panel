@@ -83,4 +83,15 @@ export const postJson = <T>(path: string, body?: unknown, headers: Record<string
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-export const deleteJson = <T>(path: string) => send<T>(path, { method: "DELETE", headers: writeHeaders() });
+/** DELETE, with a JSON body when the route takes one (DELETE /push/subscriptions { endpoint }). */
+export const deleteJson = <T>(path: string, body?: unknown) =>
+  send<T>(
+    path,
+    body === undefined
+      ? { method: "DELETE", headers: writeHeaders() }
+      : {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json", ...writeHeaders() },
+          body: JSON.stringify(body),
+        },
+  );

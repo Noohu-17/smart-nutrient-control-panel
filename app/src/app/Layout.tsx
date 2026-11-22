@@ -5,6 +5,7 @@ import { DemoBanner } from "../components/DemoBanner";
 import { SimBanner } from "../components/SimBanner";
 import { SiteAlerts } from "../features/alerts/SiteAlerts";
 import { AlertToasts } from "../features/notifications/AlertToasts";
+import { usePushClicks } from "../features/notifications/usePushClicks";
 import { BottomTabs } from "./BottomTabs";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
@@ -17,6 +18,7 @@ export function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
   const { role, checking } = useSession();
   const { pathname } = useLocation();
+  usePushClicks();
   // a reload: wait for GET /api/me rather than send a signed-in person to the sign-in page
   if (checking)
     return (

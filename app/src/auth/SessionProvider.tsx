@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { getJson, postJson, setCsrfToken, setOnSignedOut } from "../api/client";
 import type { Me, TotpSetup } from "../api/types";
+import { unsubscribe as stopPushes } from "../features/notifications/push";
 import { fromServerRole, toServerRole } from "./roles";
 import { SessionContext, type Session } from "./session";
 
@@ -49,6 +50,9 @@ export function SessionProvider({ children, initialMe }: { children: ReactNode; 
       sendCode: async (code) => setMe(await postJson<Me>("/auth/totp", { code })),
       setUpTwoFactor: () => postJson<TotpSetup>("/auth/totp", {}),
       signOut: async () => {
+        // the server can't tell which subscription is this browser's, so this browser says so
+        // first: the next person on it gets none of this one's alerts (§11.2, T1-41)
+        await stopPushes();
         // signed out here even if the server can't be reached; the cookie ends with its session
         await postJson("/auth/logout").catch(() => {});
         setMe(null);
