@@ -1,0 +1,119 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": false,
+    "note": "The sensor catalogue per farm type (DM-3), from the \"Sensors by farm type\" sheet (Farm-Sensors-by-Farm-Type.xlsx, hydroponics rows): each sensor's name, what it measures, whether it is a must-have, its typical range and what the reading means. Ranges are typical values for common vegetables and leafy greens; exact targets depend on the crop, so confirm with the agronomist. Which sensors each zone has fitted is in layout.json zones[].sensors (layoutSensor names that key); fittedBy CLIMATE_CONTROLLER is fitted on a site whose layout has a climate controller (layout.climate.controller), as the air is measured for the whole house. layoutSensor null: no zone can have one fitted yet (no reading in the contract), so it always shows Not connected. growingSystems says which farm type each layout growingSystem belongs to. readings: where the app finds the live value, from GET /api/zones/{zoneId} (zone.readings or zone) or GET /api/climate (climate.readings)."
+  },
+  "growingSystems": { "NFT": "HYDROPONICS", "DWC": "HYDROPONICS", "VERTICAL": "HYDROPONICS" },
+  "farmTypes": {
+    "HYDROPONICS": {
+      "name": "Hydroponics (NFT, DWC, vertical): roots in nutrient water",
+      "sensors": [
+        {
+          "id": "ph",
+          "name": "pH sensor",
+          "measures": "Acidity of the nutrient solution",
+          "necessity": "MUST_HAVE",
+          "typical": "5.5 – 6.5",
+          "indicates": "Outside this range plants can't absorb some nutrients (nutrient lockout). High → add acid; low → add base.",
+          "layoutSensor": "ph",
+          "readings": [{ "from": "zone.readings", "key": "ph", "label": "pH", "unit": "", "decimals": 2 }]
+        },
+        {
+          "id": "ec",
+          "name": "EC / TDS sensor",
+          "measures": "Strength of nutrients dissolved in the water",
+          "necessity": "MUST_HAVE",
+          "typical": "1.2 – 2.5 mS/cm (depends on crop)",
+          "indicates": "Low → plants underfed, add nutrients. High → salt stress and root burn, add fresh water.",
+          "layoutSensor": "ec",
+          "readings": [{ "from": "zone.readings", "key": "ec", "label": "EC", "unit": "mS/cm", "decimals": 2 }]
+        },
+        {
+          "id": "waterTemp",
+          "name": "Water temperature sensor",
+          "measures": "Temperature of the nutrient solution",
+          "necessity": "MUST_HAVE",
+          "typical": "18 – 24 °C",
+          "indicates": "Too warm → less oxygen in water and root rot risk. Too cold → slow growth.",
+          "layoutSensor": "solTemp",
+          "readings": [{ "from": "zone.readings", "key": "solTempC", "label": "Water temp", "unit": "°C", "decimals": 1 }]
+        },
+        {
+          "id": "waterLevel",
+          "name": "Water level sensor",
+          "measures": "How full the reservoir is",
+          "necessity": "MUST_HAVE",
+          "typical": "Above the minimum mark (e.g. > 30%)",
+          "indicates": "Low → refill needed; pump may run dry.",
+          "layoutSensor": "reservoirLevel",
+          "readings": [{ "from": "zone.readings", "key": "reservoirPct", "label": "Level", "unit": "%", "decimals": 0 }]
+        },
+        {
+          "id": "flow",
+          "name": "Flow sensor",
+          "measures": "Whether solution is circulating to the plants",
+          "necessity": "MUST_HAVE",
+          "typical": "Steady at the system's design flow",
+          "indicates": "Low or zero → pump failure or blockage; in NFT roots dry out within hours.",
+          "layoutSensor": "circFlow",
+          "readings": [{ "from": "zone.readings", "key": "circFlowLpm", "label": "Flow", "unit": "L/min", "decimals": 1 }]
+        },
+        {
+          "id": "airTempRh",
+          "name": "Air temperature & humidity sensor",
+          "measures": "Growing-area climate",
+          "necessity": "MUST_HAVE",
+          "typical": "18 – 28 °C; 50 – 80% RH",
+          "indicates": "High humidity → fungal disease. High temperature → heat stress, bolting.",
+          "fittedBy": "CLIMATE_CONTROLLER",
+          "readings": [
+            { "from": "climate.readings", "key": "airTempC", "label": "Air temp", "unit": "°C", "decimals": 1 },
+            { "from": "climate.readings", "key": "airRh", "label": "Humidity", "unit": "%", "decimals": 0 }
+          ]
+        },
+        {
+          "id": "dissolvedOxygen",
+          "name": "Dissolved oxygen (DO) sensor",
+          "measures": "Oxygen dissolved in the solution",
+          "necessity": "GOOD_TO_HAVE",
+          "typical": "Above 6 mg/L",
+          "indicates": "Low → roots suffocate, root rot risk. Must-have for deep-water (DWC) systems.",
+          "layoutSensor": "dissolvedOxygen",
+          "readings": [{ "from": "zone.readings", "key": "doMgL", "label": "DO", "unit": "mg/L", "decimals": 1 }]
+        },
+        {
+          "id": "co2",
+          "name": "CO₂ sensor",
+          "measures": "Carbon dioxide in the air",
+          "necessity": "GOOD_TO_HAVE",
+          "typical": "400 – 1,000 ppm",
+          "indicates": "Low in closed spaces → limits growth. Very high → unsafe for workers.",
+          "layoutSensor": null,
+          "readings": []
+        },
+        {
+          "id": "light",
+          "name": "Light (PAR) sensor",
+          "measures": "Light plants can use for growth",
+          "necessity": "GOOD_TO_HAVE",
+          "typical": "Leafy greens: about 200 – 400 µmol/m²/s",
+          "indicates": "Too low → slow, stretched plants. Too high → leaf burn, more heat.",
+          "layoutSensor": null,
+          "readings": []
+        },
+        {
+          "id": "leak",
+          "name": "Leak / overflow sensor",
+          "measures": "Water where it shouldn't be",
+          "necessity": "GOOD_TO_HAVE",
+          "typical": "Dry",
+          "indicates": "Wet → leak or overflow; solution loss and electrical hazard.",
+          "layoutSensor": "leak",
+          "readings": [{ "from": "zone", "key": "leak", "label": "Leak", "states": { "false": "Dry", "true": "Wet" } }]
+        }
+      ]
+    }
+  }
+}

@@ -14,6 +14,7 @@ import { ZoneTags } from "./ZoneTags";
 import { DOSE_CARD, goToDoseCard } from "./doseCard";
 import { ZoneActions } from "./ZoneActions";
 import { ZoneDetails } from "./ZoneDetails";
+import { ZoneSensors } from "./ZoneSensors";
 import { ResumeZone } from "./ResumeZone";
 import { ZoneReadings, ZoneSourceChip, ZoneStatusChip } from "./ZoneLive";
 import { useZoneStatus } from "./useZoneStatus";
@@ -97,6 +98,8 @@ export function ZonePage() {
           <ZoneDetails key={`details-${zone.id}`} zone={zone} />
 
           <DoseCard key={zone.id} zone={zone} />
+
+          <ZoneSensors key={`sensors-${zone.id}`} zone={zone} farm={farm.data} />
 
           <section className="zone-card" aria-labelledby="benches-title">
             <header className="zone-card-head">

@@ -39,6 +39,7 @@ from conftest import sign_in_as
 
 ORG = "client_A"
 CONTRACT = Path(__file__).resolve().parents[2] / "docs" / "contract.md"
+REPO_CLIENTS = Path(__file__).resolve().parents[2] / "config" / "clients"
 READING_NAMES = {
     "ec", "ph", "solTempC", "reservoirPct", "reservoirL", "circFlowLpm", "doMgL", "dayTankPct", "dayTankL",
 }
@@ -198,6 +199,33 @@ def test_farm_leaves_out_what_the_pack_leaves_out(api):
 
 def test_farm_needs_no_database(pack, no_database):
     assert api_client(pack, no_database).get("/api/farm").status_code == 200
+
+
+# --- GET /api/sensors (DM-3) ------------------------------------------------------------
+
+
+@pytest.mark.parametrize("client", ["client_A", "client_B"])
+def test_sensors_is_the_packs_catalogue_without_meta(client, no_database):
+    folder = REPO_CLIENTS / client
+    if not folder.exists():
+        pytest.skip("no config pack here (the Docker test image has none)")
+    catalogue = json.loads((folder / "sensors.json").read_text(encoding="utf-8"))
+    answer = api_client(folder, no_database).get("/api/sensors")
+    assert answer.status_code == 200
+    assert answer.json() == {key: value for key, value in catalogue.items() if key != "_meta"}
+    assert len(answer.json()["farmTypes"]["HYDROPONICS"]["sensors"]) == 10  # the sheet's hydroponics rows
+    assert answer.json()["growingSystems"]["NFT"] == "HYDROPONICS"
+
+
+def test_sensors_is_404_for_a_pack_without_a_catalogue(pack, no_database):
+    error = assert_error(api_client(pack, no_database).get("/api/sensors"), 404, "NOT_FOUND")
+    assert "no sensor catalogue" in error["message"]
+
+
+def test_a_broken_sensor_catalogue_is_a_500(pack, no_database, caplog):
+    (pack / "sensors.json").write_text(json.dumps({"growingSystems": {}}), encoding="utf-8")
+    assert_error(api_client(pack, no_database).get("/api/sensors"), 500, "INTERNAL")
+    assert any("cannot load the config pack" in m for m in caplog.messages)
 
 
 @pytest.mark.parametrize(

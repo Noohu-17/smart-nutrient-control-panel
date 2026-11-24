@@ -84,6 +84,35 @@ export type Farm = {
   features: Features;
 };
 
+/* ---------- GET /api/sensors (DM-3: sensors.json, the sensor catalogue per farm type) ---------- */
+/** Where a fitted sensor's live value is: a field of the zone answer, or of the climate answer. */
+export type SensorReading = {
+  from: "zone.readings" | "zone" | "climate.readings";
+  key: string;
+  label: string;
+  unit?: string;
+  decimals?: number;
+  states?: Record<"true" | "false", string>; // a yes/no value, e.g. leak: Dry / Wet
+};
+
+export type SensorInfo = {
+  id: string;
+  name: string;
+  measures: string;
+  necessity: "MUST_HAVE" | "GOOD_TO_HAVE";
+  typical: string;
+  indicates: string;
+  layoutSensor?: string | null; // the layout zones[].sensors key that says it is fitted
+  fittedBy?: "CLIMATE_CONTROLLER" | null; // fitted for the whole house
+  readings: SensorReading[];
+};
+
+export type SensorCatalogue = {
+  v: number;
+  growingSystems: Record<string, string>; // each layout growingSystem's farm type
+  farmTypes: Record<string, { name: string; sensors: SensorInfo[] }>;
+};
+
 /* ---------- GET /api/zones/{zoneId} (contract §11.2, zone response; readings from §6.1) ---------- */
 export type ZoneStatus = {
   zone: string;

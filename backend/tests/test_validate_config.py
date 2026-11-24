@@ -42,6 +42,10 @@ def zone(data, index=0):
     return data["zones"][index]
 
 
+def sensor(data, sensor_id, farm_type="HYDROPONICS"):
+    return next(s for s in data["farmTypes"][farm_type]["sensors"] if s["id"] == sensor_id)
+
+
 def test_both_client_packs_are_valid():
     result = run(CLIENTS)
     assert result.returncode == 0, result.stderr
@@ -85,6 +89,17 @@ def test_both_client_packs_are_valid():
         ("hardware.json", lambda d: d["pumps"].update(zones=[]), "pumps.zones must be an object"),
         ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"]["N"].update(flowMlPerS=0.001),
          "controllers.ZC2: line N's largest dose, 2 mL at 0.001 mL/s, is 2000 s of pumping"),
+        # DM-3: the sensor catalogue
+        ("sensors.json", lambda d: d.pop("farmTypes"), 'needs a "growingSystems" object and a non-empty "farmTypes"'),
+        ("sensors.json", lambda d: d["growingSystems"].pop("NFT"), "zone Z1 grows in NFT, which growingSystems leaves out"),
+        ("sensors.json", lambda d: d["growingSystems"].update(NFT="SOIL"), "growingSystems.NFT is 'SOIL', which is not in farmTypes"),
+        ("sensors.json", lambda d: sensor(d, "ph").update(necessity="NICE"), "farmTypes.HYDROPONICS.sensors.ph: necessity must be"),
+        ("sensors.json", lambda d: sensor(d, "ph").pop("typical"), 'sensors.ph: needs "typical" text'),
+        ("sensors.json", lambda d: sensor(d, "flow").update(layoutSensor="pump"), "layoutSensor 'pump' is not a layout sensor"),
+        ("sensors.json", lambda d: sensor(d, "ec")["readings"][0].update(key="tds"), "zone.readings has no reading 'tds'"),
+        ("sensors.json", lambda d: sensor(d, "co2").update(readings=[{"from": "climate.readings", "key": "airRh", "label": "x"}]),
+         "sensors.co2: has readings but nothing says when it is fitted"),
+        ("sensors.json", lambda d: sensor(d, "light").update(id="co2"), "every sensor needs its own id, got 'co2'"),
     ],
 )
 def test_a_broken_pack_fails_and_says_why(tmp_path, name, change, said):

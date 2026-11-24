@@ -11,6 +11,7 @@ export const SCENARIOS = {
   "z1-estop": "E-STOP pressed on the Zone A dosing cabinet",
   "z1-leak": "Leak sensor wet in Zone A",
   "farm-error": "GET /api/farm fails (500)",
+  "no-sensors": "A pack without a sensor catalogue: GET /api/sensors is 404, so no Sensors section",
   "no-playground":
     "A real farm: features.playground is false, so no Simulator; every zone and the climate LIVE",
   "client-b": "Like client_B: a real farm, every zone LIVE, the climate SIMULATED, no fans",

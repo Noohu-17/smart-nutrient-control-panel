@@ -23,7 +23,15 @@ from ..config import Settings, load_settings
 from ..db.engine import create_db_engine
 from ..packs import NotImported, Pack, kept_pack, load_pack, refresh_soon
 from . import queries
-from .pack import PackError, SiteRef, read_farm, read_zone_details, site_of, zone_sources
+from .pack import (
+    PackError,
+    SiteRef,
+    read_farm,
+    read_sensors,
+    read_zone_details,
+    site_of,
+    zone_sources,
+)
 from .schemas import (
     ClimateStatus,
     DeviceInfo,
@@ -31,6 +39,7 @@ from .schemas import (
     ErrorBody,
     Farm,
     PowerStatus,
+    SensorCatalogue,
     ZoneCrop,
     ZoneList,
     ZoneProfile,
@@ -131,6 +140,14 @@ def _errors(*statuses: int) -> dict[int | str, dict[str, Any]]:
 def get_farm(pack: PackDep) -> Farm:
     """The site's layout and feature switches (§11.2). From a pack folder, needs no database."""
     return read_farm(pack)
+
+
+def get_sensors(pack: PackDep) -> SensorCatalogue:
+    """The sensor catalogue per farm type (sensors.json, DM-3). 404 for a pack without one."""
+    catalogue = read_sensors(pack)
+    if catalogue is None:
+        raise HTTPException(404, "This site's settings have no sensor catalogue")
+    return catalogue
 
 
 def list_zones(pack: PackDep, engine: EngineDep, site: SiteDep) -> ZoneList:
@@ -289,6 +306,7 @@ def add_read_api(app: FastAPI) -> None:
     """The routes go straight onto the app, so each one is listed in app.routes."""
     routes = (
         ("/api/farm", get_farm, Farm, (500,)),
+        ("/api/sensors", get_sensors, SensorCatalogue, (404, 500)),
         ("/api/zones", list_zones, ZoneList, (503,)),
         ("/api/zones/{zoneId}", get_zone, ZoneStatus, (404, 422, 503)),
         ("/api/climate", get_climate, ClimateStatus, (500, 503)),

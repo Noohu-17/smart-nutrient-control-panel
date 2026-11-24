@@ -15,6 +15,7 @@ import type {
   PowerStatus,
   PushKey,
   ScenarioOptions,
+  SensorCatalogue,
   ServerAlert,
   SimFaultBody,
   SimHold,
@@ -52,6 +53,17 @@ export function useFarm() {
     queryKey: ["farm"],
     queryFn: () => getJson<Farm>("/farm"),
     staleTime: 5 * ONE_MINUTE,
+  });
+}
+
+/** GET /api/sensors · the sensor catalogue per farm type (DM-3). Config, so keep it for 5 minutes.
+    A pack without one answers 404, which is not worth asking again. */
+export function useSensors() {
+  return useQuery({
+    queryKey: ["sensors"],
+    queryFn: () => getJson<SensorCatalogue>("/sensors"),
+    staleTime: 5 * ONE_MINUTE,
+    retry: false,
   });
 }
 
@@ -137,12 +149,13 @@ export function useZones(zoneIds: string[]) {
 }
 
 /** GET /api/climate · air inside and outside, electrical room, climate equipment. Every minute. */
-export function useClimate() {
+export function useClimate({ enabled = true }: { enabled?: boolean } = {}) {
   const pollMs = usePollMs(ONE_MINUTE);
   return useQuery({
     queryKey: ["climate"],
     queryFn: () => getJson<ClimateStatus>("/climate"),
     refetchInterval: pollMs,
+    enabled,
   });
 }
 

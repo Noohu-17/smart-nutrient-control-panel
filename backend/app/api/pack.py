@@ -12,7 +12,7 @@ from typing import Any
 
 from ..packcheck import pump_rates
 from ..packs import Pack, PackError, as_pack
-from .schemas import Drum, Farm, FarmZone, ZoneCrop, ZoneProfile
+from .schemas import Drum, Farm, FarmZone, SensorCatalogue, ZoneCrop, ZoneProfile
 
 log = logging.getLogger("api")
 
@@ -78,6 +78,17 @@ def default_zone_source(features: Any) -> str:
     else (§2.4): a real farm's zone is never treated as simulated by mistake."""
     playground = isinstance(features, dict) and features.get("playground") is True
     return "SIMULATED" if playground else "LIVE"
+
+
+def read_sensors(source: PackLike) -> SensorCatalogue | None:
+    """sensors.json, the sensor catalogue per farm type (DM-3), or None for a pack without one."""
+    pack = as_pack(source)
+    try:
+        return SensorCatalogue.model_validate(_without_meta(pack.json("sensors.json")))
+    except FileNotFoundError:
+        return None
+    except (OSError, TypeError, ValueError, AttributeError) as exc:  # ValidationError: ValueError
+        raise _cannot_load(exc) from exc
 
 
 def zone_sources(source: PackLike) -> dict[str, str]:

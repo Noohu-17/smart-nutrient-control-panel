@@ -25,6 +25,8 @@ PACK_FILES = [
     "features.json", "users.json", "simulator.json", "hardware.json", "nutrients.json",
     "io_map.json", "scenarios.json",
 ]
+# Checked when the pack has it; a pack from before it leaves it out.
+OPTIONAL_PACK_FILES = ["sensors.json"]
 
 # These hold real values. Every other file must carry _meta.placeholder.
 REAL_VALUE_FILES = {"layout.json", "features.json"}
@@ -406,6 +408,80 @@ def check_nutrients(rel, nutrients, dose_lines_by_zone, errors, layout=None):
                           "it fills (layout.json dayTanks)")
 
 
+# DM-3: the sensor catalogue (sensors.json). Where the app finds each reading, and the ones it knows.
+SENSOR_NECESSITY = {"MUST_HAVE", "GOOD_TO_HAVE"}
+SENSOR_FITTED_BY = {"CLIMATE_CONTROLLER"}  # fitted for the whole house, not per zone
+SENSOR_READING_KEYS = {
+    "zone.readings": {"ec", "ph", "solTempC", "reservoirPct", "reservoirL", "circFlowLpm", "doMgL"},
+    "zone": {"leak"},
+    "climate.readings": {"airTempC", "airRh", "outsideTempC", "outsideRh", "elecRoomTempC"},
+}
+
+
+def check_sensors(rel, sensors, layout, errors):
+    """Each farm type's sensors: what they are, and where the app finds the reading of a fitted one.
+    Every growing system the layout's zones use must belong to a farm type."""
+    farm_types = sensors.get("farmTypes")
+    systems = sensors.get("growingSystems")
+    if not isinstance(farm_types, dict) or not farm_types or not isinstance(systems, dict):
+        errors.append(f'{rel}: needs a "growingSystems" object and a non-empty "farmTypes" object')
+        return
+    for system, farm_type in systems.items():
+        if system not in GROWING_SYSTEMS:
+            errors.append(f"{rel}: growingSystems.{system} is not a growing system ({', '.join(sorted(GROWING_SYSTEMS))})")
+        if farm_type not in farm_types:
+            errors.append(f"{rel}: growingSystems.{system} is {farm_type!r}, which is not in farmTypes")
+    for zone in layout.get("zones") or []:
+        system = zone.get("growingSystem") if isinstance(zone, dict) else None
+        if system is not None and system not in systems:
+            errors.append(f"{rel}: zone {zone.get('id')} grows in {system}, which growingSystems leaves out")
+
+    for farm_type, entry in farm_types.items():
+        where = f"{rel}: farmTypes.{farm_type}"
+        listed = entry.get("sensors") if isinstance(entry, dict) else None
+        if not _text(entry.get("name") if isinstance(entry, dict) else None) or not isinstance(listed, list) or not listed:
+            errors.append(f'{where} needs a "name" and a non-empty "sensors" list')
+            continue
+        ids = set()
+        for sensor in listed:
+            if not isinstance(sensor, dict):
+                errors.append(f"{where}.sensors: each sensor must be an object")
+                continue
+            sid = sensor.get("id")
+            at = f"{where}.sensors.{sid}"
+            if not _text(sid) or sid in ids:
+                errors.append(f"{where}.sensors: every sensor needs its own id, got {sid!r}")
+            ids.add(sid)
+            for key in ("name", "measures", "typical", "indicates"):
+                if not _text(sensor.get(key)):
+                    errors.append(f'{at}: needs "{key}" text')
+            if sensor.get("necessity") not in SENSOR_NECESSITY:
+                errors.append(f"{at}: necessity must be one of {', '.join(sorted(SENSOR_NECESSITY))}")
+            fitted_by = sensor.get("fittedBy")
+            layout_sensor = sensor.get("layoutSensor")
+            if fitted_by is not None and fitted_by not in SENSOR_FITTED_BY:
+                errors.append(f"{at}: fittedBy must be {', '.join(sorted(SENSOR_FITTED_BY))}, got {fitted_by!r}")
+            if fitted_by is None and layout_sensor is not None and layout_sensor not in SENSOR_KEYS:
+                errors.append(f"{at}: layoutSensor {layout_sensor!r} is not a layout sensor ({', '.join(sorted(SENSOR_KEYS))})")
+            readings = sensor.get("readings")
+            if not isinstance(readings, list):
+                errors.append(f'{at}: needs a "readings" list ([] for none)')
+                continue
+            if readings and fitted_by is None and layout_sensor is None:
+                errors.append(f"{at}: has readings but nothing says when it is fitted (layoutSensor or fittedBy)")
+            for reading in readings:
+                if not isinstance(reading, dict):
+                    errors.append(f"{at}: each reading must be an object")
+                    continue
+                source, key = reading.get("from"), reading.get("key")
+                if source not in SENSOR_READING_KEYS:
+                    errors.append(f"{at}: reading from must be one of {', '.join(SENSOR_READING_KEYS)}, got {source!r}")
+                elif key not in SENSOR_READING_KEYS[source]:
+                    errors.append(f"{at}: {source} has no reading {key!r} ({', '.join(sorted(SENSOR_READING_KEYS[source]))})")
+                if not _text(reading.get("label")):
+                    errors.append(f'{at}: reading {key} needs a "label"')
+
+
 def pump_rates(hardware, zone_id):
     """Each dose line's pump rate in one zone (hardware.json, contract 2.5), as
     {line: (flowMlPerS as written, the key it is under)}. A zone whose pumps run at their own rate
@@ -517,6 +593,8 @@ def check_pack(client, where, names, loaded, errors):
             check_nutrients(rel, data, dose_lines_by_zone, errors, layout)
         if name == "hardware.json" and dose_lines_by_zone:
             check_pump_rates(rel, data, dose_lines_by_zone, errors)
+        if name == "sensors.json" and isinstance(data, dict):
+            check_sensors(rel, data, layout if isinstance(layout, dict) else {}, errors)
 
     io_map = loaded.get("io_map.json")
     if isinstance(io_map, dict) and isinstance(layout, dict):

@@ -28,6 +28,7 @@ import { zoneDosing } from "./data/dosing";
 import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
 import { doseLimits } from "./data/zoneDetails";
+import { sensorCatalogue } from "./data/sensors";
 import { DoseInputError, runDoseChecks, validateLines } from "./dosing";
 import { ackEntry, listOperations, recordOperation } from "./operations";
 import { addSubscription, pushKey, removeSubscription } from "./push";
@@ -221,6 +222,14 @@ export const handlers = [
     if (currentScenario() === "farm-error")
       return apiError(500, "INTERNAL", "The farm layout could not be loaded");
     return HttpResponse.json(scenarioLayout());
+  }),
+
+  // GET /api/sensors · the sensor catalogue per farm type (DM-3); 404 for a pack without one
+  http.get("/api/sensors", async () => {
+    await networkDelay();
+    if (currentScenario() === "no-sensors")
+      return apiError(404, "NOT_FOUND", "This site's settings have no sensor catalogue");
+    return HttpResponse.json(sensorCatalogue);
   }),
 
   // GET /api/climate · CC1's latest readings and state (contract §11.2)

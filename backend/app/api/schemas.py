@@ -173,6 +173,39 @@ class Farm(PackModel):
     features: dict[str, bool]
 
 
+# --- GET /api/sensors: sensors.json, the sensor catalogue per farm type (DM-3) --------------
+
+
+class SensorReading(PackModel):
+    """Where the app finds a fitted sensor's live value: `from` the zone or climate answer, `key`."""
+
+    from_: str = Field(alias="from")
+    key: str
+    label: str
+
+
+class SensorInfo(PackModel):
+    id: str
+    name: str
+    measures: str
+    necessity: Literal["MUST_HAVE", "GOOD_TO_HAVE"]
+    typical: str
+    indicates: str
+    layout_sensor: str | None = None  # the layout.json zones[].sensors key that says it is fitted
+    fitted_by: str | None = None  # CLIMATE_CONTROLLER: fitted for the whole house
+    readings: list[SensorReading]
+
+
+class SensorFarmType(PackModel):
+    name: str
+    sensors: list[SensorInfo]
+
+
+class SensorCatalogue(PackModel):
+    growing_systems: dict[str, str]  # each layout growingSystem's farm type
+    farm_types: dict[str, SensorFarmType]
+
+
 # --- GET /api/zones and /api/zones/{zoneId} (§11.2) -------------------------------------
 
 

@@ -7,6 +7,7 @@ import configLimits from "../../../config/clients/client_A/limits.json";
 import configNutrients from "../../../config/clients/client_A/nutrients.json";
 import configRecipes from "../../../config/clients/client_A/recipes.json";
 import configScenarios from "../../../config/clients/client_A/scenarios.json";
+import configSensors from "../../../config/clients/client_A/sensors.json";
 import type { ClimateStatus, DoseLimits, Farm, PowerStatus, ServerRole, ZoneStatus } from "../api/types";
 import { csrfHeaders, fakeSignIn } from "./session";
 import { hold } from "./sim";
@@ -17,6 +18,7 @@ import mockLimits from "./data/limits.json";
 import mockNutrients from "./data/nutrients.json";
 import mockRecipes from "./data/recipes.json";
 import mockScenarios from "./data/scenarios.json";
+import mockSensors from "./data/sensors.json";
 
 // Fields of the zone response example under GET /zones/{zoneId} in docs/contract.md §11.2 (T1-10),
 // which the real back end (T1-12) answers. simTs is left out: playground readings only.
@@ -105,6 +107,14 @@ describe("fake API (MSW)", () => {
   it("the mock recipes and nutrients are exact copies of config/clients/client_A's", () => {
     expect(mockRecipes).toEqual(configRecipes);
     expect(mockNutrients).toEqual(configNutrients);
+  });
+
+  it("GET /api/sensors is config/clients/client_A/sensors.json without its _meta (DM-3)", async () => {
+    expect(mockSensors).toEqual(configSensors);
+    const res = await get("/sensors");
+    expect(res.status).toBe(200);
+    const catalogue = Object.fromEntries(Object.entries(configSensors).filter(([key]) => key !== "_meta"));
+    expect(await res.json()).toEqual(catalogue);
   });
 
   it("GET /api/zones/Z2 says what the zone is and grows, as the back end does (T1-38)", async () => {
