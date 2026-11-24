@@ -436,6 +436,21 @@ def test_a_pack_with_problems_is_refused_and_nothing_is_stored(migrated_db, tmp_
         assert connection.scalar(select(Site.site_id)) is None  # the farm isn't loaded either
 
 
+def test_a_pack_with_a_negative_limit_is_refused_and_nothing_is_stored(migrated_db, tmp_path):
+    """DM-9 (Round 2 test 16 step 4): a copy of the pack with a per-dose limit of -50 mL."""
+    config_store.import_folder(migrated_db, CLIENT_B)
+    folder = shutil.copytree(CLIENT_B, tmp_path / "client_B")
+    limits = json.loads((folder / "limits.json").read_text(encoding="utf-8"))
+    limits["zones"]["Z1"]["limits"]["maxPerDoseMl"]["N"] = -50
+    (folder / "limits.json").write_text(json.dumps(limits, indent=2), encoding="utf-8")
+    with pytest.raises(config_store.Refused) as refused:
+        config_store.import_folder(migrated_db, folder)
+    assert any("zone Z1: limits.maxPerDoseMl.N must be mL > 0, got -50" in p for p in refused.value.problems)
+    assert [row.version for row in config_store.versions(migrated_db, "client_B")] == [1]
+    newest = config_store.stored(migrated_db, "client_B")
+    assert newest.json("limits.json")["zones"]["Z1"]["limits"]["maxPerDoseMl"]["N"] == 2
+
+
 def test_the_app_runs_from_the_database(migrated_db):
     config_store.import_folder(migrated_db, CLIENT_B)
     app.dependency_overrides[get_settings] = database_settings

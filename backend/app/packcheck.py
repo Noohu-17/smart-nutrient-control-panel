@@ -279,6 +279,8 @@ def check_zone_keys(rel, name, data, dose_lines_by_zone, errors):
     if name != "limits.json":
         return
     for zone_id, zone in zones.items():
+        if isinstance(zone, dict):
+            check_limit_values(f"{rel}: zone {zone_id}", zone, errors)
         lines = dose_lines_by_zone.get(zone_id)
         limits = zone.get("limits") if isinstance(zone, dict) else None
         if lines is None or not isinstance(limits, dict):
@@ -287,6 +289,61 @@ def check_zone_keys(rel, name, data, dose_lines_by_zone, errors):
             values = limits.get(key)
             if isinstance(values, dict) and set(values) != set(lines):
                 errors.append(f"{rel}: zone {zone_id}: limits.{key} keys {sorted(values)} do not match doseLines {lines}")
+
+
+def check_limit_values(where, zone, errors):
+    """DM-9: a zone's safety limits must make sense, not only have the right keys. Per-dose and 24 h
+    mL above 0, and per-dose no more than that line's 24 h; EC ceiling above 0; pH bounds within
+    0-14 with min below max; reservoir % within 0-100; mix wait and dose duration not negative. A
+    key the file leaves out is not checked here."""
+    limits = zone.get("limits")
+    if limits is not None and not isinstance(limits, dict):
+        errors.append(f'{where}: "limits" must be an object')
+        limits = None
+    limits = limits or {}
+    per_line = {}
+    for key in LINE_KEYED_LIMITS:
+        if key not in limits:
+            continue
+        values = limits[key]
+        if not isinstance(values, dict):
+            errors.append(f"{where}: limits.{key} must be an object keyed by dose line")
+            continue
+        for line, ml in values.items():
+            if not _positive_number(ml):
+                errors.append(f"{where}: limits.{key}.{line} must be mL > 0, got {ml!r}")
+        per_line[key] = values
+    per_dose, per_day = per_line.get("maxPerDoseMl", {}), per_line.get("max24hMl", {})
+    for line, ml in per_dose.items():
+        day = per_day.get(line)
+        if _positive_number(ml) and _positive_number(day) and ml > day:
+            errors.append(f"{where}: limits.maxPerDoseMl.{line} {ml} mL is more than max24hMl.{line} {day} mL")
+
+    if "ecCeiling" in limits and not _positive_number(limits["ecCeiling"]):
+        errors.append(f"{where}: limits.ecCeiling must be a number > 0, got {limits['ecCeiling']!r}")
+    ph = {}
+    for key in ("phMin", "phMax"):
+        if key not in limits:
+            continue
+        value = limits[key]
+        if _number(value) and 0 <= value <= 14:
+            ph[key] = value
+        else:
+            errors.append(f"{where}: limits.{key} must be a number within 0-14, got {value!r}")
+    if len(ph) == 2 and ph["phMin"] >= ph["phMax"]:
+        errors.append(f"{where}: limits.phMin {ph['phMin']} must be below phMax {ph['phMax']}")
+    if "minReservoirPctToDose" in limits:
+        value = limits["minReservoirPctToDose"]
+        if not (_number(value) and 0 <= value <= 100):
+            errors.append(f"{where}: limits.minReservoirPctToDose must be a number within 0-100, got {value!r}")
+
+    dose = zone.get("dose")
+    if dose is not None and not isinstance(dose, dict):
+        errors.append(f'{where}: "dose" must be an object')
+        return
+    for key in ("mixWaitS", "maxDurationS"):
+        if key in (dose or {}) and not (_number(dose[key]) and dose[key] >= 0):
+            errors.append(f"{where}: dose.{key} must be a number of seconds, not negative, got {dose[key]!r}")
 
 
 def check_zone_recipes(rel, recipes, zones, errors):

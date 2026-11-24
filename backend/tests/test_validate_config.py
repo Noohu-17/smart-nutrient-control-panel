@@ -90,6 +90,52 @@ def test_both_client_packs_are_valid():
 def test_a_broken_pack_fails_and_says_why(tmp_path, name, change, said):
     assert said in broken(tmp_path, name, change)
 
+def limits(data, zone_id="Z1"):
+    return data["zones"][zone_id]["limits"]
+
+
+@pytest.mark.parametrize(
+    ("change", "said"),
+    [
+        (lambda d: limits(d)["maxPerDoseMl"].update(N=-50), "zone Z1: limits.maxPerDoseMl.N must be mL > 0, got -50"),
+        (lambda d: limits(d)["maxPerDoseMl"].update(P=0), "zone Z1: limits.maxPerDoseMl.P must be mL > 0, got 0"),
+        (lambda d: limits(d)["maxPerDoseMl"].update(K="lots"), "zone Z1: limits.maxPerDoseMl.K must be mL > 0, got 'lots'"),
+        (lambda d: limits(d, "Z2")["max24hMl"].update(N=-8), "zone Z2: limits.max24hMl.N must be mL > 0, got -8"),
+        (lambda d: limits(d)["maxPerDoseMl"].update(K=9), "zone Z1: limits.maxPerDoseMl.K 9 mL is more than max24hMl.K 8 mL"),
+        (lambda d: limits(d).update(ecCeiling=0), "zone Z1: limits.ecCeiling must be a number > 0, got 0"),
+        (lambda d: limits(d).update(ecCeiling=-1.2), "zone Z1: limits.ecCeiling must be a number > 0, got -1.2"),
+        (lambda d: limits(d).update(phMin=-1), "zone Z1: limits.phMin must be a number within 0-14, got -1"),
+        (lambda d: limits(d).update(phMax=15), "zone Z1: limits.phMax must be a number within 0-14, got 15"),
+        (lambda d: limits(d).update(phMin=7), "zone Z1: limits.phMin 7 must be below phMax 6.5"),
+        (lambda d: limits(d).update(phMin=6.5), "zone Z1: limits.phMin 6.5 must be below phMax 6.5"),
+        (lambda d: limits(d).update(minReservoirPctToDose=-5),
+         "zone Z1: limits.minReservoirPctToDose must be a number within 0-100, got -5"),
+        (lambda d: limits(d).update(minReservoirPctToDose=120),
+         "zone Z1: limits.minReservoirPctToDose must be a number within 0-100, got 120"),
+        (lambda d: d["zones"]["Z1"]["dose"].update(mixWaitS=-1),
+         "zone Z1: dose.mixWaitS must be a number of seconds, not negative, got -1"),
+        (lambda d: d["zones"]["Z2"]["dose"].update(maxDurationS=-600),
+         "zone Z2: dose.maxDurationS must be a number of seconds, not negative, got -600"),
+    ],
+)
+def test_a_limit_that_makes_no_sense_fails_and_says_why(tmp_path, change, said):
+    """DM-9: limits.json values, not only its keys."""
+    assert said in broken(tmp_path, "limits.json", change)
+
+
+def test_limits_at_their_edges_are_valid(tmp_path):
+    """The bounds themselves are allowed: per-dose equal to the 24 h limit, pH 0 and 14, reservoir
+    0 % and 100 %, no mix wait."""
+    clients = tmp_path / "clients"
+    pack = shutil.copytree(CLIENTS / "client_B", clients / "client_B")
+    data = json.loads((pack / "limits.json").read_text(encoding="utf-8"))
+    limits(data)["maxPerDoseMl"]["N"] = limits(data)["max24hMl"]["N"]
+    limits(data).update(phMin=0, phMax=14, minReservoirPctToDose=0)
+    limits(data, "Z2")["minReservoirPctToDose"] = 100
+    data["zones"]["Z1"]["dose"]["mixWaitS"] = 0
+    (pack / "limits.json").write_text(json.dumps(data), encoding="utf-8")
+    result = run(clients)
+    assert result.returncode == 0, result.stderr
 
 def test_a_climate_source_must_be_live_or_simulated(tmp_path):
     said = broken(tmp_path, "layout.json", lambda layout: layout["climate"].update(source="REAL"))
