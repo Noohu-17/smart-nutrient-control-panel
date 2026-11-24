@@ -61,6 +61,23 @@
   overflow-wrap: anywhere;
 }
 
+/* house climate on a zone page and its one line on a zone card */
+.zone-card-head .card-link {
+  color: var(--color-primary);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+}
+.zone-climate-line {
+  margin: 0;
+  font-size: var(--text-label-size);
+  color: var(--text-secondary);
+}
+.zone-climate-line a {
+  color: var(--color-primary);
+  font-weight: var(--weight-semibold);
+  text-decoration: none;
+}
+
 /* no data from the zone: dashed and muted, values show "--" */
 .zone-card.offline {
   border-style: dashed;

@@ -66,8 +66,10 @@ function commandEnding(): CommandEnding {
 }
 
 /** The layout this scenario's farm has: "no-generator" is a site without a generator or UPS;
-    "no-playground" a real farm, where every zone is LIVE (§2.4); "live-zone" a playground site
-    with Zone B on real hardware. */
+    "no-playground" a real farm, where every zone and the climate are LIVE (§2.4); "client-b" a
+    real farm whose zones are LIVE but whose climate the simulator plays, with no fans (DM-2);
+    "live-zone" a playground site with Zone B on real hardware; "no-climate" a site with no
+    climate controller. */
 function scenarioLayout(): Farm {
   const scenario = currentScenario();
   if (scenario === "no-generator")
@@ -76,12 +78,35 @@ function scenarioLayout(): Farm {
     return {
       ...farmLayout,
       zones: farmLayout.zones.map((z) => ({ ...z, source: "LIVE" as const })),
+      climate: { ...farmLayout.climate, source: "LIVE" },
+      features: { ...farmLayout.features, playground: false },
+    };
+  if (scenario === "client-b")
+    return {
+      ...farmLayout,
+      zones: farmLayout.zones.map((z) => ({ ...z, source: "LIVE" as const })),
+      climate: { ...farmLayout.climate, source: "SIMULATED", fans: [] },
       features: { ...farmLayout.features, playground: false },
     };
   if (scenario === "live-zone")
     return {
       ...farmLayout,
       zones: farmLayout.zones.map((z) => (z.id === "Z2" ? { ...z, source: "LIVE" as const } : z)),
+    };
+  if (scenario === "no-climate")
+    return {
+      ...farmLayout,
+      climate: {
+        controller: "",
+        fans: [],
+        padPumps: [],
+        chillers: {},
+        shade: [],
+        haf: [],
+        foggers: [],
+        airSensors: [],
+      },
+      devices: farmLayout.devices?.filter((d) => d.kind !== "CLIMATE_CONTROLLER"),
     };
   return farmLayout;
 }
@@ -201,6 +226,8 @@ export const handlers = [
   // GET /api/climate · CC1's latest readings and state (contract §11.2)
   http.get("/api/climate", async () => {
     await networkDelay();
+    if (currentScenario() === "no-climate")
+      return apiError(404, "NOT_FOUND", "This site has no climate controller");
     const climate = buildClimateStatus(scenarioLayout());
     if (currentScenario() === "climate-offline") {
       climate.online = false;

@@ -2,6 +2,7 @@
 // Air drifts a little on every request, like zone telemetry. Sensor positions, equipment IDs and
 // whether a generator or UPS is fitted all come from the layout, never from here.
 import type { ClimateStatus, Farm, PowerStatus } from "../../api/types";
+import { vpdKpa } from "../../config/readings";
 
 type Air = {
   byPos: Record<string, number>;
@@ -79,6 +80,7 @@ export function buildClimateStatus(layout: Farm): ClimateStatus {
       outsideTempC: round(now.outsideTempC, 1),
       outsideRh: Math.round(now.outsideRh),
       elecRoomTempC: round(now.elecRoomTempC, 1),
+      vpdKpa: vpdKpa(airTempC, Math.round(now.airRh)), // §1: the cloud works it out
     },
     quality: { airTempC: "OK", airRh: "OK", outsideTempC: "OK", outsideRh: "OK", elecRoomTempC: "OK" },
     mode: "MANUAL",

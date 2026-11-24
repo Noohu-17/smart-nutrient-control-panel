@@ -33,6 +33,22 @@ export const ELEC_ROOM_READING: ReadingSpec<ClimateKey> = {
   decimals: 1,
 };
 
+/** Vapour pressure deficit, kPa to 0.01 (contract §1). */
+export const VPD_READING: ReadingSpec = { key: "vpdKpa", label: "VPD", unit: "kPa", decimals: 2 };
+
+/** VPD from air temp and RH (Tetens), as the cloud calculates it (§6.2). Null without both. */
+export function vpdKpa(airTempC: number | null | undefined, airRh: number | null | undefined) {
+  if (airTempC === null || airTempC === undefined || airRh === null || airRh === undefined) return null;
+  const saturation = 0.6108 * Math.exp((17.27 * airTempC) / (airTempC + 237.3));
+  return Math.round(saturation * (1 - airRh / 100) * 100) / 100;
+}
+
+/** The answer's vpdKpa, or worked out here from air temp and RH when the back end leaves it out. */
+export function climateVpd(climate: ClimateStatus) {
+  const { vpdKpa: sent, airTempC, airRh } = climate.readings;
+  return sent !== undefined ? sent : vpdKpa(airTempC, airRh);
+}
+
 /** One card per air sensor position; positions come from layout.climate.airSensors. */
 export const AIR_POSITION_LABEL: Record<string, string> = {
   PAD_END: "Pad end",

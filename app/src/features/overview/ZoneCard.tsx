@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { FarmZone } from "../../api/types";
 import { zonePath } from "../../config/readings";
+import { ZoneClimateLine } from "../climate/ZoneClimate";
 import { ZoneActions } from "../zones/ZoneActions";
 import { ZoneReadings, ZoneSourceChip, ZoneStatusChip } from "../zones/ZoneLive";
 import { ZoneTags } from "../zones/ZoneTags";
@@ -24,6 +25,7 @@ export function ZoneCard({ zone }: { zone: FarmZone }) {
       </header>
       <ZoneTags zone={zone} status={status} />
       <ZoneReadings status={status} />
+      <ZoneClimateLine />
       <ZoneActions zoneId={zone.id} />
     </section>
   );

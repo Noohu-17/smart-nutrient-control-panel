@@ -6,6 +6,8 @@ import { zonePath } from "../../config/readings";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusChip } from "../../components/StatusChip";
 import { AlertStrip } from "../alerts/AlertStrip";
+import { hasClimateController } from "../climate/climateText";
+import { ZoneClimateCard } from "../climate/ZoneClimate";
 import { useZoneAlerts } from "../alerts/useZoneAlerts";
 import { DoseCard } from "../dosing/DoseCard";
 import { ZoneTags } from "./ZoneTags";
@@ -89,6 +91,8 @@ export function ZonePage() {
       ) : (
         <>
           <ZoneLive key={`live-${zone.id}`} zone={zone} zones={farm.data.zones} />
+
+          {hasClimateController(farm.data) && <ZoneClimateCard farm={farm.data} />}
 
           <ZoneDetails key={`details-${zone.id}`} zone={zone} />
 

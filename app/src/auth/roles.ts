@@ -14,7 +14,7 @@ export type Permission = "operate" | "ack" | "export" | "recipe" | "clearFault" 
 const STAFF: Role[] = ["Owner", "Agronomist", "Operator"];
 
 export const CAN: Record<Permission, Role[]> = {
-  operate: STAFF, // dose, refill, climate mode and equipment
+  operate: STAFF, // dose, refill and climate equipment
   ack: STAFF, // acknowledge alerts
   export: STAFF,
   recipe: ["Owner", "Agronomist"],

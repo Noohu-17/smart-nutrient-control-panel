@@ -214,6 +214,7 @@ describe("fake API (MSW)", () => {
       outsideTempC: 33.8,
       outsideRh: 58,
       elecRoomTempC: 34.0,
+      vpdKpa: 1.32, // §1: from air temp and RH
     });
     expect(c.equipment).toMatchObject({
       fanStage: 2,

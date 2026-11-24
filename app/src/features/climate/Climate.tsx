@@ -17,7 +17,6 @@ export function Climate() {
       <div className="phead">
         <h1>Climate</h1>
         <div className="actions">
-          <RoleButton perm="operate">Change mode</RoleButton>
           <RoleButton perm="operate">Control equipment</RoleButton>
         </div>
       </div>

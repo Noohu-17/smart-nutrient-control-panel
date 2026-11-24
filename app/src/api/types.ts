@@ -69,7 +69,7 @@ export type Farm = {
   zones: FarmZone[];
   nursery: { tables: number };
   climate: {
-    controller: string;
+    controller: string; // "" on a site with no climate controller
     fans: string[];
     padPumps: string[];
     chillers: Record<string, string>;
@@ -77,6 +77,7 @@ export type Farm = {
     haf: string[];
     foggers: string[];
     airSensors: string[];
+    source?: ZoneSource; // DM-2: who plays the climate controller; left out, as for a zone (§2.4)
   };
   power: { monitor: string; generator: boolean; ups: boolean };
   devices?: { id: string; kind: string; zone?: string }[];
@@ -158,6 +159,8 @@ export type ClimateStatus = {
     outsideTempC: number | null;
     outsideRh: number | null;
     elecRoomTempC: number | null;
+    // §1: calculated by the cloud from air temp and RH; left out by a back end that doesn't yet
+    vpdKpa?: number | null;
   };
   // {} until the controller first reports; OK becomes STALE past the fresh limit or when offline
   quality: Partial<Record<"airTempC" | "airRh" | "outsideTempC" | "outsideRh" | "elecRoomTempC", Quality>>;
