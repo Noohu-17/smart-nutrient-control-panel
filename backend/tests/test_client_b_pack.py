@@ -39,3 +39,10 @@ def test_each_client_b_zone_doses_at_its_own_pump_rate():
     1 L/min (hardware.json pumps.zones.Z2), for the estimate and the dose form."""
     assert read_dosing(CLIENT_B, "Z1").pump_ml_per_min == {"N": 15, "P": 15, "K": 15}
     assert read_dosing(CLIENT_B, "Z2").pump_ml_per_min == pytest.approx({"N": 1000, "P": 1000, "K": 1000}, abs=0.1)
+
+
+def test_client_b_climate_is_simulated_until_it_has_hardware():
+    """DM-2: the zones are on the rig, the climate is played by the simulator."""
+    climate = read_farm(CLIENT_B).climate
+    assert climate.source == "SIMULATED"
+    assert climate.air_sensors == ["PAD_END", "MIDDLE", "FAN_END"]

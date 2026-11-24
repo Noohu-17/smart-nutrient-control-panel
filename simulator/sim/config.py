@@ -196,11 +196,27 @@ def zone_sources(client_dir: Path) -> dict[str, str]:
     return sources
 
 
+def climate_source(client_dir: Path) -> str:
+    """The climate's source (layout.json climate.source, contract 2.4), as a zone's: LIVE, a real
+    climate controller, or SIMULATED, played here. Left out, it is SIMULATED on a playground site
+    and LIVE everywhere else. A real farm whose zones are on hardware but whose climate isn't yet
+    (client_B) sets SIMULATED, and the simulator plays only its climate (and power)."""
+    climate = read_pack_file(client_dir, "layout.json").get("climate")
+    default = "SIMULATED" if playground_enabled(client_dir) else "LIVE"
+    source = climate.get("source", default) if isinstance(climate, dict) else default
+    if source not in ZONE_SOURCES:
+        raise ValueError(f"layout.json: climate.source must be LIVE or SIMULATED, got {source!r}")
+    return source
+
+
 def simulated_devices(client_dir: Path) -> tuple[dict[str, Any], ...]:
     """The devices the simulator plays: every layout.json device except a LIVE zone's controller,
-    which its hardware plays (contract 2.4). Its zone's model still runs, unseen."""
+    which its hardware plays, and the climate controller when the climate is LIVE (contract 2.4).
+    A LIVE zone has no model here either (farm.load_farm)."""
     live = {zone for zone, source in zone_sources(client_dir).items() if source == "LIVE"}
+    climate_live = climate_source(client_dir) == "LIVE"
     return tuple(
         device for device in load_devices(client_dir)
         if not (device["kind"] == "ZONE_CONTROLLER" and device.get("zone") in live)
+        and not (device["kind"] == "CLIMATE_CONTROLLER" and climate_live)
     )

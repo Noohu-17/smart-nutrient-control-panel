@@ -17,6 +17,7 @@ entry, and entries for lines a zone doesn't have are ignored.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -143,6 +144,35 @@ class AirConditions:
 
 
 @dataclass(frozen=True, slots=True)
+class AirCycle:
+    """A simple day in the polyhouse (simulator.json model.air.dailyCycle): the air is warmest, and
+    driest, at warmestHour (local time) and coolest twelve hours later. The swings are the full
+    range from coolest to warmest. Without it the air is held at model.air (a playground holds
+    it)."""
+
+    temp_swing_c: float
+    rh_swing_pct: float
+    warmest_hour: float
+
+    def air_at(self, base: AirConditions, local_hour: float) -> AirConditions:
+        """The air at this local time of day, around `base` (model.air: the day's average)."""
+        swing = math.cos(2 * math.pi * (local_hour - self.warmest_hour) / 24.0)
+        warmer = self.temp_swing_c / 2 * swing
+        drier = self.rh_swing_pct / 2 * swing
+
+        def rh(value: float) -> float:
+            return min(PERCENT_MAX, max(0.0, value - drier))
+
+        return AirConditions(
+            temp_by_pos_c={pos: t + warmer for pos, t in base.temp_by_pos_c.items()},
+            rh=rh(base.rh),
+            outside_temp_c=base.outside_temp_c + warmer,
+            outside_rh=rh(base.outside_rh),
+            elec_room_temp_c=base.elec_room_temp_c,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class PowerSupply:
     """What the power monitor measures while mains is healthy (contract 6.3)."""
 
@@ -190,6 +220,24 @@ def parse_air(model: Mapping[str, Any], air_sensors: Any) -> AirConditions:
         outside_rh=_percent(cfg, "outsideRh", path),
         elec_room_temp_c=_number(cfg, "elecRoomTempC", path),
     )
+
+
+def parse_air_cycle(model: Mapping[str, Any]) -> AirCycle | None:
+    """model.air.dailyCycle, or None when the pack has none (the air stays as model.air)."""
+    cfg = _section(model, "air", "model").get("dailyCycle")
+    if cfg is None:
+        return None
+    path = "model.air.dailyCycle"
+    if not isinstance(cfg, Mapping):
+        raise ValueError(f"{path} must be an object, got {cfg!r}")
+    temp_swing_c = _number(cfg, "tempSwingC", path)
+    rh_swing_pct = _number(cfg, "rhSwingPct", path)
+    warmest_hour = _number(cfg, "warmestHour", path)
+    if temp_swing_c < 0 or rh_swing_pct < 0:
+        raise ValueError(f"{path}: tempSwingC and rhSwingPct must be >= 0")
+    if not 0 <= warmest_hour < 24:
+        raise ValueError(f"{path}.warmestHour must be from 0 to under 24, got {warmest_hour}")
+    return AirCycle(temp_swing_c, rh_swing_pct, warmest_hour)
 
 
 def parse_power(model: Mapping[str, Any]) -> PowerSupply:

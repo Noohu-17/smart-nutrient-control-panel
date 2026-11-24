@@ -89,3 +89,13 @@ def test_both_client_packs_are_valid():
 )
 def test_a_broken_pack_fails_and_says_why(tmp_path, name, change, said):
     assert said in broken(tmp_path, name, change)
+
+
+def test_a_climate_source_must_be_live_or_simulated(tmp_path):
+    said = broken(tmp_path, "layout.json", lambda layout: layout["climate"].update(source="REAL"))
+    assert "climate.source must be LIVE or SIMULATED" in said
+
+
+def test_a_simulated_climate_needs_air_sensor_positions(tmp_path):
+    said = broken(tmp_path, "layout.json", lambda layout: layout["climate"].update(airSensors=[]))
+    assert "climate.airSensors" in said

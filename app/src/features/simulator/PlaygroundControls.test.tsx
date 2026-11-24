@@ -1,5 +1,5 @@
 // Playground controls on the Simulator screen (contract §11.4) against the fake API
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
@@ -112,7 +112,8 @@ describe("Simulator screen: playground controls", () => {
     expect(list.getByText("Held at 7.2")).toBeInTheDocument();
     // The entry stays and a line confirms it; holding the same reading again updates it.
     expect(held.getByLabelText("Value")).toHaveValue(7.2);
-    expect(held.getByRole("status")).toHaveTextContent("Held: Zone A · pH at 7.2.");
+    // The line comes with the hold's answer, which may arrive just after the list refreshes.
+    await waitFor(() => expect(held.getByRole("status")).toHaveTextContent("Held: Zone A · pH at 7.2."));
     await user.clear(held.getByLabelText("Value"));
     expect(held.getByRole("status")).toHaveTextContent("");
     await user.type(held.getByLabelText("Value"), "6.5");

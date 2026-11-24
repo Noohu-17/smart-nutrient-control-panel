@@ -171,6 +171,10 @@ def check_layout(client, rel, layout, errors):
         check_zone_details(where, zone, fail)
 
     climate = layout.get("climate") or {}
+    if "source" in climate and climate["source"] not in ("LIVE", "SIMULATED"):
+        fail(f"climate.source must be LIVE or SIMULATED, got {climate['source']!r}")
+    if climate.get("source") == "SIMULATED" and not climate.get("airSensors"):
+        fail("climate.airSensors: a SIMULATED climate needs at least one air sensor position")
     for zone_id, chiller in (climate.get("chillers") or {}).items():
         if zone_id not in dose_lines_by_zone:
             fail(f"climate.chillers: chiller {chiller} is keyed by {zone_id!r}, which is not a zone in this layout")

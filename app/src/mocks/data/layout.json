@@ -74,6 +74,7 @@
   "nursery": { "tables": 6 },
   "climate": {
     "controller": "CC1",
+    "source": "SIMULATED",
     "fans": ["FAN1", "FAN2", "FAN3", "FAN4"],
     "padPumps": ["PAD1"],
     "chillers": { "Z1": "CH1", "Z2": "CH2" },

@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from sim.config import load_devices, load_site, simulated_devices, zone_sources
+from sim.config import climate_source, load_devices, load_site, simulated_devices, zone_sources
 from sim.settings import load_settings
 
 
@@ -124,3 +124,42 @@ def test_a_device_added_to_the_layout_is_played_too(tmp_path):
 def test_rejects_a_device_list_the_simulator_cannot_play(tmp_path, devices):
     with pytest.raises(ValueError, match="device"):
         load_devices(write_layout(tmp_path, {"devices": devices}))
+
+
+# --- The climate's source (DM-2) ----------------------------------------------------------
+
+CLIENT_B = load_settings({}).client_dir.parent / "client_B"
+
+
+def climate_pack(tmp_path, *, playground, source=None):
+    """Z1 on hardware, a climate controller and a power monitor; the climate's source as given."""
+    climate = {"controller": "CC1", **({"source": source} if source else {})}
+    devices = [{"id": "ZC1", "kind": "ZONE_CONTROLLER", "zone": "Z1"},
+               {"id": "CC1", "kind": "CLIMATE_CONTROLLER"}, {"id": "PM1", "kind": "POWER_MONITOR"}]
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    write_layout(tmp_path, {"site": "s", "zones": [{"id": "Z1", "source": "LIVE"}],
+                            "climate": climate, "devices": devices})
+    (tmp_path / "features.json").write_text(json.dumps({"playground": playground}))
+    return tmp_path
+
+
+def test_a_climate_without_a_source_is_simulated_on_a_playground_and_live_elsewhere(tmp_path):
+    assert climate_source(climate_pack(tmp_path / "play", playground=True)) == "SIMULATED"
+    assert climate_source(climate_pack(tmp_path / "farm", playground=False)) == "LIVE"
+    simulated = climate_pack(tmp_path / "set", playground=False, source="SIMULATED")
+    assert climate_source(simulated) == "SIMULATED"
+    with pytest.raises(ValueError, match="climate.source must be LIVE or SIMULATED"):
+        climate_source(climate_pack(tmp_path / "bad", playground=False, source="REAL"))
+
+
+def test_a_live_climate_controller_is_never_played_here(tmp_path):
+    live = climate_pack(tmp_path / "live", playground=False)
+    assert [d["id"] for d in simulated_devices(live)] == ["PM1"]
+    simulated = climate_pack(tmp_path / "sim", playground=False, source="SIMULATED")
+    assert [d["id"] for d in simulated_devices(simulated)] == ["CC1", "PM1"]
+
+
+def test_client_b_has_only_its_climate_and_power_simulated():
+    """Its zones are on the rig (LIVE); its climate has no hardware yet (SIMULATED)."""
+    assert climate_source(CLIENT_B) == "SIMULATED"
+    assert [d["id"] for d in simulated_devices(CLIENT_B)] == ["CC1", "PM1"]

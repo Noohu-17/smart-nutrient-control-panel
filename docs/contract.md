@@ -178,7 +178,7 @@ The back end, app and simulator all load the same file: `config/clients/<client>
     { "id": "Z2", "name": "Zone B", "source": "SIMULATED", "controller": "ZC2", "reservoir": { "id": "R2", "usableL": 1200 }, "dosingCabinet": "D2", "doseLines": ["A", "B", "ACID"], "dayTanks": { "A": { "usableL": 50 }, "B": { "usableL": 50 }, "ACID": { "usableL": 50 } }, "benches": [ { "id": "Z2-B1", "channels": 6, "lengthM": 8.5 }, { "id": "Z2-B2", "channels": 6, "lengthM": 8.5 }, { "id": "Z2-B3", "channels": 6, "lengthM": 8.5 }, { "id": "Z2-B4", "channels": 6, "lengthM": 8.5 } ] }
   ],
   "nursery": { "tables": 6 },
-  "climate": { "controller": "CC1", "fans": ["FAN1", "FAN2", "FAN3", "FAN4"], "padPumps": ["PAD1"], "chillers": { "Z1": "CH1", "Z2": "CH2" }, "shade": ["SHADE1"], "haf": ["HAF1"], "foggers": [], "airSensors": ["PAD_END", "MIDDLE", "FAN_END"] },
+  "climate": { "controller": "CC1", "source": "SIMULATED", "fans": ["FAN1", "FAN2", "FAN3", "FAN4"], "padPumps": ["PAD1"], "chillers": { "Z1": "CH1", "Z2": "CH2" }, "shade": ["SHADE1"], "haf": ["HAF1"], "foggers": [], "airSensors": ["PAD_END", "MIDDLE", "FAN_END"] },
   "power": { "monitor": "PM1", "generator": true, "ups": true }
 }
 ```
@@ -204,6 +204,8 @@ How the controller is linked (`MQTT`, or `SF_GATEWAY` on the prototype rig) is i
 - refuses the simulator's holds and failure drills, and while any zone is live a playground reset is refused (11.4);
 - is never played by the simulator, which plays only the simulated zones' controllers;
 - is the only kind of zone a controller with `"link": "SF_GATEWAY"` (2.5) may run.
+
+**Live and simulated climate.** `climate.source` works the same way for the climate controller: `LIVE`, a real one, or `SIMULATED`, played by the simulator; left out, `SIMULATED` on a playground site and `LIVE` elsewhere. A farm whose zones are on hardware but whose climate isn't yet (client_B) sets `"source": "SIMULATED"`: the simulator then plays only its climate controller and power monitor, with no model for the live zones, and the app labels the climate Simulated. A simulated climate needs at least one `airSensors` position. `GET /farm` (11.2) always has `climate.source`. A simulated climate may follow a day (`simulator.json` `model.air.dailyCycle`: `tempSwingC`, `rhSwingPct`, `warmestHour` in local time); without it the air stays at `model.air`.
 
 ### 2.5 Client configuration pack
 
@@ -1519,6 +1521,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, operations | `GET /operations` (11.2): every dose, stop, resume and alert acknowledgement, newest first, with who did it, when and the result; `kind`, `zone`, `limit` and `before` (T1-28). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, Web Push | `GET /push/key`, `POST /push/subscriptions` and `DELETE /push/subscriptions` (11.2): alerts pushed to the browsers that turned notifications on, by `notifyRoles` and the severities each asked for, on a site whose `alerts.json` `delivery` has `WEB_PUSH` (2.5), from T1-41. MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, per-zone pump rates | `hardware.json` (2.5): a zone whose pumps run at their own rate has `pumps.zones.<zone>.doseLines.<line>.flowMlPerS`, which its lines take instead of `pumps.doseLines.<line>.flowMlPerS`; a zone without it keeps the shared rates, so no pack changes unless it adds one. The dose review's `estimate.durationMin`, `pumpMlPerMin` in `GET /zones/{zoneId}/dose-limits` (11.2), the simulator's pumps and the rig's dose times use the zone's rate. client_B's Zone B (`ZC2`) runs on the rig's Zone 2 at 1 L/min (T1-31). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
+| v1.0, simulated climate | `climate.source` in `layout.json` (2.4), `LIVE` or `SIMULATED`, with the zones' default; always in `GET /farm` (11.2). The simulator plays a simulated climate controller (and the power monitor) even when every zone is live, and builds no model for a live zone; `simulator.json` `model.air.dailyCycle` moves the simulated air through the day. client_B's climate is simulated until it has hardware (DM-2). MQTT messages don't change, so they keep `"v": 1` (16). | Track 4 |
 
 ### v1.0 section review
 

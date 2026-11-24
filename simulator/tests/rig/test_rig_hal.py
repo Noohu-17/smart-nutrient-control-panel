@@ -162,7 +162,8 @@ CLIENT_B = Path(__file__).parents[3] / "config" / "clients" / "client_B"
 def test_client_b_runs_both_zones_on_the_rig_at_their_own_pump_rates():
     """T1-31: Zone A is the rig's Zone 1, the actuator box, its pumps calibrated at 15 mL/min;
     Zone B is Zone 2, the gateway's own relays, whose pumps run 1 L/min (hardware.json
-    pumps.zones.Z2). The simulator never plays a live farm's zones: it refuses the pack."""
+    pumps.zones.Z2). The simulator never plays a live farm's zones: it builds none of them
+    (DM-2: it still plays client_B's simulated climate and power)."""
     from sim.farm import load_farm
 
     zone_a, zone_b = load_rig_zones(CLIENT_B)
@@ -172,8 +173,7 @@ def test_client_b_runs_both_zones_on_the_rig_at_their_own_pump_rates():
     assert zone_a.pump_ml_per_s == {"N": 0.25, "P": 0.25, "K": 0.25}
     assert zone_b.pump_ml_per_s == {"N": 16.667, "P": 16.667, "K": 16.667}
     assert not zone_a.pumps_on_gateway and zone_b.pumps_on_gateway
-    with pytest.raises(ValueError, match=r"simulator\.json: model"):
-        load_farm(CLIENT_B)
+    assert load_farm(CLIENT_B).zones == {}
 
 
 def client_b_hal(tmp_path, zone_id):

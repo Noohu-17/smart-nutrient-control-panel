@@ -18,12 +18,14 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .config import load_demo_start, pump_rate, read_pack_file
+from .config import load_demo_start, pump_rate, read_pack_file, zone_sources
 from .model.model_config import (
     AirConditions,
+    AirCycle,
     PowerSupply,
     initial_reservoir,
     parse_air,
+    parse_air_cycle,
     parse_chiller_setpoint,
     parse_circulation_flow_lpm,
     parse_day_tanks,
@@ -147,6 +149,9 @@ class ClimateFarm:
     latches: set[str] = field(default_factory=set)
     run_time_s: dict[str, float] = field(default_factory=dict)
     run_day: date | None = None
+    # model.air.dailyCycle: the air follows the time of day around base_air (None: held as is)
+    air_cycle: AirCycle | None = None
+    base_air: AirConditions | None = None
 
     def equipment(self) -> dict[str, Any]:
         """As contract 6.2: the fan stage, then one entry per piece of equipment."""
@@ -161,8 +166,12 @@ class ClimateFarm:
         return {name: int(seconds // 60) for name, seconds in self.run_time_s.items()}
 
     def step(self, dt_s: float, now: datetime) -> None:
-        """Count run time; "today" is the farm's own day, in the layout's timezone."""
+        """Count run time; "today" is the farm's own day, in the layout's timezone. With a daily
+        cycle, the air follows the local time of day."""
         local = now.astimezone(self.timezone)
+        if self.air_cycle is not None and self.base_air is not None:
+            hour = local.hour + local.minute / 60 + local.second / 3600
+            self.air = self.air_cycle.air_at(self.base_air, hour)
         if local.date() != self.run_day:
             self.run_day = local.date()
             self.run_time_s = dict.fromkeys(self.run_time_s, 0.0)
@@ -207,7 +216,10 @@ class Farm:
 
 def load_farm(client_dir: Path) -> Farm:
     """Build the farm in its configured starting state: model.initialState, with each zone's
-    demoStart values over it (T4-9). A scenario may override it later."""
+    demoStart values over it (T4-9). A scenario may override it later.
+
+    Only the zones the simulator plays get a model: a LIVE zone runs on real hardware (contract
+    2.4), so a pack whose zones are all LIVE (client_B) needs only the climate and power model."""
     layout = read_pack_file(client_dir, "layout.json")
     model = read_pack_file(client_dir, "simulator.json").get("model")
     if not isinstance(model, Mapping):
@@ -216,9 +228,11 @@ def load_farm(client_dir: Path) -> Farm:
     features = read_pack_file(client_dir, "features.json")
     hardware = read_pack_file(client_dir, "hardware.json")
     demo_zones = load_demo_start(client_dir)["zones"]
+    sources = zone_sources(client_dir)
     zones = [
         _build_zone(_zone_model(model, demo_zones.get(zone.get("id"))), zone, hardware)
         for zone in layout.get("zones", ())
+        if sources.get(zone.get("id")) != "LIVE"
     ]
     return Farm(
         zones={zone.zone_id: zone for zone in zones},
@@ -321,8 +335,9 @@ def _build_climate(
     if chiller_ids:
         setpoint_c = parse_chiller_setpoint(model, climate_cfg.get("chillerSetpointC") or {})
         chillers = {chiller: {"state": "OFF", "setpointC": setpoint_c} for chiller in chiller_ids}
+    air = parse_air(model, cfg.get("airSensors"))
     return ClimateFarm(
-        air=parse_air(model, cfg.get("airSensors")),
+        air=air,
         fans=tuple(cfg.get("fans", ())),
         pad_pumps=pad_pumps,
         outputs=outputs,
@@ -332,6 +347,8 @@ def _build_climate(
         # Contract 7.5: while climateAutomatic is off, climate stays MANUAL with no time limit.
         mode="AUTOMATIC" if features.get("climateAutomatic") else "MANUAL",
         run_time_s=dict.fromkeys((FANS_GROUP, *pad_pumps), 0.0),
+        air_cycle=parse_air_cycle(model),
+        base_air=air,
     )
 
 

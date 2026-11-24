@@ -54,7 +54,7 @@
     }
   ],
   "nursery": { "tables": 0 },
-  "climate": { "controller": "CC1", "fans": [], "padPumps": [], "chillers": {}, "shade": [], "haf": [], "foggers": [], "airSensors": [] },
+  "climate": { "controller": "CC1", "source": "SIMULATED", "fans": [], "padPumps": [], "chillers": {}, "shade": [], "haf": [], "foggers": [], "airSensors": ["PAD_END", "MIDDLE", "FAN_END"] },
   "power": { "monitor": "PM1", "generator": false, "ups": false },
   "devices": [
     { "id": "ZC1", "kind": "ZONE_CONTROLLER", "zone": "Z1" },

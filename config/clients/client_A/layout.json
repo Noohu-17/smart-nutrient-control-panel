@@ -54,7 +54,7 @@
     }
   ],
   "nursery": { "tables": 6 },
-  "climate": { "controller": "CC1", "fans": ["FAN1", "FAN2", "FAN3", "FAN4"], "padPumps": ["PAD1"], "chillers": { "Z1": "CH1", "Z2": "CH2" }, "shade": ["SHADE1"], "haf": ["HAF1"], "foggers": [], "airSensors": ["PAD_END", "MIDDLE", "FAN_END"] },
+  "climate": { "controller": "CC1", "source": "SIMULATED", "fans": ["FAN1", "FAN2", "FAN3", "FAN4"], "padPumps": ["PAD1"], "chillers": { "Z1": "CH1", "Z2": "CH2" }, "shade": ["SHADE1"], "haf": ["HAF1"], "foggers": [], "airSensors": ["PAD_END", "MIDDLE", "FAN_END"] },
   "power": { "monitor": "PM1", "generator": true, "ups": true },
   "devices": [
     { "id": "GW1", "kind": "GATEWAY" },

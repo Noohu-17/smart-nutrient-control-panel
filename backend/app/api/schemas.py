@@ -138,6 +138,7 @@ class Nursery(PackModel):
 
 class FarmClimate(PackModel):
     controller: str
+    source: ZoneSource  # LIVE or SIMULATED, as a zone's; read_farm fills it in when left out (§2.4)
     fans: list[str]
     pad_pumps: list[str]
     chillers: dict[str, str]

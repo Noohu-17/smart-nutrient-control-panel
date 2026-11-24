@@ -53,7 +53,7 @@ PackLike = Pack | Path
 
 def read_farm(source: PackLike) -> Farm:
     """layout.json with one more field, features, the contents of features.json (§11.2), and
-    every zone's source filled in (§2.4)."""
+    every zone's source and the climate's filled in (§2.4)."""
     pack = as_pack(source)
     try:
         layout = pack.json("layout.json")
@@ -63,7 +63,12 @@ def read_farm(source: PackLike) -> Farm:
             {"source": default, **zone} if isinstance(zone, dict) else zone
             for zone in layout.get("zones", [])
         ]
-        return Farm.model_validate(_without_meta({**layout, "zones": zones, "features": features}))
+        climate = layout.get("climate")
+        if isinstance(climate, dict):
+            climate = {"source": default, **climate}
+        return Farm.model_validate(
+            _without_meta({**layout, "zones": zones, "climate": climate, "features": features})
+        )
     except (OSError, TypeError, ValueError, AttributeError) as exc:  # ValidationError: ValueError
         raise _cannot_load(exc) from exc
 

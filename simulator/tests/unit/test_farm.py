@@ -248,3 +248,61 @@ def test_entries_for_equipment_the_layout_does_not_have_are_ignored(tmp_path):
     assert set(farm.climate.air.temp_by_pos_c) == {"PAD_END", "MIDDLE", "FAN_END"}
     assert "BASE" not in farm.zones["Z1"].day_tank_l
     assert list(farm.zones) == ["Z1", "Z2"]
+
+
+# --- Live zones and the air's daily cycle (DM-2) ------------------------------------------
+
+CLIENT_B = CLIENT_A.parent / "client_B"
+# 2026-11-24 08:30 UTC is 14:00 in Asia/Kolkata; 20:30 UTC is 02:00 the next day.
+TWO_PM_IST = datetime(2026, 11, 24, 8, 30, tzinfo=UTC)
+TWO_AM_IST = datetime(2026, 11, 24, 20, 30, tzinfo=UTC)
+
+
+def test_a_live_zone_gets_no_model(tmp_path):
+    def z1_live(layout):
+        layout["zones"][0]["source"] = "LIVE"
+    farm = load_farm(edited_pack(tmp_path, "layout.json", z1_live))
+    assert sorted(farm.zones) == ["Z2"]
+
+
+def test_client_b_is_only_its_climate_and_power():
+    farm = load_farm(CLIENT_B)
+    assert farm.zones == {}
+    assert sorted(farm.climate.air.temp_by_pos_c) == ["FAN_END", "MIDDLE", "PAD_END"]
+    assert farm.climate.air_cycle is not None
+
+
+def test_the_air_follows_the_daily_cycle():
+    """simulator.json: 8 C and 20 % RH swings, warmest at 14:00 local time, around model.air."""
+    farm = load_farm(CLIENT_B)
+    base = farm.climate.base_air
+    farm.climate.step(60, TWO_PM_IST)
+    warmest = farm.climate.air
+    assert warmest.temp_by_pos_c["MIDDLE"] == pytest.approx(base.temp_by_pos_c["MIDDLE"] + 4)
+    assert warmest.rh == pytest.approx(base.rh - 10)
+    farm.climate.step(60, TWO_AM_IST)
+    coolest = farm.climate.air
+    assert coolest.temp_by_pos_c["MIDDLE"] == pytest.approx(base.temp_by_pos_c["MIDDLE"] - 4)
+    assert coolest.rh == pytest.approx(base.rh + 10)
+    assert coolest.elec_room_temp_c == base.elec_room_temp_c
+
+
+def test_without_a_daily_cycle_the_air_stays_as_configured():
+    farm = load_farm(CLIENT_A)
+    before = farm.climate.air
+    farm.climate.step(60, NOON_IST)
+    assert farm.climate.air_cycle is None
+    assert farm.climate.air == before
+
+
+@pytest.mark.parametrize("cycle, message", [
+    ({"tempSwingC": -1, "rhSwingPct": 10, "warmestHour": 14}, ">= 0"),
+    ({"tempSwingC": 8, "rhSwingPct": 10, "warmestHour": 24}, "warmestHour"),
+    ({"tempSwingC": 8, "rhSwingPct": 10}, "warmestHour"),
+    ("warm", "must be an object"),
+])
+def test_a_daily_cycle_that_makes_no_sense_is_refused(tmp_path, cycle, message):
+    def add_cycle(sim):
+        sim["model"]["air"]["dailyCycle"] = cycle
+    with pytest.raises(ValueError, match=message):
+        load_farm(edited_pack(tmp_path, "simulator.json", add_cycle))

@@ -242,6 +242,12 @@ curl -s -X POST http://127.0.0.1:8100/reset
 the simulator and never runs beside it for the same zones. What it does and how it maps the rig
 to the contract: `sim/rig/README.md`. `python -m sim.rig.fake` stands in for the rig.
 
+## A real farm with a simulated climate (DM-2)
+
+A farm whose zones are `LIVE` but whose climate has no hardware yet (client_B) sets `"source": "SIMULATED"` on `layout.json` `climate` (contract 2.4). The simulator then plays only the climate controller and the power monitor: it never plays a live zone's controller and builds no model for a live zone, so such a pack's `simulator.json` needs only `model.air` and `model.power`. A climate whose `source` is `LIVE` (the default on a non-playground site) isn't played either.
+
+`model.air.dailyCycle` (`tempSwingC`, `rhSwingPct`, `warmestHour`, local time) moves the simulated air through the day around `model.air`: warmest and driest at `warmestHour`, coolest twelve hours later. Without it the air stays at `model.air`, as on the playground, where a person holds it.
+
 ## Tests
 
 ```

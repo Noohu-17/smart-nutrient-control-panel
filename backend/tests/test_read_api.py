@@ -79,7 +79,11 @@ def farm_answer(layout: dict, features: dict = FEATURES) -> dict:
     """GET /api/farm: the layout and its features, with each zone's source filled in where the
     layout leaves it out: SIMULATED on a playground site, LIVE elsewhere (§2.4)."""
     default = "SIMULATED" if features.get("playground") is True else "LIVE"
-    return layout | {"zones": [{"source": default, **z} for z in layout["zones"]], "features": features}
+    return layout | {
+        "zones": [{"source": default, **z} for z in layout["zones"]],
+        "climate": {"source": default, **layout["climate"]},
+        "features": features,
+    }
 
 
 def write_pack(folder: Path, layout: dict = LAYOUT, features: dict = FEATURES) -> Path:
