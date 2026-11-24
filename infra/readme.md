@@ -135,6 +135,26 @@ This checks that the gateway's login can publish its topics and nothing else, an
 
 5. Stop the broker with `docker compose ... stop mqtt`.
 
+## client_B and the prototype rig
+
+client_B's site is `coimbatore-ph1`, so its broker uses [acl-coimbatore-ph1.conf](mosquitto/staging/acl-coimbatore-ph1.conf) instead of `acl.conf` (client_A's `siet-ph1`). The same blocks, for its own site, without `GW1`: client_B's farm link is the rig's own gateway on its `sf/*` topics.
+
+The zone controller service (`zone-controller` in the staging compose file, T1-32) runs the zones `io_map.json` puts on the rig. It logs in on 1883 only: as the zone's controller (`ZC1`) for the contract topics, and as `RIGLINK` for the rig's `sf/*` topics. With client_A it exits at once and stays stopped.
+
+In `infra/.env.staging` for client_B:
+
+| Setting | Value |
+|---|---|
+| `CLIENT_DIR` | `/config/clients/client_B` |
+| `MQTT_ACL` | `acl-coimbatore-ph1.conf` |
+| `RIG_TELEMETRY_TOPIC`, `RIG_COMMAND_TOPIC` | The gateway's topic bases, `m/<workspace>/c/<channel>`, from its `secrets.h`. Never in git |
+| `MQTT_PASSWORD_RIGLINK` | `openssl rand -hex 24`; in the password manager too |
+| `RIG_GATEWAY_LOGIN` | Only if the gateway's MQTT username isn't `gateway-01` |
+
+Each time it starts, [start.sh](mosquitto/staging/start.sh) writes the broker's ACL from the `MQTT_ACL` file, then adds two blocks when the `RIG_*` topics are set: the gateway may publish on `<telemetry>/sf/#` and read `<command>/sf/cmd`; `RIGLINK` the reverse. Nothing else: no wildcards beyond the gateway's own `sf/#`, and no access to the contract's `farm/...` topics. Empty `RIG_*` values mean no rig and no rig accounts; an empty `MQTT_PASSWORD_*` makes no account.
+
+The gateway's own login, for 8883: `MQTT_ACL=acl-coimbatore-ph1.conf sh infra/mosquitto/add-device-login.sh gateway-01`, then restart the broker. The printed password goes into the password manager, and from there into the gateway's `secrets.h`.
+
 ## Not covered yet
 
-- The prototype rig's own accounts (`gateway-01` and `RIGLINK`, on its `m/<workspace>/c/...` topics, from T1-32) aren't in `acl.conf` yet.
+- `scripts/broker-acl-check.py` checks `acl.conf` (client_A's `GW1`) only, not the rig's two blocks.

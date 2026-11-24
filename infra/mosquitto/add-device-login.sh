@@ -6,7 +6,10 @@
 #
 # It makes a random password, keeps only its hash in infra/mosquitto/staging/secrets/passwords
 # (git ignores it) and prints the password once: put it in the password manager, then in the
-# device. Nothing else stores it. The device must have a block in staging/acl.conf.
+# device. Nothing else stores it. The device must have a block in the site's ACL file
+# (MQTT_ACL, staging/acl.conf by default), or be the prototype rig's gateway (RIG_GATEWAY_LOGIN,
+# gateway-01 by default), whose block start.sh writes:
+#   MQTT_ACL=acl-coimbatore-ph1.conf sh infra/mosquitto/add-device-login.sh gateway-01
 # A login here replaces the device's MQTT_PASSWORD_<ID> from infra/.env.staging. CLOUD-* accounts
 # stay in infra/.env.staging.
 #
@@ -17,7 +20,8 @@ set -eu
 MOSQUITTO_IMAGE=eclipse-mosquitto:2.0.22  # the broker's own image, for its mosquitto_passwd
 
 here=$(cd "$(dirname "$0")" && pwd)
-acl="$here/staging/acl.conf"
+acl="$here/staging/${MQTT_ACL:-acl.conf}"
+rig_gateway=${RIG_GATEWAY_LOGIN:-gateway-01}
 secrets="$here/staging/secrets"
 
 device=${1:-}
@@ -32,8 +36,8 @@ case "$device" in
         echo "add-device-login: '$device' is not a device ID (contract 2.2: GW1, ZC1 ...)" >&2
         exit 2 ;;
 esac
-if ! grep -qx "user $device" "$acl"; then
-    echo "add-device-login: $device has no block in infra/mosquitto/staging/acl.conf, so the broker" \
+if [ "$device" != "$rig_gateway" ] && ! tr -d '\r' < "$acl" | grep -qx "user $device"; then
+    echo "add-device-login: $device has no block in $acl, so the broker" \
         "would give it no topics. Add its permissions there first." >&2
     exit 1
 fi

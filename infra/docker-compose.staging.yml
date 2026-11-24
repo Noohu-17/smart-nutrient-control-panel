@@ -1,5 +1,6 @@
 # Staging stack: Caddy (HTTPS, the app and /api), the API, the worker, the notifier (Web Push),
-# PostgreSQL with TimescaleDB, the Mosquitto broker and the farm simulator. Steps: README.md,
+# PostgreSQL with TimescaleDB, the Mosquitto broker, the farm simulator and the zone controller
+# service for the zones on the prototype rig (T1-32). Steps: README.md,
 # "Deploy to staging".
 #
 # Published ports: Caddy (80, 443) and the broker's TLS port for the farm's gateway (8883).
@@ -204,6 +205,37 @@ services:
     restart: unless-stopped
     <<: *logging
 
+  # The zone controller service (T1-32): the zones io_map.json puts on the prototype rig, run by
+  # sim/controller on the rig's sf/* messages. The app sees them as any zone controller. It logs in
+  # twice on 1883, never from outside: as each rig zone's controller (ZC1 ...) for the contract
+  # topics, and as RIGLINK for the rig's sf/* topics. With a pack that puts no zone on the rig
+  # (client_A) it says so once and exits, and on-failure leaves it stopped.
+  zone-controller:
+    build: ../simulator
+    image: sna-simulator:staging
+    command: ["python", "-m", "sim.rig"]
+    stop_signal: SIGINT  # a clean stop: each rig zone's controller publishes its offline status
+    environment:
+      <<: *device-passwords
+      MQTT_PASSWORD_RIGLINK: ${MQTT_PASSWORD_RIGLINK:-}
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SIM_CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}
+      RIG_LINK_ID: RIGLINK
+      RIG_TELEMETRY_TOPIC: ${RIG_TELEMETRY_TOPIC:-}
+      RIG_COMMAND_TOPIC: ${RIG_COMMAND_TOPIC:-}
+    volumes:
+      - ../config:/config:ro
+      - rig-state:/app/.state  # nvs and bootIds survive a restart (contract 5, 8.3)
+    networks: [internal]
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    healthcheck: *broker-connected
+    restart: on-failure
+    <<: *logging
+
   db:
     image: timescale/timescaledb:2.30.2-pg17
     environment:
@@ -229,6 +261,13 @@ services:
       <<: *device-passwords
       MQTT_PASSWORD_CLOUD_API: ${MQTT_PASSWORD_CLOUD_API:?set in infra/.env.staging}
       MQTT_PASSWORD_CLOUD_WORKER: ${MQTT_PASSWORD_CLOUD_WORKER:?set in infra/.env.staging}
+      # The site's ACL file (acl.conf: siet-ph1; acl-coimbatore-ph1.conf: client_B), and the rig's
+      # topic bases and logins for its two blocks (start.sh). Empty RIG_*: no rig on this farm.
+      MQTT_ACL: ${MQTT_ACL:-acl.conf}
+      RIG_TELEMETRY_TOPIC: ${RIG_TELEMETRY_TOPIC:-}
+      RIG_COMMAND_TOPIC: ${RIG_COMMAND_TOPIC:-}
+      RIG_GATEWAY_LOGIN: ${RIG_GATEWAY_LOGIN:-gateway-01}
+      MQTT_PASSWORD_RIGLINK: ${MQTT_PASSWORD_RIGLINK:-}
     # MQTT over TLS for the farm's gateway: farm device logins only (start.sh). Plain 1883 is
     # never published: the API, the worker and the simulator reach it on the internal network.
     ports:
@@ -262,3 +301,4 @@ volumes:
   db-data:
   mqtt-data:
   simulator-state:
+  rig-state:

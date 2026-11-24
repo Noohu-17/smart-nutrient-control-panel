@@ -18,6 +18,55 @@ passwords=/tmp/mosquitto-passwords            # every account: listener 1883
 farm_passwords=/tmp/mosquitto-passwords-farm  # farm devices only: listener 8883
 listeners=/tmp/mosquitto-listeners            # mosquitto.conf includes every *.conf here
 tls=/tmp/mosquitto-tls
+acl=/tmp/mosquitto-acl.conf                   # both listeners
+
+# The ACL: the site's file (MQTT_ACL; acl.conf is client_A's siet-ph1), then, when the farm has
+# the prototype rig, its gateway's and the zone controller service's blocks on the rig's sf/*
+# topics. The topic bases are the gateway's own settings (m/<workspace>/c/<channel>), kept in
+# infra/.env.staging, never in git.
+acl_name=${MQTT_ACL:-acl.conf}
+case "$acl_name" in
+    */* | .* | '') echo "start.sh: MQTT_ACL must be a file name in infra/mosquitto/staging" >&2; exit 1 ;;
+esac
+if [ ! -f "/mosquitto/staging/$acl_name" ]; then
+    echo "start.sh: no ACL file infra/mosquitto/staging/$acl_name (MQTT_ACL)" >&2
+    exit 1
+fi
+rm -f "$acl"
+tr -d '\r' < "/mosquitto/staging/$acl_name" > "$acl"
+rig_telemetry=${RIG_TELEMETRY_TOPIC:-}
+rig_command=${RIG_COMMAND_TOPIC:-}
+rig_gateway=${RIG_GATEWAY_LOGIN:-gateway-01}
+if [ -n "$rig_telemetry" ] || [ -n "$rig_command" ]; then
+    for base in "$rig_telemetry" "$rig_command"; do
+        case "$base" in
+            '' | *[!A-Za-z0-9/_-]* | /* | */)
+                echo "start.sh: RIG_TELEMETRY_TOPIC and RIG_COMMAND_TOPIC must both be set, as" \
+                    "m/<workspace>/c/<channel> (letters, digits, / _ -; no wildcards)" >&2
+                exit 1 ;;
+        esac
+    done
+    case "$rig_gateway" in
+        *[!A-Za-z0-9-]* | CLOUD-* | RIGLINK)
+            echo "start.sh: RIG_GATEWAY_LOGIN '$rig_gateway' is not a device ID" >&2; exit 1 ;;
+    esac
+    cat >> "$acl" <<EOF
+
+# Written by start.sh from RIG_TELEMETRY_TOPIC and RIG_COMMAND_TOPIC: the prototype rig (T1-32).
+# Its gateway (a login from add-device-login.sh, so it may use 8883) publishes on sf/* and reads
+# its commands; the zone controller service (RIGLINK, 1883 only) does the reverse.
+user $rig_gateway
+topic write $rig_telemetry/sf/#
+topic read $rig_command/sf/cmd
+
+user RIGLINK
+topic read $rig_telemetry/sf/#
+topic write $rig_command/sf/cmd
+EOF
+    echo "start.sh: rig accounts $rig_gateway and RIGLINK on the rig's sf/* topics" >&2
+fi
+chown mosquitto:mosquitto "$acl"
+chmod 600 "$acl"
 
 # Fresh files each start: a restarted container keeps /tmp, owned by mosquitto from the last run.
 rm -f "$passwords" "$farm_passwords"
@@ -30,6 +79,9 @@ for variable in $(env | sed -n 's/^\(MQTT_PASSWORD_[A-Z0-9_]*\)=.*/\1/p'); do
         CLOUD_*) account="CLOUD-$(echo "${account#CLOUD_}" | tr '[:upper:]' '[:lower:]')" ;;
     esac
     eval "password=\$$variable"
+    if [ -z "$password" ]; then
+        continue  # an empty value is no account (MQTT_PASSWORD_RIGLINK on a farm without the rig)
+    fi
     mosquitto_passwd -b "$passwords" "$account" "$password"
 done
 
@@ -80,7 +132,7 @@ if [ -f "$secrets/server.crt" ] && [ -f "$secrets/server.key" ]; then
 listener 8883
 allow_anonymous false
 password_file $farm_passwords
-acl_file /mosquitto/staging/acl.conf
+acl_file $acl
 certfile $tls/server.crt
 keyfile $tls/server.key
 tls_version tlsv1.2
