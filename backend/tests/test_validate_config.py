@@ -75,6 +75,16 @@ def test_both_client_packs_are_valid():
          "doseLines.N.drum: 5 L is less than a 10 L day-tank"),
         ("nutrients.json", lambda d: d["doseLines"]["P"]["drum"].update(id="DRUM-N"), "DRUM-N already holds line N's stock"),
         ("hardware.json", lambda d: d["pumps"]["doseLines"].pop("K"), "pumps.doseLines.K.flowMlPerS must be a number > 0"),
+        # T1-31: a zone's own pump rates, hardware.json pumps.zones
+        ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"]["N"].update(flowMlPerS=0),
+         "pumps.zones.Z2.doseLines.N.flowMlPerS must be a number > 0"),
+        ("hardware.json", lambda d: d["pumps"]["zones"].update(Z9={"doseLines": {}}), "pumps.zones.Z9: layout.json has no zone Z9"),
+        ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"].update(ACID={"flowMlPerS": 1}),
+         "pumps.zones.Z2.doseLines.ACID: zone Z2 has no dose line ACID"),
+        ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"].pop("doseLines"), 'pumps.zones.Z2: needs a "doseLines" object'),
+        ("hardware.json", lambda d: d["pumps"].update(zones=[]), "pumps.zones must be an object"),
+        ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"]["N"].update(flowMlPerS=0.001),
+         "controllers.ZC2: line N's largest dose, 2 mL at 0.001 mL/s, is 2000 s of pumping"),
     ],
 )
 def test_a_broken_pack_fails_and_says_why(tmp_path, name, change, said):

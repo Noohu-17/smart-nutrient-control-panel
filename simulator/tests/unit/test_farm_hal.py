@@ -204,3 +204,23 @@ def test_pump_rates_come_from_the_config_not_code(tmp_path):
 
     zone = load_farm(edited_hardware(tmp_path, faster)).zones["Z1"]
     assert zone.dose_pump_ml_per_s == {"A": 5.5, "B": 2.0, "ACID": 2.0}
+
+
+def test_a_zone_with_its_own_pump_rates_runs_at_them(tmp_path):
+    """T1-31: hardware.json pumps.zones.<zone>.doseLines stands over pumps.doseLines for that zone
+    only, line by line."""
+    def zone_b_faster(data):
+        data["pumps"]["zones"] = {"Z2": {"doseLines": {"A": {"flowMlPerS": 16.667}}}}
+
+    zones = load_farm(edited_hardware(tmp_path, zone_b_faster)).zones
+    assert zones["Z1"].dose_pump_ml_per_s == {"A": 2.0, "B": 2.0, "ACID": 2.0}
+    assert zones["Z2"].dose_pump_ml_per_s == {"A": 16.667, "B": 2.0, "ACID": 2.0}
+
+
+def test_a_zones_own_pump_rate_must_be_a_rate(tmp_path):
+    def broken(data):
+        data["pumps"]["zones"] = {"Z2": {"doseLines": {"B": {"flowMlPerS": 0}}}}
+
+    message = r"pumps\.zones\.Z2\.doseLines\.B\.flowMlPerS must be a number > 0"
+    with pytest.raises(ValueError, match=message):
+        load_farm(edited_hardware(tmp_path, broken))

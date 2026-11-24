@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -80,6 +81,24 @@ def load_zone_dose(client_dir: Path, zone_id: str) -> dict[str, Any]:
     if not isinstance(dose, dict):
         raise ValueError(f"limits.json: zones.{zone_id}.dose must be an object, got {dose!r}")
     return dose
+
+
+def pump_rate(hardware: Mapping[str, Any], zone_id: str, line: str) -> tuple[Any, str]:
+    """A dose line's pump rate in one zone (hardware.json, contract 2.5): flowMlPerS as written,
+    and the key it is under. A zone whose pumps run at their own rate has
+    pumps.zones.<zone>.doseLines.<line>; otherwise the line takes pumps.doseLines.<line>, the
+    rate the zones share. The same rule as the back end's packcheck.pump_rates."""
+    pumps = hardware.get("pumps") if isinstance(hardware, Mapping) else None
+    pumps = pumps if isinstance(pumps, Mapping) else {}
+    zones = pumps.get("zones") if isinstance(pumps.get("zones"), Mapping) else {}
+    own = zones.get(zone_id) if isinstance(zones.get(zone_id), Mapping) else {}
+    for key, lines in ((f"pumps.zones.{zone_id}.doseLines", own.get("doseLines")),
+                       ("pumps.doseLines", pumps.get("doseLines"))):
+        if isinstance(lines, Mapping) and line in lines:
+            entry = lines[line]
+            return (entry.get("flowMlPerS") if isinstance(entry, Mapping) else None,
+                    f"{key}.{line}.flowMlPerS")
+    return None, f"pumps.doseLines.{line}.flowMlPerS"
 
 
 def load_demo_start(client_dir: Path) -> dict[str, Any]:

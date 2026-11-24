@@ -6,6 +6,8 @@ the pack's shape, not its numbers, which the team will keep adjusting.
 
 from pathlib import Path
 
+import pytest
+
 from app.alerts import AlertRules
 from app.api.pack import read_dosing, read_farm, site_of
 
@@ -30,3 +32,10 @@ def test_every_client_b_zone_has_what_the_dose_review_needs():
         assert set(dosing.limits["maxPerDoseMl"]) == set(zone.dose_lines)
         assert set(dosing.pump_ml_per_min) >= set(zone.dose_lines)
     assert AlertRules.from_pack(CLIENT_B) is not None
+
+
+def test_each_client_b_zone_doses_at_its_own_pump_rate():
+    """T1-31: Zone A's pumps are calibrated at 15 mL/min; Zone B's, the gateway's own relays, run
+    1 L/min (hardware.json pumps.zones.Z2), for the estimate and the dose form."""
+    assert read_dosing(CLIENT_B, "Z1").pump_ml_per_min == {"N": 15, "P": 15, "K": 15}
+    assert read_dosing(CLIENT_B, "Z2").pump_ml_per_min == pytest.approx({"N": 1000, "P": 1000, "K": 1000}, abs=0.1)

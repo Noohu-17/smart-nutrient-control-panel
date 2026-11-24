@@ -51,8 +51,8 @@ def test_client_b_is_two_nft_zones_with_their_tanks_sensors_and_links():
     assert (z1.growing_system, z1.plant_sites) == ("NFT", 4 * 45)
     assert (z1.tank.volume_l, z1.tank.usable_l) == (90, 90)  # the 90 L main tank, all usable
     assert z1.sensors["ec"] and not z1.sensors["dayTankLevel"]  # the N, P, K tanks have no level sensors
-    # Zone A runs on the rig (io_map.json); Zone B has no link there, so it is MQTT
-    assert [details[zone][0].link for zone in details] == ["SF_GATEWAY", "MQTT"]
+    # both run on the rig (io_map.json): Zone A on its Zone 1, Zone B on its Zone 2 (T1-31)
+    assert [details[zone][0].link for zone in details] == ["SF_GATEWAY", "SF_GATEWAY"]
 
 
 def test_client_b_crops_have_their_variety_and_planting_day():

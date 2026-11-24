@@ -345,15 +345,55 @@ def check_nutrients(rel, nutrients, dose_lines_by_zone, errors, layout=None):
                           "it fills (layout.json dayTanks)")
 
 
+def pump_rates(hardware, zone_id):
+    """Each dose line's pump rate in one zone (hardware.json, contract 2.5), as
+    {line: (flowMlPerS as written, the key it is under)}. A zone whose pumps run at their own rate
+    has pumps.zones.<zone>.doseLines.<line>; every other line of every zone takes
+    pumps.doseLines.<line>, the rate the zones share."""
+    pumps = hardware.get("pumps") if isinstance(hardware, dict) else None
+    pumps = pumps if isinstance(pumps, dict) else {}
+    zones = pumps.get("zones") if isinstance(pumps.get("zones"), dict) else {}
+    own = zones.get(zone_id) if isinstance(zones.get(zone_id), dict) else {}
+    rates = {}
+    for key, lines in (("pumps.doseLines", pumps.get("doseLines")),
+                       (f"pumps.zones.{zone_id}.doseLines", own.get("doseLines"))):
+        for line, entry in (lines.items() if isinstance(lines, dict) else ()):
+            flow = entry.get("flowMlPerS") if isinstance(entry, dict) else None
+            rates[line] = (flow, f"{key}.{line}.flowMlPerS")
+    return rates
+
+
+def pump_rate(hardware, zone_id, line):
+    """One line's (flowMlPerS as written, its key) in one zone; (None, the shared key) if unset."""
+    return pump_rates(hardware, zone_id).get(line, (None, f"pumps.doseLines.{line}.flowMlPerS"))
+
+
 def check_pump_rates(rel, hardware, dose_lines_by_zone, errors):
-    """Each dose line's pump rate (hardware.json pumps.doseLines.<line>.flowMlPerS), which the dose
-    review's estimate and the dose-line answer use (T1-38)."""
-    flows = ((hardware.get("pumps") or {}).get("doseLines") or {}) if isinstance(hardware, dict) else {}
-    for line in sorted({line for lines in dose_lines_by_zone.values() for line in lines}):
-        flow = (flows.get(line) or {}).get("flowMlPerS") if isinstance(flows.get(line), dict) else None
-        if not _positive_number(flow):
-            errors.append(f"{rel}: pumps.doseLines.{line}.flowMlPerS must be a number > 0 "
-                          "(every dose line in the layout needs its pump rate)")
+    """Each dose line's pump rate in each zone (pump_rates), which the dose review's estimate and
+    the dose-line answer use (T1-38). pumps.zones is keyed by layout zones and their dose lines."""
+    pumps = hardware.get("pumps") if isinstance(hardware, dict) else None
+    zones = pumps.get("zones") if isinstance(pumps, dict) else None
+    if zones is not None and not isinstance(zones, dict):
+        errors.append(f"{rel}: pumps.zones must be an object keyed by layout.json zone IDs")
+        zones = {}
+    for zone_id, entry in (zones or {}).items():
+        where = f"{rel}: pumps.zones.{zone_id}"
+        if zone_id not in dose_lines_by_zone:
+            errors.append(f"{where}: layout.json has no zone {zone_id}")
+        elif not isinstance(entry, dict) or not isinstance(entry.get("doseLines"), dict):
+            errors.append(f'{where}: needs a "doseLines" object keyed by the zone\'s dose lines')
+        else:
+            for line in sorted(set(entry["doseLines"]) - set(dose_lines_by_zone[zone_id])):
+                errors.append(f"{where}.doseLines.{line}: zone {zone_id} has no dose line {line} "
+                              f"(its doseLines are {dose_lines_by_zone[zone_id]})")
+    failed = set()
+    for zone_id, lines in dose_lines_by_zone.items():
+        for line in lines:
+            flow, key = pump_rate(hardware, zone_id, line)
+            if not _positive_number(flow) and key not in failed:
+                failed.add(key)
+                errors.append(f"{rel}: {key} must be a number > 0 "
+                              "(every dose line in the layout needs its pump rate)")
 
 
 def _day_tank_litres(layout):
@@ -431,8 +471,8 @@ RIG_MAX_DOSE_S = 600  # the rig runs one timed dose for at most this long (sf/cm
 def check_rig_controllers(rel, io_map, layout, hardware, errors, limits=None, features=None):
     """A controller run by the zone controller service on the prototype rig (T1-32,
     simulator/sim/rig): `"link": "SF_GATEWAY"` in io_map.json controllers. A line's largest
-    dose (limits.json maxPerDoseMl) must fit in one rig dose at its pump's flow, and its zone is
-    LIVE (contract 2.4)."""
+    dose (limits.json maxPerDoseMl) must fit in one rig dose at its pump's flow in that zone
+    (pump_rates), and its zone is LIVE (contract 2.4)."""
     playground = isinstance(features, dict) and features.get("playground") is True
     default_source = "SIMULATED" if playground else "LIVE"
     controllers = io_map.get("controllers")
@@ -440,7 +480,6 @@ def check_rig_controllers(rel, io_map, layout, hardware, errors, limits=None, fe
         errors.append(f"{rel}: controllers must be an object")
         return
     zones = {z.get("controller"): z for z in layout.get("zones", []) if isinstance(z, dict)}
-    flows = ((hardware or {}).get("pumps") or {}).get("doseLines") or {}
     for device, entry in controllers.items():
         if not isinstance(entry, dict) or entry.get("link") != "SF_GATEWAY":
             continue
@@ -464,10 +503,10 @@ def check_rig_controllers(rel, io_map, layout, hardware, errors, limits=None, fe
             errors.append(f"{where}.pumps: each line needs its own relay of {list(RIG_RELAYS)}")
         largest = _max_per_dose(limits, zone.get("id"))
         for line in lines:
-            flow = (flows.get(line) or {}).get("flowMlPerS")
+            flow, key = pump_rate(hardware, zone.get("id"), line)
             if not _positive_number(flow):
-                errors.append(f"{where}: hardware.json pumps.doseLines.{line}.flowMlPerS "
-                              "must be a number > 0 (a dose runs mL / flow seconds)")
+                errors.append(f"{where}: hardware.json {key} must be a number > 0 "
+                              "(a dose runs mL / flow seconds)")
                 continue
             most = largest.get(line) if isinstance(largest, dict) else None
             if _positive_number(most) and most / flow > RIG_MAX_DOSE_S:

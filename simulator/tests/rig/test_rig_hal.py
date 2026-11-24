@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
-from rig_support import RIG_ENTRY, make_rig_pack, zone_doc
+from rig_support import RIG_ENTRY, Rig, make_rig_pack, zone_doc
 
-from sim.rig.config import load_rig_settings, load_rig_zones
+from sim.rig.config import load_rig_settings, load_rig_zones, smallest_dose_ml
+from sim.rig.hal import RigHal
 from sim.rig.sf import dose_command, dose_id_for, status_of, subtopic, switch_off_command
 
 
@@ -154,19 +156,101 @@ def test_a_simulated_zone_is_never_run_on_the_rig(tmp_path):
         load_rig_zones(make_rig_pack(tmp_path, zone_source="SIMULATED"))
 
 
-def test_client_b_runs_zone_a_on_the_rigs_zone_1():
-    """T1-31: client_B's Zone A is the rig's actuator box. Zone B joins with per-zone pump rates,
-    and the simulator never plays a live farm's zones: it refuses the pack."""
-    from pathlib import Path
+CLIENT_B = Path(__file__).parents[3] / "config" / "clients" / "client_B"
 
+
+def test_client_b_runs_both_zones_on_the_rig_at_their_own_pump_rates():
+    """T1-31: Zone A is the rig's Zone 1, the actuator box, its pumps calibrated at 15 mL/min;
+    Zone B is Zone 2, the gateway's own relays, whose pumps run 1 L/min (hardware.json
+    pumps.zones.Z2). The simulator never plays a live farm's zones: it refuses the pack."""
     from sim.farm import load_farm
 
-    client_b = Path(__file__).parents[3] / "config" / "clients" / "client_B"
-    [zone] = load_rig_zones(client_b)
-    assert (zone.device_id, zone.zone_id, zone.target) == ("ZC1", "Z1", "zone:1")
-    assert zone.pumps == {"N": "relay1", "P": "relay2", "K": "relay3"}
+    zone_a, zone_b = load_rig_zones(CLIENT_B)
+    assert (zone_a.device_id, zone_a.zone_id, zone_a.target) == ("ZC1", "Z1", "zone:1")
+    assert (zone_b.device_id, zone_b.zone_id, zone_b.target) == ("ZC2", "Z2", "zone:2")
+    assert zone_a.pumps == zone_b.pumps == {"N": "relay1", "P": "relay2", "K": "relay3"}
+    assert zone_a.pump_ml_per_s == {"N": 0.25, "P": 0.25, "K": 0.25}
+    assert zone_b.pump_ml_per_s == {"N": 16.667, "P": 16.667, "K": 16.667}
+    assert not zone_a.pumps_on_gateway and zone_b.pumps_on_gateway
     with pytest.raises(ValueError, match=r"simulator\.json: model"):
-        load_farm(client_b)
+        load_farm(CLIENT_B)
+
+
+def client_b_hal(tmp_path, zone_id):
+    zone = next(z for z in load_rig_zones(CLIENT_B) if z.zone_id == zone_id)
+    sent = []
+    return RigHal(zone, tmp_path / f"nvs_{zone.device_id}.json", sent.append), sent
+
+
+def test_each_client_b_zone_times_its_doses_at_its_own_pump_rate(tmp_path):
+    """2 mL, Zone B's largest dose, is 0.12 s of the gateway's relay; on Zone A it is 8 s."""
+    hal_a, sent_a = client_b_hal(tmp_path, "Z1")
+    hal_b, sent_b = client_b_hal(tmp_path, "Z2")
+    hal_a.run_pump_for("PUMP_N", 2, "dose/N")
+    hal_b.run_pump_for("PUMP_N", 2, "dose/N")
+    assert [(c["target"], c["args"]["relay"], c["args"]["seconds"]) for c in sent_a] == [
+        ("zone:1", "relay1", 8.0)]
+    assert [(c["target"], c["args"]["relay"], c["args"]["seconds"]) for c in sent_b] == [
+        ("zone:2", "relay1", 0.12)]
+
+
+def test_a_client_b_zone_b_dose_of_1_ml_is_too_short_for_the_rig(tmp_path, caplog):
+    """1 mL at 16.667 mL/s is 0.06 s, under the rig's 0.1 s: it is logged when the zone is
+    loaded, and the rig is never sent it (the line delivers nothing)."""
+    caplog.set_level("WARNING", logger="sim.rig")
+    hal_b, sent_b = client_b_hal(tmp_path, "Z2")
+    assert "Z2: line N's pump runs 16.667 mL/s, so a dose under 2 mL" in caplog.text
+    assert "Z1:" not in caplog.text  # 1 mL at 0.25 mL/s is 4 s
+    hal_b.run_pump_for("PUMP_K", 1, "small/K")
+    assert sent_b == [] and not hal_b.pump_running("PUMP_K")
+
+
+@pytest.mark.parametrize(
+    ("ml_per_s", "smallest"), [(0.25, 1), (10, 1), (10.5, 2), (16.667, 2), (30, 3)]
+)
+def test_the_smallest_dose_a_pump_can_run_on_the_rig(ml_per_s, smallest):
+    assert smallest_dose_ml(ml_per_s) == smallest
+
+
+def zone_rate_pack(tmp_path, rates):
+    """make_rig_pack with Z1's own pump rates, hardware.json pumps.zones.Z1.doseLines."""
+    pack = make_rig_pack(tmp_path)
+    hardware = json.loads((pack / "hardware.json").read_text(encoding="utf-8"))
+    hardware["pumps"]["zones"] = {
+        "Z1": {"doseLines": {line: {"flowMlPerS": flow} for line, flow in rates.items()}}
+    }
+    (pack / "hardware.json").write_text(json.dumps(hardware), encoding="utf-8")
+    return pack
+
+
+def test_a_zones_own_pump_rate_stands_over_the_shared_one(tmp_path):
+    """Lines the zone gives no rate of keep pumps.doseLines' (client_A: 2 mL/s)."""
+    [zone] = load_rig_zones(zone_rate_pack(tmp_path, {"A": 5.0}))
+    assert zone.pump_ml_per_s == {"A": 5.0, "B": 2.0, "ACID": 2.0}
+
+
+@pytest.mark.parametrize(
+    ("rates", "message"),
+    [
+        ({"A": 0}, r"pumps\.zones\.Z1\.doseLines\.A\.flowMlPerS must be a number > 0"),
+        ({"B": "fast"}, r"pumps\.zones\.Z1\.doseLines\.B\.flowMlPerS"),
+        # the largest dose is checked at the zone's own rate
+        ({"ACID": 0.1}, r"line ACID's largest dose, 100 mL at 0\.1 mL/s, is 1000 s"),
+    ],
+)
+def test_a_zones_own_pump_rate_is_checked_as_the_shared_one_is(tmp_path, rates, message):
+    with pytest.raises(ValueError, match=message):
+        load_rig_zones(zone_rate_pack(tmp_path, rates))
+
+
+def test_a_dose_too_short_for_the_rig_ends_without_pumping(tmp_path, clock):
+    """The controller's answer to a line the rig can't run: nothing was sent, nothing delivered."""
+    rig = Rig(tmp_path, zone_rate_pack(tmp_path, {"A": 16.667}), clock)
+    cmd_id = rig.dose(A=1)
+    for _ in range(4):
+        rig.step()
+    assert rig.doses_sent() == []
+    assert rig.states(cmd_id)[-1]["state"] == "FAILED"
 
 
 def test_client_a_runs_nothing_on_the_rig():

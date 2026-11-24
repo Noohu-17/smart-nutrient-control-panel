@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..packcheck import pump_rates
 from ..packs import Pack, PackError, as_pack
 from .schemas import Drum, Farm, FarmZone, ZoneCrop, ZoneProfile
 
@@ -175,7 +176,9 @@ class ZoneDosing:
     limits: dict[str, Any]  # limits.json zones.{zone}.limits, as written there
     mix_wait_s: float  # limits.json zones.{zone}.dose.mixWaitS
     target: Target | None  # None: no recipe applied to the zone
-    pump_ml_per_min: dict[str, float]  # hardware.json pumps.doseLines.*.flowMlPerS, per minute
+    # hardware.json flowMlPerS per minute: the zone's own pumps.zones.{zone}.doseLines.* where it
+    # has them, else pumps.doseLines.* (packcheck.pump_rates)
+    pump_ml_per_min: dict[str, float]
     day_tank_warn_pct: float  # alerts.json events.DAYTANK_LOW.thresholdPct
     ec_per_ml_per_l: dict[str, float]  # EC added per mL in each litre: nutrients.json
     ph_per_ml_per_l: dict[str, float]  # pH change per mL in each litre: the same
@@ -203,7 +206,7 @@ def read_dosing(source: PackLike, zone_id: str) -> ZoneDosing | None:
         if zone is None:
             return None
         recipes = pack.json("recipes.json")
-        pumps = pack.json("hardware.json")["pumps"]["doseLines"]
+        pumps = pump_rates(pack.json("hardware.json"), zone_id)
         stock = pack.json("nutrients.json")["doseLines"]
         alerts = pack.json("alerts.json")
         features = pack.json("features.json")
@@ -212,7 +215,7 @@ def read_dosing(source: PackLike, zone_id: str) -> ZoneDosing | None:
             limits=zone["limits"],
             mix_wait_s=zone["dose"]["mixWaitS"],
             target=_target(recipes, zone_id),
-            pump_ml_per_min={line: pump["flowMlPerS"] * 60 for line, pump in pumps.items()},
+            pump_ml_per_min={line: flow * 60 for line, (flow, _key) in pumps.items()},
             day_tank_warn_pct=alerts["events"]["DAYTANK_LOW"]["thresholdPct"],
             ec_per_ml_per_l={line: entry["ecChangePerMlPerL"] for line, entry in stock.items()},
             ph_per_ml_per_l={line: entry["phChangePerMlPerL"] for line, entry in stock.items()},

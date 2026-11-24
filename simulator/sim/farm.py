@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .config import load_demo_start, read_pack_file
+from .config import load_demo_start, pump_rate, read_pack_file
 from .model.model_config import (
     AirConditions,
     PowerSupply,
@@ -257,7 +257,7 @@ def _build_zone(
         do_fitted=bool((zone.get("sensors") or {}).get("dissolvedOxygen", False)),
         outputs=outputs,
         name=zone.get("name"),
-        dose_pump_ml_per_s=_dose_pump_rates(hardware, tanks),
+        dose_pump_ml_per_s=_dose_pump_rates(hardware, zone_id, tanks),
         flow_meter_ml=dict.fromkeys(tanks, 0.0),
         mix_time_constant_s=_mix_time_constant_s(model),
     )
@@ -281,21 +281,22 @@ def _mix_time_constant_s(model: Mapping[str, Any]) -> float:
     return float(value)
 
 
-def _dose_pump_rates(hardware: Mapping[str, Any], lines: Iterable[str]) -> dict[str, float]:
-    """Each line's pump flow (hardware.json pumps.doseLines); every installed line needs one."""
-    pumps = (hardware.get("pumps") or {}).get("doseLines") or {}
+def _dose_pump_rates(
+    hardware: Mapping[str, Any], zone_id: str, lines: Iterable[str]
+) -> dict[str, float]:
+    """Each line's pump flow in this zone (hardware.json, config.pump_rate: the zone's own
+    pumps.zones.<zone>.doseLines where it has them, else pumps.doseLines); every installed line
+    needs one."""
     rates = {}
     for line in lines:
-        rate = (pumps.get(line) or {}).get("flowMlPerS")
+        written, key = pump_rate(hardware, zone_id, line)
+        rate = written
         try:
             require_finite(line, rate)
         except ValueError:
             rate = None
         if rate is None or rate <= 0:
-            raise ValueError(
-                f"hardware.json: pumps.doseLines.{line}.flowMlPerS must be a number > 0, "
-                f"got {(pumps.get(line) or {}).get('flowMlPerS')!r}"
-            )
+            raise ValueError(f"hardware.json: {key} must be a number > 0, got {written!r}")
         rates[line] = float(rate)
     return rates
 

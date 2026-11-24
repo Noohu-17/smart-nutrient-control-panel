@@ -1,6 +1,6 @@
 """Helpers for the zone controller service's tests (T1-32), shared by tests/rig.
 
-`make_rig_pack` is client_A with ZC1 on the rig (io_map.json), the way client_B will put its zones
+`make_rig_pack` is client_A with ZC1 on the rig (io_map.json), the way client_B puts its zones
 on it (T1-31). `recording` replays recordings/*.jsonl: a gateway session written from the rig's
 own documented examples and schemas (snm-prototype-extension-v1, gateway docs/CLOUD.md) until
 R-10's capture of the real rig replaces it.

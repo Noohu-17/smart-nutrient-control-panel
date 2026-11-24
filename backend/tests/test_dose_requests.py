@@ -442,6 +442,24 @@ def test_dose_limits_say_what_each_line_doses_and_how_fast_its_pump_runs(api, wo
     assert acid["pumpMlPerMin"] == flow["flowMlPerS"] * 60
 
 
+def test_a_zone_with_its_own_pump_rates_is_estimated_and_described_at_them(tmp_path, migrated_db):
+    """T1-31: hardware.json pumps.zones.<zone>.doseLines stands over pumps.doseLines for that zone's
+    lines; its other lines, and the other zone, keep the shared rate."""
+    pack = write_dosing_pack(tmp_path / ORG)
+    hardware = json.loads((pack / "hardware.json").read_text(encoding="utf-8"))
+    hardware["pumps"]["zones"] = {"Z1": {"doseLines": {"A": {"flowMlPerS": 0.5}}}}
+    (pack / "hardware.json").write_text(json.dumps(hardware), encoding="utf-8")
+    seed(migrated_db, pack)
+    ready_zone(Worker(migrated_db, ORG, SITE))
+    api = api_client(pack, migrated_db)
+    # Z1: 120 mL of A at 0.5 mL/s is 4 min, 150 mL of B and acid at 2 mL/s 1.25 min, then 50 min mix wait
+    assert review(api)["estimate"] == {"durationMin": 56, "totalMl": 270}
+    assert {line: entry["pumpMlPerMin"] for line, entry in limits(api).items()} == {"A": 30, "B": 120, "ACID": 120}
+    assert {line: entry["pumpMlPerMin"] for line, entry in limits(api, "Z2").items()} == {
+        "A": 120, "B": 120, "ACID": 120,
+    }
+
+
 def test_dose_limits_of_a_pack_that_doesnt_describe_its_lines_are_null(tmp_path, migrated_db):
     pack = write_dosing_pack(tmp_path / ORG)
     nutrients = json.loads((pack / "nutrients.json").read_text(encoding="utf-8"))

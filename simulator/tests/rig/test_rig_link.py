@@ -5,9 +5,12 @@ stops the service cleanly."""
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 
 import aiomqtt
 import pytest
+from rig_support import T0, zone_doc
 
 from sim.rig import service
 from sim.rig.config import RigSettings
@@ -66,3 +69,18 @@ def test_with_no_zone_on_the_rig_the_service_says_so_and_stops_cleanly(monkeypat
     monkeypatch.setenv("SIM_CLIENT_DIR", str(load_settings({}).client_dir))
     service.main()
     assert "no zone runs on the rig" in caplog.text and "has nothing to run" in caplog.text
+
+
+def test_client_b_runs_both_its_zones_through_one_gateway(tmp_path):
+    """T1-31: ZC1 on the rig's Zone 1 and ZC2 on Zone 2, both through gateway-01. Each sf/zone
+    document goes to the controller of the zone it names, as each dose report does."""
+    client_b = Path(__file__).parents[3] / "config" / "clients" / "client_B"
+    settings = load_settings({"SIM_CLIENT_DIR": str(client_b), "SIM_STATE_DIR": str(tmp_path)})
+    link, devices = service.build(settings, SETTINGS)
+    assert [(d.zone.device_id, d.zone.zone_id, d.zone.rig_zone) for d in devices] == [
+        ("ZC1", "Z1", 1), ("ZC2", "Z2", 2)]
+    for n in (2, 1):
+        document = zone_doc(ts=T0, seq=50 + n) | {"zone": n, "name": f"Zone {n}"}
+        link.on_message(f"{SETTINGS.telemetry_topic}/sf/zone/{n}", json.dumps(document),
+                        retained=True)
+    assert [d.hal.latest["zone"] for d in devices] == [1, 2]

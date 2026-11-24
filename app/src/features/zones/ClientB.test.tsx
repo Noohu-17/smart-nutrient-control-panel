@@ -62,6 +62,14 @@ function zoneAnswer(zone: FarmZone): ZoneStatus {
   };
 }
 
+type Pumps = Partial<Record<Line, { flowMlPerS: number }>>;
+
+/** hardware.json's pump rate of a line in a zone: the zone's own (pumps.zones), else the shared one (T1-31). */
+function pumpOf(zoneId: string, line: Line) {
+  const own = (hardware.pumps.zones as Record<string, { doseLines: Pumps } | undefined>)[zoneId];
+  return own?.doseLines[line] ?? hardware.pumps.doseLines[line];
+}
+
 /** GET /api/zones/{zoneId}/dose-limits: limits.json, nutrients.json and hardware.json. */
 function doseLimitsAnswer(zone: FarmZone): DoseLimits {
   const zoneLimits = limits.zones[zone.id as "Z1"].limits;
@@ -76,7 +84,7 @@ function doseLimitsAnswer(zone: FarmZone): DoseLimits {
         strengthPct,
         drum,
         purpose,
-        pumpMlPerMin: hardware.pumps.doseLines[line].flowMlPerS * 60,
+        pumpMlPerMin: pumpOf(zone.id, line).flowMlPerS * 60,
         maxPerDoseMl: zoneLimits.maxPerDoseMl[line],
         max24hMl: zoneLimits.max24hMl[line],
         dosed24hMl: 0,
@@ -161,6 +169,15 @@ describe("client_B with the real back end's answers", () => {
     );
     expect(row("Controller")).toBe("ZC1 · Prototype rig gateway");
     expect(row("Notes")).toMatch(/^Runs on the prototype rig's Zone 1/);
+  });
+
+  it("shows Zone B on the rig's Zone 2 (T1-31)", async () => {
+    renderAt("/zone/Z2");
+    const panel = within((await screen.findByRole("heading", { name: "Zone details" })).closest("section")!);
+    const row = (term: string) => panel.getByText(term, { selector: "dt" }).nextElementSibling?.textContent;
+    await panel.findByText("Spinach · Ooty 1");
+    expect(row("Controller")).toBe("ZC2 · Prototype rig gateway");
+    expect(row("Notes")).toMatch(/^Runs on the prototype rig's Zone 2/);
   });
 
   it("describes each nutrient under its amount and in the review", async () => {

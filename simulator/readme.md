@@ -148,7 +148,7 @@ Each zone controller runs that controller (`sim/main.py` `attach_controller`). I
 zone of the farm model, and its nvs is `.state/nvs_<device>.json`.
 
 A dose runs line by line. Each pump moves stock from its day-tank into the reservoir at its rate in
-`hardware.json` `pumps.doseLines` (placeholders), so EC really changes, and a flow meter counts what
+`hardware.json` `pumps.doseLines`, or the zone's own `pumps.zones.<zone>.doseLines` (placeholders), so EC really changes, and a flow meter counts what
 it delivered. Circulation then mixes the stock through the water: the probes see a share
 `1 - exp(-t / timeConstantS)` of it (`simulator.json` `model.mixing`, 600 s), and nothing mixes while
 circulation is off. The mix wait (`limits.json` `dose.mixWaitS`, 3000 s) runs on simulated time,

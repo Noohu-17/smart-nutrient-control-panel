@@ -56,7 +56,7 @@ The checks run in the §11.3 order, with the check IDs and messages of the app's
 | `PROJECTED_EC_PH` | EC or pH missing, or the projection outside `ecCeiling`/`phMin`/`phMax`; **warns** outside the recipe's target, or with no recipe | `nutrients.json`, `recipes.json` |
 | `FRESH_READINGS` | EC or pH older than 120 s, from an offline controller, missing, or with a quality other than `OK` (none at all counts as not `OK`) | readings |
 
-`estimate.durationMin` is the pump time at `hardware.json` `pumps.doseLines.*.flowMlPerS` (the rates the simulator's pumps run at) plus `mixWaitS`, rounded up. Amounts that can't be a dose (a line the zone hasn't got, not whole mL, nothing above 0, a line twice) are `422` `INVALID_COMMAND`, as in the fake.
+`estimate.durationMin` is the pump time at the zone's pump rates (the rates the simulator's and the rig's pumps run at: `hardware.json` `pumps.zones.<zone>.doseLines.*.flowMlPerS` where the zone has its own, else `pumps.doseLines.*.flowMlPerS`) plus `mixWaitS`, rounded up. `pumpMlPerMin` in the dose-limits answer is the same rate. Amounts that can't be a dose (a line the zone hasn't got, not whole mL, nothing above 0, a line twice) are `422` `INVALID_COMMAND`, as in the fake.
 
 ## Errors
 

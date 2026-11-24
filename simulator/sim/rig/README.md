@@ -52,11 +52,16 @@ service check it.
 | `tdsPpmPerMsCm` | The TDS meter's scale. The sensor node reports ppm = EC (µS/cm) x 0.5, so 500 ppm per mS/cm |
 | `dayTankLevelSensors` | `false`: the drums have no level sensors, so the controller can't check them before a dose and a person must |
 
-A pump's flow is `hardware.json` `pumps.doseLines.<line>.flowMlPerS`: a dose of x mL runs x / flow
-seconds. Measure each pump three times (R-3) and put the rate there. A line's largest dose
-(`limits.json` `maxPerDoseMl`) must fit in the rig's 600 s at that flow: the service and
+A pump's flow is its zone's `hardware.json` `pumps.zones.<zone>.doseLines.<line>.flowMlPerS`, or,
+for a zone without its own rates, `pumps.doseLines.<line>.flowMlPerS`: a dose of x mL runs x / flow
+seconds. Zone 2's pumps are the gateway's own and need not run at Zone 1's rate (client_B: 1 L/min
+against 15 mL/min). Measure each pump three times (R-3) and put the rate there. A line's largest
+dose (`limits.json` `maxPerDoseMl`) must fit in the rig's 600 s at that flow: the service and
 `scripts/validate_config.py` refuse a pack where it doesn't, so a dose the review approves is
-always one the rig can run.
+always one the rig can run for long enough. The rig's shortest dose is 0.1 s, and doses are whole
+mL: on a pump faster than 10 mL/s, 1 mL is shorter than that, so the service logs, at start, the
+smallest dose each such line can run, and never sends the rig a shorter one (the line delivers
+nothing, so the dose ends `FAILED` or `PARTIAL`, as any line that pumped nothing).
 
 | Setting | Default | |
 |---|---|---|
