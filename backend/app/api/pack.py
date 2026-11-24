@@ -202,6 +202,10 @@ class ZoneDosing:
     # at a reset (§11.4). A LIVE zone's are on real time, always.
     simulated_time: bool
     stock: dict[str, LineStock]  # what each line doses: nutrients.json, T1-38
+    # io_map.json controllers.{controller}.dayTankLevelSensors (DM-4): false where the drums have no
+    # level sensor (client_B's rig), so the review can't read how much stock is left. True when the
+    # pack has no io_map.json or the controller doesn't say.
+    day_tank_sensors: bool = True
 
 
 def _target(recipes: dict[str, Any], zone_id: str) -> Target | None:
@@ -237,9 +241,17 @@ def read_dosing(source: PackLike, zone_id: str) -> ZoneDosing | None:
             ph_per_ml_per_l={line: entry["phChangePerMlPerL"] for line, entry in stock.items()},
             simulated_time=features.get("playground") is True and zone_source == "SIMULATED",
             stock={line: _stock(entry) for line, entry in stock.items()},
+            day_tank_sensors=_day_tank_sensors(pack, zone_id),
         )
     except (OSError, KeyError, TypeError, ValueError, StopIteration) as exc:
         raise _cannot_load(exc) from exc
+
+
+def _day_tank_sensors(pack: Pack, zone_id: str) -> bool:
+    """Whether the zone's controller can read its day-tanks' (drums') levels (DM-4)."""
+    zone = next((z for z in pack.json("layout.json").get("zones", ()) if z.get("id") == zone_id), {})
+    controllers = (pack.optional("io_map.json") or {}).get("controllers") or {}
+    return (controllers.get(zone.get("controller")) or {}).get("dayTankLevelSensors") is not False
 
 
 def run_settings(source: PackLike, zone_id: str, keys: tuple[str, ...]) -> dict[str, Any]:
