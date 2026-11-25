@@ -206,19 +206,19 @@ describe("client_B with the real back end's answers", () => {
     const user = userEvent.setup();
     renderAt("/zone/Z1", { role: "Operator" });
     const card = within((await screen.findByRole("heading", { name: "Manual dose" })).closest("section")!);
-    const nitrogen = "Nitrogen · City Greens Grow 24% · Leaf and stem growth";
+    const nitrogen = "City Greens Grow 24%";
     await card.findByText(nitrogen);
     // each amount is described by its limits (T1-37), then what it doses
-    const limit = "Max 2 mL per dose · 8 mL left today";
-    expect(card.getByLabelText("Line N")).toHaveAccessibleDescription(`${limit} ${nitrogen}`);
-    expect(card.getByLabelText("Line P")).toHaveAccessibleDescription(
-      `${limit} Phosphorus · City Greens Grow Flora 26% · Roots, flowering and fruit set`,
+    const limit = "Up to 2 mL a dose · 8 mL left today";
+    expect(card.getByLabelText("Nitrogen (N)")).toHaveAccessibleDescription(`${limit} ${nitrogen}`);
+    expect(card.getByLabelText("Phosphorus (P)")).toHaveAccessibleDescription(
+      `${limit} City Greens Grow Flora 26%`,
     );
-    expect(card.getByLabelText("Line K")).toHaveAccessibleDescription(
-      `${limit} Potassium · City Greens Grow Thrive 19% · Fruit quality, sturdy plants and water balance`,
+    expect(card.getByLabelText("Potassium (K)")).toHaveAccessibleDescription(
+      `${limit} City Greens Grow Thrive 19%`,
     );
 
-    await user.type(card.getByLabelText("Line N"), "2");
+    await user.type(card.getByLabelText("Nitrogen (N)"), "2");
     await user.click(card.getByRole("button", { name: "Review dose" }));
     await screen.findByRole("heading", { name: "Review safety checks" });
     const summary = screen.getByText("2 mL", { selector: ".dose-summary b" }).closest("li")!;

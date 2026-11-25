@@ -6,6 +6,8 @@ import type { DoseLineLimit, FarmZone, ZoneCrop } from "../api/types";
 import {
   cropDay,
   cropDayText,
+  doseLineLabel,
+  nutrientPurpose,
   nutrientText,
   plantedText,
   unitDetail,
@@ -130,27 +132,24 @@ describe("growing units and nutrients", () => {
     expect(zoneProfile(zones[0]).plantSites).toBe(180);
   });
 
-  it("describe each of client_B's nutrients in one short line", () => {
-    expect(nutrientText(lineInfo("N"))).toBe("Nitrogen · City Greens Grow 24% · Leaf and stem growth");
-    expect(nutrientText(lineInfo("P"))).toBe(
-      "Phosphorus · City Greens Grow Flora 26% · Roots, flowering and fruit set",
-    );
-    expect(nutrientText(lineInfo("K"))).toBe(
-      "Potassium · City Greens Grow Thrive 19% · Fruit quality, sturdy plants and water balance",
-    );
+  it("label each of client_B's amounts by its nutrient, and name its stock in one short line", () => {
+    expect(doseLineLabel("N", lineInfo("N"))).toBe("Nitrogen (N)");
+    expect(nutrientText(lineInfo("N"))).toBe("City Greens Grow 24%");
+    expect(nutrientPurpose(lineInfo("N"))).toBe("Leaf and stem growth");
+    expect(nutrientText(lineInfo("P"))).toBe("City Greens Grow Flora 26%");
+    expect(nutrientText(lineInfo("K"))).toBe("City Greens Grow Thrive 19%");
   });
 
-  it("don't repeat a name that is already the line's label", () => {
-    const stockA = {
-      ...lineInfo("N"),
-      line: "A",
-      name: "Stock A",
-      compound: "Calcium nitrate",
-      strengthPct: 10,
-    };
-    expect(nutrientText({ ...stockA, purpose: "Nitrogen and calcium" })).toBe(
-      "Calcium nitrate 10% · Nitrogen and calcium",
-    );
+  it("keep a line's own name when the nutrient's name only repeats it", () => {
+    const stockA = { ...lineInfo("N"), line: "A", name: "Stock A", compound: "Calcium nitrate", strengthPct: 10 };
+    expect(doseLineLabel("A", stockA)).toBe("Stock A");
+    expect(nutrientText(stockA)).toBe("Calcium nitrate 10%");
+  });
+
+  it("say what a line is for when the pack names no stock", () => {
+    const noStock = { ...lineInfo("N"), compound: null, strengthPct: null };
+    expect(nutrientText(noStock)).toBe("Leaf and stem growth");
+    expect(nutrientPurpose(noStock)).toBeUndefined();
   });
 
   it("say nothing for a line the pack doesn't describe", () => {

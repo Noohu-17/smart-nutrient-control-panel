@@ -170,16 +170,24 @@ export function zoneTags(
   ].filter((tag): tag is string => Boolean(tag));
 }
 
-/** The short line under a dose amount: "Nitrogen · City Greens Grow 24% · Leaf and stem growth".
-    The name is left out when it only repeats the line's label, e.g. client_A's "Stock A". */
+/** A dose amount's label: the nutrient the pack names, with the line's letter when the line has no
+    name of its own ("Nitrogen (N)", "Acid (pH down)"); otherwise the line's name, e.g. "Stock A". */
+export function doseLineLabel(line: string, info: DoseLineLimit | undefined) {
+  if (!info?.name) return lineName(line);
+  return lineName(line) === `Line ${line}` ? `${info.name} (${line})` : info.name;
+}
+
+/** The short line under a dose amount: the stock, "City Greens Grow 24%", or what it is for when
+    the pack names no stock. What it is for is nutrientPurpose, shown on hover. */
 export function nutrientText(info: DoseLineLimit | undefined) {
   if (!info) return null;
-  const name = info.name && info.name !== lineName(info.line) ? info.name : null;
-  const compound =
-    info.compound && info.strengthPct != null ? `${info.compound} ${info.strengthPct}%` : info.compound;
-  const parts = [name, compound, info.purpose].filter(Boolean);
-  return parts.length ? parts.join(" · ") : null;
+  if (info.compound) return info.strengthPct != null ? `${info.compound} ${info.strengthPct}%` : info.compound;
+  return info.purpose || null;
 }
+
+/** What a dose line is for ("Leaf and stem growth"), when the stock line doesn't already say it. */
+export const nutrientPurpose = (info: DoseLineLimit | undefined) =>
+  (info?.compound && info.purpose) || undefined;
 
 /** "Planted 10 Nov 2026" in the farm's own calendar. */
 export function plantedText(plantedOn: string) {

@@ -6,8 +6,8 @@ import { useSession } from "../../auth/session";
 import { Icon } from "../../components/Icon";
 import { LockedButton } from "../../components/LockedButton";
 import { StatusChip } from "../../components/StatusChip";
-import { checkTitle, limitHint, lineName, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
-import { nutrientText } from "../../config/zoneText";
+import { checkTitle, limitHint, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
+import { doseLineLabel, nutrientPurpose, nutrientText } from "../../config/zoneText";
 import { DOSE_CARD } from "../zones/doseCard";
 import { CommandStatus } from "./CommandStatus";
 import { useStockShown } from "./stockShown";
@@ -25,13 +25,13 @@ const isWholeMl = (v: string | undefined) => v === undefined || v === "" || /^\d
 type LineInfo = DoseLineLimit[] | undefined;
 const infoFor = (info: LineInfo, line: string) => info?.find((l) => l.line === line);
 
-/** The short line describing what a dose line doses (nutrients.json, T2-30); nothing if the pack
-    doesn't say. */
+/** The short line naming a dose line's stock (nutrients.json, T2-30), what it is for on hover;
+    nothing if the pack doesn't say. */
 function NutrientNote({ info, id }: { info: DoseLineLimit | undefined; id?: string }) {
   const [shown] = useStockShown();
   const text = nutrientText(info);
   return text && shown ? (
-    <small className="nutrient-note" id={id}>
+    <small className="nutrient-note" id={id} title={nutrientPurpose(info)}>
       {text}
     </small>
   ) : null;
@@ -138,7 +138,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
                 .join(" ");
               return (
                 <div key={line} className="dose-line">
-                  <label htmlFor={`${idBase}-${line}`}>{lineName(line)}</label>
+                  <label htmlFor={`${idBase}-${line}`}>{doseLineLabel(line, info)}</label>
                   <span className="dose-input">
                     <input
                       id={`${idBase}-${line}`}
@@ -216,7 +216,7 @@ function Review({
           .map((l) => (
             <li key={l.line}>
               <span className="dose-summary-line">
-                {lineName(l.line)}
+                {doseLineLabel(l.line, infoFor(lineInfo, l.line))}
                 <NutrientNote info={infoFor(lineInfo, l.line)} />
               </span>
               <b>{l.ml} mL</b>

@@ -73,20 +73,20 @@ describe("Manual dose and review", () => {
     const { card } = await enter({});
     // limits.json: 300 mL per dose and 1,500 a day of A and B, 100 and 400 of acid; the fake API
     // has 240 mL of A and B and 60 mL of acid dosed today
-    await card.findByText("Max 100 mL per dose · 340 mL left today");
+    await card.findByText("Up to 100 mL a dose · 340 mL left today");
     for (const label of ["Stock A", "Stock B"])
       expect(card.getByLabelText(label)).toHaveAccessibleDescription(
-        /^Max 300 mL per dose · 1,260 mL left today /,
+        /^Up to 300 mL a dose · 1,260 mL left today /,
       );
-    expect(card.getByLabelText("Acid")).toHaveAccessibleDescription(
-      "Max 100 mL per dose · 340 mL left today Acid (pH down) · Phosphoric acid 10% · Lowers pH",
+    expect(card.getByLabelText("Acid (pH down)")).toHaveAccessibleDescription(
+      "Up to 100 mL a dose · 340 mL left today Phosphoric acid 10%",
     );
   });
 
   it("turns the box red as soon as the amount is over a limit, and Review still checks", async () => {
     const { user, card } = await enter({});
     const stockA = card.getByLabelText("Stock A");
-    await card.findByText("Max 100 mL per dose · 340 mL left today"); // the limits have loaded
+    await card.findByText("Up to 100 mL a dose · 340 mL left today"); // the limits have loaded
     await user.type(stockA, "300");
     expect(stockA).toHaveAttribute("aria-invalid", "false");
     await user.type(stockA, "1"); // 3001
@@ -107,7 +107,7 @@ describe("Manual dose and review", () => {
     );
     const { user, card } = await enter({});
     const stockA = card.getByLabelText("Stock A");
-    await card.findByText("Max 300 mL per dose · 100 mL left today");
+    await card.findByText("Up to 300 mL a dose · 100 mL left today");
     await user.type(stockA, "150");
     expect(stockA).toHaveAttribute("aria-invalid", "true");
     expect(stockA).toHaveAccessibleDescription("Over what's left today: 100 mL"); // a back end from before T1-38: no nutrient line

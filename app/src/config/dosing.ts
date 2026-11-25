@@ -21,7 +21,7 @@ export function limitHint(limit: DoseLineLimit, amountMl: number): { text: strin
       text: limit.left24hMl > 0 ? `Over what's left today: ${ml(limit.left24hMl)}` : "Nothing left today",
       over: true,
     };
-  return { text: `Max ${ml(limit.maxPerDoseMl)} per dose · ${ml(limit.left24hMl)} left today`, over: false };
+  return { text: `Up to ${ml(limit.maxPerDoseMl)} a dose · ${ml(limit.left24hMl)} left today`, over: false };
 }
 
 /** Headings for the §11.3 check IDs; an ID the back end adds later shows as itself. */
