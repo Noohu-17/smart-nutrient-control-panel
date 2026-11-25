@@ -3,7 +3,18 @@ Remote nutrient dosing and climate monitoring for the Coimbatore polyhouse (2 NF
 
 ## Run the control panel
 
-From the repo root: `npm install` (once; it installs `app/`), then `npm run dev` and open http://localhost:5173. It runs on the app's fake API, so no back end is needed. Sign in with `owner@farm.test` / `fake-password`, then the code `123456` (two-step); `new-owner@farm.test` walks through setting up the authenticator; `operator@farm.test`, `agronomist@farm.test` and `viewer@farm.test` need no code. `npm run dev:demo` shows the demo role picker instead. For the real back end, see `infra/readme.md` and run the app with `VITE_USE_MOCKS=false`.
+From the repo root: `npm install` (once; it installs `app/`), then `npm run dev` and open the address it prints (http://localhost:5173 when that port is free). It runs on the **real back end**: `scripts/control-panel/backend.mjs` first starts it in Docker (on Windows, Docker in WSL Ubuntu), with the database, MQTT, the worker and the simulated farm (client_A), and the app talks to it (`app/.env.real`). The first start builds the images and takes a few minutes. Its own Docker project `control-panel` and ports (API 8010, simulator control 8110, PostgreSQL 5442, MQTT 1893), so another checkout's stack keeps running.
+
+Sign-in accounts (local dev only; `scripts/control-panel/users.py`):
+
+| Role | Email | Password | Second step |
+| :--- | :--- | :--- | :--- |
+| Owner | `jack123@gmail.com` | `jk12345` | a code from an authenticator app; set it up at the first sign-in (Show the key) |
+| Agronomist | `agronomist123@gmail.com` | `ag12345` | none |
+| Operator | `operator123@gmail.com` | `op12345` | none |
+| Viewer | `viewer123@gmail.com` | `vw12345` | none |
+
+`npm run backend:stop` stops the back end (the database is kept), `npm run backend:logs` shows the API log. `npm run dev:demo` runs the app on its fake API with the demo role picker, no back end needed.
 
 ## Folders
 - firmware/ — ESP32 controller code (zone + climate controllers)
