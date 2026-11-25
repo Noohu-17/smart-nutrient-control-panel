@@ -15,9 +15,9 @@ import {
 } from "../../config/zoneText";
 import { useZoneStatus } from "./useZoneStatus";
 
-function Row({ term, children }: { term: string; children: ReactNode }) {
+function Row({ term, children, wide }: { term: string; children: ReactNode; wide?: boolean }) {
   return (
-    <div>
+    <div className={wide ? "zone-details-wide" : undefined}>
       <dt>{term}</dt>
       <dd>{children}</dd>
     </div>
@@ -96,7 +96,12 @@ export function ZoneDetails({ zone }: { zone: FarmZone }) {
         <Row term="Controller">
           {profile.controller} · {linkName(profile.link)}
         </Row>
-        {profile.notes && <Row term="Notes">{profile.notes}</Row>}
+        {/* a row of its own, so a long note never stretches the tiles beside it */}
+        {profile.notes && (
+          <Row term="Notes" wide>
+            {profile.notes}
+          </Row>
+        )}
       </dl>
     </section>
   );

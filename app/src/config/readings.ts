@@ -56,6 +56,19 @@ export const AIR_POSITION_LABEL: Record<string, string> = {
   FAN_END: "Fan end",
 };
 
+/** Climate cards: one short line under each value on what it is (the zone page's `about`). */
+export const CLIMATE_ABOUT: Record<string, string> = {
+  airTempC: "Inside the house, all sensors averaged",
+  airRh: "Moisture in the air inside",
+  outsideTempC: "The weather outside",
+  outsideRh: "Moisture in the air outside",
+  vpdKpa: "How fast leaves give off water",
+  PAD_END: "By the cooling pad, the coolest end",
+  MIDDLE: "The centre of the house",
+  FAN_END: "By the exhaust fans, the warmest end",
+  elecRoomTempC: "Where the control panels are",
+};
+
 export const airPositionSpec = (position: string): ReadingSpec => ({
   key: position,
   label: AIR_POSITION_LABEL[position] ?? position,

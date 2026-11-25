@@ -158,6 +158,7 @@ describe("client_B zone pages", () => {
       for (const name of NOT_CONNECTED) {
         const card = section.getByRole("group", { name });
         expect(card).toHaveClass("not-connected");
+        expect(card.parentElement).toHaveClass("readings-missing"); // their own rows, under the live ones
         expect(within(card).getByText("Not connected")).toBeInTheDocument();
         expect(card.querySelector(".reading-value")).toBeNull();
       }

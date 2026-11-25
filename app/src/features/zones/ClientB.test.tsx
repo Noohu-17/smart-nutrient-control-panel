@@ -181,7 +181,7 @@ describe("client_B with the real back end's answers", () => {
       "EC, pH, Solution temp, Tank levelNot fitted: Circulation flow, Day-tank level, Leak, Dissolved oxygen",
     );
     expect(row("Controller")).toBe("ZC1 · Prototype rig gateway");
-    expect(row("Notes")).toMatch(/^Runs on the prototype rig's Zone 1/);
+    expect(panel.queryByText("Notes", { selector: "dt" })).not.toBeInTheDocument(); // no note, no row
   });
 
   it("shows Zone A's EC and pH targets, EC also in ppm on the rig's TDS scale", async () => {
@@ -200,7 +200,7 @@ describe("client_B with the real back end's answers", () => {
     const row = (term: string) => panel.getByText(term, { selector: "dt" }).nextElementSibling?.textContent;
     await panel.findByText("Spinach · Ooty 1");
     expect(row("Controller")).toBe("ZC2 · Prototype rig gateway");
-    expect(row("Notes")).toMatch(/^Runs on the prototype rig's Zone 2/);
+    expect(row("Notes")).toBe("Its pumps are fast, so doses under 2 mL won't run.");
   });
 
   it("describes each nutrient under its amount and in the review", async () => {

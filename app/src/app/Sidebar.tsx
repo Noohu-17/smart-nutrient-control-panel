@@ -1,7 +1,25 @@
 import { NavLink } from "react-router-dom";
 import { useFarm } from "../api/hooks";
+import { useSession } from "../auth/session";
 import { Icon } from "../components/Icon";
 import { navMonitor, navSystem, type NavItem } from "./nav";
+
+/** Who is signed in, at the foot of the sidebar: their initial, name and role. */
+function SignedInCard() {
+  const { user, role } = useSession();
+  if (!user || !role) return null;
+  return (
+    <div className="me" role="group" aria-label="Signed in">
+      <div className="av" aria-hidden="true">
+        {user.name.charAt(0).toUpperCase()}
+      </div>
+      <div>
+        <b>{user.name}</b>
+        <span>{role}</span>
+      </div>
+    </div>
+  );
+}
 
 function Group({ title, items, onNavigate }: { title: string; items: NavItem[]; onNavigate: () => void }) {
   return (
@@ -40,6 +58,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
       </div>
       <Group title="Monitor" items={navMonitor(farm.data?.zones ?? [])} onNavigate={onNavigate} />
       <Group title="System" items={navSystem(farm.data?.features.playground)} onNavigate={onNavigate} />
+      <SignedInCard />
     </nav>
   );
 }

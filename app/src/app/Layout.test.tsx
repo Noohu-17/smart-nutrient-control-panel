@@ -38,6 +38,14 @@ describe("App shell", () => {
     expect(await main.findByRole("link", { name: "Zone B" })).toHaveAttribute("href", "/zone/Z2");
   });
 
+  it("shows who is signed in at the foot of the sidebar", async () => {
+    renderAt("/");
+    const nav = within(screen.getByRole("navigation", { name: "Main" }));
+    const card = within(await nav.findByRole("group", { name: "Signed in" }));
+    expect(card.getByText("Owner")).toBeInTheDocument();
+    expect(card.queryByText(/@/)).not.toBeInTheDocument(); // name and role only, as in the first demo
+  });
+
   it.each([
     ["/zone/Z1", "Zone A"],
     ["/zone/Z2", "Zone B"],
