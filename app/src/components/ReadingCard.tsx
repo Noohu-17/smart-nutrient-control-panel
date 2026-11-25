@@ -66,9 +66,11 @@ export function ReadingCard({
       <span className="reading-head">
         <span>{spec.label}</span>
         {target && (
-          <span>
-            Target {formatReading(target.min, spec)}–{formatReading(target.max, spec)}
-            {targetNote && ` (${targetNote})`}
+          <span className="reading-target">
+            <span>
+              Target {formatReading(target.min, spec)}–{formatReading(target.max, spec)}
+            </span>
+            {targetNote && <> <span>({targetNote})</span></>}
           </span>
         )}
       </span>

@@ -185,7 +185,9 @@ describe("client_B with the real back end's answers", () => {
 
   it("shows Zone A's EC and pH targets, EC also in ppm on the rig's TDS scale", async () => {
     renderAt("/zone/Z1");
-    const ec = await screen.findByText("Target 0.80–1.20 (400–600 ppm)");
+    const ec = await screen.findByText(
+      (_, el) => el?.className === "reading-target" && el.textContent === "Target 0.80–1.20 (400–600 ppm)",
+    );
     expect(ec.closest("[role=group]")).toHaveAccessibleName("EC");
     const ph = screen.getByText("Target 5.80–6.20");
     expect(ph.closest("[role=group]")).toHaveAccessibleName("pH");

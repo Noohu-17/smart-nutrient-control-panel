@@ -212,8 +212,12 @@
   line-height: var(--text-label-line);
   color: var(--text-secondary);
 }
-/* the target moves under the label as a whole when the card is narrow, never split mid-number */
-.reading-head > span + span {
+/* the target moves under the label when the card is narrow; the range and its other unit each stay
+   whole, so a narrow card puts "(400–600 ppm)" on its own line rather than cut it or split a number */
+.reading-target {
+  min-width: 0;
+}
+.reading-target > span {
   white-space: nowrap;
 }
 .reading-value {
