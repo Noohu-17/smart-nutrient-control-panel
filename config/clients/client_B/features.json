@@ -1,2 +1,2 @@
 { "playground": false, "demoFarm": false, "climateAutomatic": false, "autoRefill": false,
-  "secondApproval": false, "foggers": false }
+  "secondApproval": false, "foggers": false, "ownerTwoFactor": false }

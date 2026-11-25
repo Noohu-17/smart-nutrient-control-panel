@@ -111,13 +111,22 @@ def _me(settings, caller: Caller) -> Me:
     )
 
 
-def _stage_after_password(user) -> str:
+def owner_two_factor(pack) -> bool:
+    """features.json ownerTwoFactor: false lets an Owner sign in with a password alone. Left out, or
+    anything but false, an Owner must have two-factor (T1-35). A user who has set two-factor up
+    keeps using it either way."""
+    return read_farm(pack).features.get("ownerTwoFactor") is not False
+
+
+def _stage_after_password(user, owner_needs_two_factor: bool = True) -> str:
     if user.totp_enabled_at is not None:
         return TOTP
-    return TOTP_SETUP if user.role == OWNER else FULL
+    return TOTP_SETUP if user.role == OWNER and owner_needs_two_factor else FULL
 
 
-def login(body: LoginBody, response: Response, settings: SettingsDep, engine: EngineDep, site: SiteDep) -> Me:
+def login(
+    body: LoginBody, response: Response, settings: SettingsDep, engine: EngineDep, site: SiteDep, pack: PackDep
+) -> Me:
     """Sign in. 401 for a wrong email or password, or a turned-off user, the same for all three.
     429 after too many of those for this email (_refuse_if_limited)."""
     email = body.email.strip().lower()
@@ -134,7 +143,7 @@ def login(body: LoginBody, response: Response, settings: SettingsDep, engine: En
                         "SIGN_IN_FAILED", detail=detail)
             connection.commit()
             raise ApiError(401, "UNAUTHORIZED", WRONG)
-        stage = _stage_after_password(user)
+        stage = _stage_after_password(user, owner_two_factor(pack))
         return _start_session(connection, response, settings, site, user, stage,
                               "SIGN_IN" if stage == FULL else "SIGN_IN_PASSWORD")
 

@@ -21,7 +21,7 @@ from app.api.pack import SiteRef
 from app.api.routes import get_engine, get_settings
 from app.auth import passwords, sessions, totp
 from app.auth.access import OPEN
-from app.auth.users import Refused, create_owner, reset_two_factor
+from app.auth.users import Refused, create_owner, create_user, reset_two_factor
 from app.config import load_settings
 from app.db.models import AuditLog, SentCommand, User, UserSession
 from app.db.seed import seed
@@ -405,6 +405,59 @@ def test_create_owner_refuses_a_second_owner_and_an_unseeded_site(migrated_db, p
     create_owner(migrated_db, site, "boss@example.org", "The Boss")
     with pytest.raises(Refused, match="already has an Owner"):
         create_owner(migrated_db, site, "other@example.org", "Other Boss")
+
+
+def test_create_user_makes_a_user_of_any_role_who_signs_in(migrated_db, pack, publisher):
+    seed(migrated_db, pack)
+    site = SiteRef(ORG, SITE)
+    _, viewer_password = create_user(migrated_db, site, " Viewer@Example.org ", "A Viewer", "viewer")
+    create_owner(migrated_db, site, "boss@example.org", "The Boss")
+    _, second = create_user(migrated_db, site, "second@example.org", "Second Owner", "OWNER")  # more than one
+    with migrated_db.connect() as connection:
+        roles = dict(connection.execute(select(User.email, User.role)).all())
+    assert roles == {"viewer@example.org": "VIEWER", "boss@example.org": "OWNER", "second@example.org": "OWNER"}
+
+    api = client_on(pack, migrated_db, publisher)
+    response = api.post("/api/auth/login", json={"email": "viewer@example.org", "password": viewer_password})
+    assert (response.json()["user"]["role"], response.json()["step"]) == ("VIEWER", "DONE")
+    response = client_on(pack, migrated_db).post(
+        "/api/auth/login", json={"email": "second@example.org", "password": second})
+    assert response.json()["step"] == "TOTP_SETUP"  # features.json leaves ownerTwoFactor out: two-factor
+
+
+def test_create_user_refuses_a_bad_role_a_taken_email_and_an_unseeded_site(migrated_db, pack):
+    site = SiteRef(ORG, SITE)
+    with pytest.raises(Refused, match="seed"):
+        create_user(migrated_db, site, "a@example.org", "A", "OPERATOR")
+    seed(migrated_db, pack)
+    with pytest.raises(Refused, match="role must be one of"):
+        create_user(migrated_db, site, "a@example.org", "A", "BOSS")
+    create_user(migrated_db, site, "a@example.org", "A", "OPERATOR")
+    with pytest.raises(Refused, match="already has an account"):
+        create_user(migrated_db, site, "A@example.org", "Again", "VIEWER")
+
+
+def test_an_owner_signs_in_with_the_password_only_when_owner_two_factor_is_off(migrated_db, tmp_path, publisher):
+    """features.json "ownerTwoFactor": false (client_B while it is shown and tested)."""
+    pack = write_pack(tmp_path / ORG, features={"playground": False, "ownerTwoFactor": False})
+    seed(migrated_db, pack)
+    _, password = create_owner(migrated_db, SiteRef(ORG, SITE), "boss@example.org", "The Boss")
+    api = client_on(pack, migrated_db, publisher)
+    response = api.post("/api/auth/login", json={"email": "boss@example.org", "password": password})
+    assert (response.json()["user"]["role"], response.json()["step"]) == ("OWNER", "DONE")
+    assert api.get("/api/users").status_code == 200  # signed in fully, no code
+
+
+def test_an_owner_who_set_two_factor_up_keeps_it_when_the_switch_is_off(migrated_db, tmp_path, publisher):
+    pack = write_pack(tmp_path / ORG, features={"playground": False, "ownerTwoFactor": False})
+    seed(migrated_db, pack)
+    user_id, password = create_owner(migrated_db, SiteRef(ORG, SITE), "boss@example.org", "The Boss")
+    with migrated_db.begin() as connection:
+        connection.execute(update(User).where(User.user_id == user_id).values(
+            totp_secret=OWNER_TOTP, totp_enabled_at=NOW))
+    response = client_on(pack, migrated_db, publisher).post(
+        "/api/auth/login", json={"email": "boss@example.org", "password": password})
+    assert response.json()["step"] == "TOTP"
 
 
 # --- Demo sign-in -----------------------------------------------------------------------------
