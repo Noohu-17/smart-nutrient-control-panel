@@ -344,6 +344,34 @@ def test_not_enough_concentrate_blocks_and_a_low_tank_warns(api, worker):
     assert body["canConfirm"] is True
 
 
+def test_drums_without_a_level_sensor_warn_and_say_check_by_eye(tmp_path, migrated_db):
+    """DM-4: io_map.json dayTankLevelSensors false (client_B's rig): the review can't read the
+    stock left, so DAYTANK warns, whatever the readings say, and the dose may go ahead."""
+    pack = write_dosing_pack(tmp_path / ORG)
+    io_map = {"v": 1, "controllers": {"ZC1": {"dayTankLevelSensors": False}}}
+    (pack / "io_map.json").write_text(json.dumps(io_map), encoding="utf-8")
+    seed(migrated_db, pack)
+    worker, api = Worker(migrated_db, ORG, SITE), api_client(pack, migrated_db)
+    ready_zone(worker, readings={"dayTankL": {"A": 0.0, "B": 0.0, "ACID": 0.0}})
+    body = review(api)
+    assert check(body, "DAYTANK") == (
+        "WARN", "No level sensor on stock tanks A, B, ACID: check by eye before dosing")
+    assert body["canConfirm"] is True
+    one = review(api, {"zone": "Z1", "lines": [{"line": "B", "ml": 50}]})
+    assert check(one, "DAYTANK")[1] == "No level sensor on stock tank B: check by eye before dosing"
+
+
+def test_a_controller_with_level_sensors_still_reads_them(tmp_path, migrated_db):
+    """dayTankLevelSensors true (or left out, as on client_A) keeps the readings check."""
+    pack = write_dosing_pack(tmp_path / ORG)
+    io_map = {"v": 1, "controllers": {"ZC1": {"dayTankLevelSensors": True}}}
+    (pack / "io_map.json").write_text(json.dumps(io_map), encoding="utf-8")
+    seed(migrated_db, pack)
+    worker, api = Worker(migrated_db, ORG, SITE), api_client(pack, migrated_db)
+    ready_zone(worker, readings={"dayTankL": {"A": 0.1, "B": 33.0, "ACID": 40.5}})
+    assert check(review(api), "DAYTANK") == ("BLOCK", "Day-tank A has less than 120 mL")
+
+
 def test_a_low_reservoir_blocks(api, worker):
     ready_zone(worker, readings={"reservoirPct": 20})
     assert check(review(api), "RESERVOIR") == ("BLOCK", "R1 at 20%, below the 30% minimum to dose")

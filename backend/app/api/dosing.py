@@ -170,11 +170,17 @@ def review(
         ),
     )
 
-    # DAYTANK: not enough concentrate blocks (an unknown level counts as empty); a low one warns
+    # DAYTANK: not enough concentrate blocks (an unknown level counts as empty); a low one warns.
+    # Drums with no level sensor (io_map.json dayTankLevelSensors false, DM-4) can't be read, so
+    # the review warns instead: the grower checks them by eye. The zone controller does the same.
     tank_l, tank_pct = readings.day_tank_l, readings.day_tank_pct
     short = [a for a in dosing_lines if (tank_l.get(a.line) or 0) * 1000 < a.ml]
     low = [a for a in dosing_lines if (tank_pct.get(a.line) or 0) < dosing.day_tank_warn_pct]
-    if short:
+    if not dosing.day_tank_sensors:
+        tanks = ", ".join(a.line for a in dosing_lines)
+        which = f"stock tanks {tanks}" if len(dosing_lines) > 1 else f"stock tank {tanks}"
+        add("DAYTANK", False, "", f"No level sensor on {which}: check by eye before dosing", "WARN")
+    elif short:
         add("DAYTANK", False, "", "; ".join(f"Day-tank {a.line} has less than {_number(a.ml)} mL" for a in short))
     else:
         add(
