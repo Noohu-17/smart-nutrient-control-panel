@@ -162,6 +162,7 @@ def _about(dosing: ZoneDosing, line: str) -> dict[str, Any]:
         "strength_pct": stock.strength_pct if stock else None,
         "drum": stock.drum if stock else None,
         "purpose": stock.purpose if stock else None,
+        "npk": stock.npk if stock else None,
         "pump_ml_per_min": dosing.pump_ml_per_min.get(line),
     }
 

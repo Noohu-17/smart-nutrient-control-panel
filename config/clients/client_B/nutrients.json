@@ -3,7 +3,7 @@
   "_meta": {
     "client": "client_B",
     "placeholder": true,
-    "note": "What each dose line's stock does to the nutrient solution, so the dose review can estimate EC and pH after a dose (contract 11.3). ecChangePerMlPerL: the EC rise in mS/cm from 1 mL of stock in 1 L of solution; phChangePerMlPerL: the pH change from the same. Stocks (from the team, DM-5): A is City Greens Grow (NPK 24-00-00, nitrogen and calcium), B is City Greens Flora (NPK 05-26-00, phosphorus), C is City Greens Thrive (NPK 06-00-19, potassium and magnesium), each with micronutrients, each in a 10 L tank (confirmed at the farm, review of #82). The NPK grade is the % of N, P and K in 100 g of the product (the team): strengthPct is the main nutrient's figure, 24 (N), 26 (P) and 19 (K). Per 1 mL, from the maker's breakdown: A 256.90 mg nitrate N, 94.20 mg Ca, with Si, S, Cu, Mn, Zn; B 61.00 mg phosphate, 12.00 mg ammoniacal N, 3.60 mg fulvic acid, 1.30 mg Fe, 0.40 mg B; C 149.50 mg K2O, 44.53 mg nitrate N, 28.00 mg MgO, 16.80 mg Mn. There is no pH-down line: the solutions are A, B and C only, and IN4 on both controllers is the water inlet. Each line also says what it is (T1-38): name (what the app shows), compound (the product), strengthPct, drum (the container the stock is kept in: id and volumeL), and purpose (what it is dosed for, from the team). The pump rate is hardware.json pumps.doseLines.<line>.flowMlPerS, not a copy here.",
+    "note": "What each dose line's stock does to the nutrient solution, so the dose review can estimate EC and pH after a dose (contract 11.3). ecChangePerMlPerL: the EC rise in mS/cm from 1 mL of stock in 1 L of solution; phChangePerMlPerL: the pH change from the same. Stocks (from the team, DM-5): A is City Greens Grow (NPK 24-00-00, nitrogen and calcium), B is City Greens Flora (NPK 05-26-00, phosphorus), C is City Greens Thrive (NPK 06-00-19, potassium and magnesium), each with micronutrients, each in a 10 L tank (confirmed at the farm, review of #82). The NPK grade is the % of N, P and K in 100 g of the product (the team): strengthPct is the main nutrient's figure, 24 (N), 26 (P) and 19 (K). Per 1 mL, from the maker's breakdown: A 256.90 mg nitrate N, 94.20 mg Ca, with Si, S, Cu, Mn, Zn; B 61.00 mg phosphate, 12.00 mg ammoniacal N, 3.60 mg fulvic acid, 1.30 mg Fe, 0.40 mg B; C 149.50 mg K2O, 44.53 mg nitrate N, 28.00 mg MgO, 16.80 mg Mn. There is no pH-down line: the solutions are A, B and C only, and IN4 on both controllers is the water inlet. Each line also says what it is (T1-38): name (what the app shows), compound (the product), strengthPct, drum (the container the stock is kept in: id and volumeL), and purpose (what it is dosed for, from the team), and npk (the N-P-K grade on the product label, % by weight: Grow 24-00-00, Flora 05-26-00, Thrive 06-00-19). The pump rate is hardware.json pumps.doseLines.<line>.flowMlPerS, not a copy here.",
     "placeholderKeys": ["doseLines"],
     "sources": {
       "doseLines.A.ecChangePerMlPerL": "PLACEHOLDER: client_A's contract-example stock (0.47), until a jar test: 1 mL of stock A in 1 L of the farm's water, read the EC rise. On the high side on purpose: the review then stops short of the EC ceiling rather than past it.",
@@ -19,6 +19,7 @@
       "name": "Grow: nitrogen and calcium",
       "compound": "City Greens Grow 24-00-00, N",
       "strengthPct": 24,
+      "npk": { "n": 24, "p": 0, "k": 0 },
       "drum": { "id": "DRUM-A", "volumeL": 10 },
       "purpose": "Vegetative growth: leaves, chlorophyll and strong cell walls",
       "ecChangePerMlPerL": 0.47,
@@ -28,6 +29,7 @@
       "name": "Flora: phosphorus",
       "compound": "City Greens Flora 05-26-00, P",
       "strengthPct": 26,
+      "npk": { "n": 5, "p": 26, "k": 0 },
       "drum": { "id": "DRUM-B", "volumeL": 10 },
       "purpose": "Root development, flowering and overall growth",
       "ecChangePerMlPerL": 0.47,
@@ -37,6 +39,7 @@
       "name": "Thrive: potassium and magnesium",
       "compound": "City Greens Thrive 06-00-19, K",
       "strengthPct": 19,
+      "npk": { "n": 6, "p": 0, "k": 19 },
       "drum": { "id": "DRUM-C", "volumeL": 10 },
       "purpose": "Overall growth and plant strength",
       "ecChangePerMlPerL": 0.47,

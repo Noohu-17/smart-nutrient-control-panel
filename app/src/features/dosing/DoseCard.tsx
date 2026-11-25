@@ -7,7 +7,7 @@ import { Icon } from "../../components/Icon";
 import { LockedButton } from "../../components/LockedButton";
 import { StatusChip } from "../../components/StatusChip";
 import { checkTitle, limitHint, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
-import { doseLineLabel, nutrientDetails, nutrientText } from "../../config/zoneText";
+import { doseLineLabel, mixNpk, npkText, nutrientDetails, nutrientText } from "../../config/zoneText";
 import { DOSE_CARD } from "../zones/doseCard";
 import { CommandStatus } from "./CommandStatus";
 import { useStockShown } from "./stockShown";
@@ -25,15 +25,27 @@ const isWholeMl = (v: string | undefined) => v === undefined || v === "" || /^\d
 type LineInfo = DoseLineLimit[] | undefined;
 const infoFor = (info: LineInfo, line: string) => info?.find((l) => l.line === line);
 
-/** The short line naming a dose line's stock (nutrients.json, T2-30), what it is for on hover;
-    nothing if the pack doesn't say. */
+/** The short line naming a dose line's stock (nutrients.json, T2-30) and its label's N-P-K grade,
+    the product and what it is for on hover; nothing if the pack doesn't say. */
 function NutrientNote({ info, id }: { info: DoseLineLimit | undefined; id?: string }) {
   const [shown] = useStockShown();
-  const text = nutrientText(info);
+  const text = [nutrientText(info), info?.npk && npkText(info.npk)].filter(Boolean).join(" · ");
   return text && shown ? (
     <small className="nutrient-note" id={id} title={nutrientDetails(info)}>
       {text}
     </small>
+  ) : null;
+}
+
+/** What the amounts make together: "This mix: N-P-K 14.5-13-0", once two stocks with a grade have
+    an amount; hidden with the stock details. */
+function MixNote({ lines, lineInfo }: { lines: DoseLineAmount[]; lineInfo: LineInfo }) {
+  const [shown] = useStockShown();
+  const mix = mixNpk(lines.map((l) => ({ ml: l.ml, npk: infoFor(lineInfo, l.line)?.npk })));
+  return mix && shown ? (
+    <p className="dose-mix" role="status">
+      This mix: <b>{npkText(mix)}</b>
+    </p>
   ) : null;
 }
 
@@ -164,6 +176,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
               );
             })}
           </div>
+          <MixNote lines={lines} lineInfo={lineInfo} />
           {review.error && <p className="banner crit">{review.error.message}</p>}
           <div className="dose-actions">
             <span className="dose-note">Enter whole mL. The safety checks run on the next step.</span>
@@ -223,6 +236,7 @@ function Review({
             </li>
           ))}
       </ul>
+      <MixNote lines={dr.lines} lineInfo={lineInfo} />
 
       <ul className="checks" aria-label="Safety checks">
         {dr.checks.map((c) => (

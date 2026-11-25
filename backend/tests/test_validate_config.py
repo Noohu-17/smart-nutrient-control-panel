@@ -74,6 +74,8 @@ def test_both_client_packs_are_valid():
         ("nutrients.json", lambda d: d["doseLines"]["A"].pop("compound"), "doseLines.A.compound must be text"),
         ("nutrients.json", lambda d: d["doseLines"]["B"].update(strengthPct=0), "doseLines.B.strengthPct must be a number > 0"),
         ("nutrients.json", lambda d: d["doseLines"]["C"].update(strengthPct=140), "doseLines.C.strengthPct must be a number > 0"),
+        ("nutrients.json", lambda d: d["doseLines"]["A"].update(npk={"n": 24, "p": 0}), "doseLines.A.npk must be {n, p, k}"),
+        ("nutrients.json", lambda d: d["doseLines"]["B"]["npk"].update(p=126), "doseLines.B.npk must be {n, p, k}"),
         ("nutrients.json", lambda d: d["doseLines"]["A"].pop("drum"), "doseLines.A.drum needs an id"),
         ("nutrients.json", lambda d: d["doseLines"]["A"]["drum"].update(volumeL=5),
          "doseLines.A.drum: 5 L is less than a 10 L day-tank"),

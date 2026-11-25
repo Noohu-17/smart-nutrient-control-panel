@@ -371,7 +371,8 @@ def check_zone_recipes(rel, recipes, zones, errors):
 
 def check_nutrients(rel, nutrients, dose_lines_by_zone, errors, layout=None):
     """Every dose line in the layout needs its stock's EC and pH change per mL in each litre, and
-    what the stock is (T1-38): name, compound, strengthPct, drum and purpose."""
+    what the stock is (T1-38): name, compound, strengthPct, drum and purpose; npk, the label's N-P-K
+    grade, where the pack gives it."""
     lines = nutrients.get("doseLines")
     if not isinstance(lines, dict):
         errors.append(f'{rel}: "doseLines" must be an object keyed by dose line')
@@ -394,6 +395,10 @@ def check_nutrients(rel, nutrients, dose_lines_by_zone, errors, layout=None):
         strength = entry.get("strengthPct")
         if not _positive_number(strength) or strength > 100:
             errors.append(f"{where}.strengthPct must be a number > 0 and no more than 100")
+        npk = entry.get("npk")
+        if npk is not None and not (isinstance(npk, dict) and set(npk) == {"n", "p", "k"}
+                                    and all(_number(v) and 0 <= v <= 100 for v in npk.values())):
+            errors.append(f"{where}.npk must be {{n, p, k}}, each a % from 0 to 100 (the label's grade)")
         drum = entry.get("drum")
         drum = drum if isinstance(drum, dict) else {}
         if not _text(drum.get("id")) or not _positive_number(drum.get("volumeL")):

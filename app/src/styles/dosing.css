@@ -89,6 +89,13 @@
   display: flex;
   flex-direction: column;
 }
+/* the N-P-K of the amounts together, under the amounts and the review's list */
+.dose-mix {
+  margin: 0;
+  font-size: var(--text-label-size);
+  line-height: var(--text-label-line);
+  color: var(--text-secondary);
+}
 
 /* ---------- review */
 .dose-summary,

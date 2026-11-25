@@ -12,7 +12,7 @@ from typing import Any
 
 from ..packcheck import pump_rates
 from ..packs import Pack, PackError, as_pack
-from .schemas import Drum, Farm, FarmZone, SensorCatalogue, ZoneCrop, ZoneProfile
+from .schemas import Drum, Farm, FarmZone, Npk, SensorCatalogue, ZoneCrop, ZoneProfile
 
 log = logging.getLogger("api")
 
@@ -177,6 +177,7 @@ class LineStock:
     strength_pct: float | None
     drum: Drum | None
     purpose: str | None
+    npk: Npk | None = None  # the label's N-P-K grade
 
 
 def _stock(entry: dict[str, Any]) -> LineStock:
@@ -187,6 +188,7 @@ def _stock(entry: dict[str, Any]) -> LineStock:
         strength_pct=entry.get("strengthPct"),
         drum=Drum.model_validate(drum) if drum is not None else None,
         purpose=entry.get("purpose"),
+        npk=Npk.model_validate(entry["npk"]) if entry.get("npk") is not None else None,
     )
 
 

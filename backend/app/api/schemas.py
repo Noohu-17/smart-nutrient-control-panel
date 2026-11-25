@@ -370,6 +370,14 @@ class Drum(ContractModel):
     volume_l: float
 
 
+class Npk(ContractModel):
+    """A stock's N-P-K grade from its label, % by weight (nutrients.json npk)."""
+
+    n: float
+    p: float
+    k: float
+
+
 class DoseLineLimit(ContractModel):
     """One line's limits and how much of its 24 h limit is left, so the app can warn while typing,
     and what the line doses (nutrients.json) and how fast its pump runs (hardware.json), T1-38.
@@ -381,6 +389,7 @@ class DoseLineLimit(ContractModel):
     strength_pct: float | None
     drum: Drum | None
     purpose: str | None
+    npk: Npk | None = None
     pump_ml_per_min: float | None
     max_per_dose_ml: float
     # named here: the camelCase generator would make "max24HMl" of these

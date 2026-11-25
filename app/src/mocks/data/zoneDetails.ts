@@ -55,6 +55,7 @@ export function doseLimits(zone: FarmZone, dosing: ZoneDosing): DoseLimits {
         strengthPct: stock.strengthPct ?? null,
         drum: stock.drum ?? null,
         purpose: stock.purpose ?? null,
+        npk: null, // client_A's stocks have no label grade
         pumpMlPerMin: dosing.pumpMlPerMin[line] ?? null,
         maxPerDoseMl: dosing.limits.maxPerDoseMl[line] ?? 0,
         max24hMl,

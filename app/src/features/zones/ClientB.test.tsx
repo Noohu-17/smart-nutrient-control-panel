@@ -87,7 +87,7 @@ function doseLimitsAnswer(zone: FarmZone): DoseLimits {
   return {
     zone: zone.id,
     lines: (zone.doseLines as Line[]).map((line) => {
-      const { name, compound, strengthPct, drum, purpose } = nutrients.doseLines[line];
+      const { name, compound, strengthPct, drum, purpose, npk } = nutrients.doseLines[line];
       return {
         line,
         name,
@@ -95,6 +95,7 @@ function doseLimitsAnswer(zone: FarmZone): DoseLimits {
         strengthPct,
         drum,
         purpose,
+        npk,
         pumpMlPerMin: pumpOf(zone.id, line).flowMlPerS * 60,
         maxPerDoseMl: zoneLimits.maxPerDoseMl[line],
         max24hMl: zoneLimits.max24hMl[line],
@@ -206,22 +207,43 @@ describe("client_B with the real back end's answers", () => {
     const user = userEvent.setup();
     renderAt("/zone/Z1", { role: "Operator" });
     const card = within((await screen.findByRole("heading", { name: "Manual dose" })).closest("section")!);
-    const grow = "Grow: nitrogen and calcium";
+    const grow = "Grow: nitrogen and calcium · N-P-K 24-0-0";
     await card.findByText(grow);
-    // each amount is described by its limits (T1-37), then what it doses
+    // each amount is described by its limits (T1-37), then what it doses and its label's N-P-K
     const limit = "Up to 2 mL a dose · 8 mL left today";
     expect(card.getByLabelText("Stock A")).toHaveAccessibleDescription(`${limit} ${grow}`);
-    expect(card.getByLabelText("Stock B")).toHaveAccessibleDescription(`${limit} Flora: phosphorus`);
-    expect(card.getByLabelText("Stock C")).toHaveAccessibleDescription(`${limit} Thrive: potassium and magnesium`);
+    expect(card.getByLabelText("Stock B")).toHaveAccessibleDescription(`${limit} Flora: phosphorus · N-P-K 5-26-0`);
+    expect(card.getByLabelText("Stock C")).toHaveAccessibleDescription(
+      `${limit} Thrive: potassium and magnesium · N-P-K 6-0-19`,
+    );
     expect(card.getByText(grow)).toHaveAttribute(
       "title",
       "City Greens Grow 24-00-00, N 24% · Vegetative growth: leaves, chlorophyll and strong cell walls",
     );
 
     await user.type(card.getByLabelText("Stock A"), "2");
+    expect(card.queryByText(/This mix/)).not.toBeInTheDocument(); // one stock: its own grade says it
+    await user.type(card.getByLabelText("Stock B"), "2");
+    // 2 mL of 24-0-0 and 2 mL of 5-26-0 together
+    expect(card.getByRole("status", { name: "" })).toHaveTextContent("This mix: N-P-K 14.5-13-0");
     await user.click(card.getByRole("button", { name: "Review dose" }));
     await screen.findByRole("heading", { name: "Review safety checks" });
-    const summary = screen.getByText("2 mL", { selector: ".dose-summary b" }).closest("li")!;
+    const summary = screen.getAllByText("2 mL", { selector: ".dose-summary b" })[0].closest("li")!;
     expect(summary).toHaveTextContent(grow);
+    expect(screen.getByText(/This mix/)).toHaveTextContent("This mix: N-P-K 14.5-13-0");
+  });
+
+  it("hides each stock's N-P-K and the mix's with the stock details", async () => {
+    const user = userEvent.setup();
+    renderAt("/zone/Z1", { role: "Operator" });
+    const card = within((await screen.findByRole("heading", { name: "Manual dose" })).closest("section")!);
+    await card.findByText("Grow: nitrogen and calcium · N-P-K 24-0-0");
+    await user.type(card.getByLabelText("Stock A"), "1");
+    await user.type(card.getByLabelText("Stock C"), "3");
+    expect(card.getByText(/This mix/)).toHaveTextContent("This mix: N-P-K 10.5-0-14.3");
+    await user.click(card.getByRole("button", { name: "Hide stock" }));
+    expect(card.queryByText(/N-P-K/)).not.toBeInTheDocument();
+    await user.click(card.getByRole("button", { name: "Show stock" }));
+    expect(card.getByText(/This mix/)).toBeInTheDocument();
   });
 });

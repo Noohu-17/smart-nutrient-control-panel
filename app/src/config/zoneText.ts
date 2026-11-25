@@ -5,6 +5,7 @@ import type {
   DoseLineLimit,
   FarmZone,
   GrowingUnit,
+  Npk,
   Tank,
   ZoneCrop,
   ZoneProfile,
@@ -186,6 +187,21 @@ export function nutrientText(info: DoseLineLimit | undefined) {
   if (!info) return null;
   const name = info.name && info.name !== lineName(info.line) && !isGeneric(info.line) ? info.name : null;
   return name || stockText(info) || info.purpose || null;
+}
+
+const grade = (n: number) => String(Math.round(n * 10) / 10);
+
+/** "N-P-K 24-0-0": a stock's label grade. */
+export const npkText = (npk: Npk) => `N-P-K ${grade(npk.n)}-${grade(npk.p)}-${grade(npk.k)}`;
+
+/** The N-P-K grade of the amounts mixed together, each stock weighted by its mL: 2 mL of 24-0-0 and
+    2 mL of 5-26-0 make 14.5-13-0. Null unless two or more stocks are dosed and each has a grade. */
+export function mixNpk(amounts: { ml: number; npk: Npk | null | undefined }[]): Npk | null {
+  const dosed = amounts.filter((a) => a.ml > 0);
+  if (dosed.length < 2 || dosed.some((a) => !a.npk)) return null;
+  const total = dosed.reduce((sum, a) => sum + a.ml, 0);
+  const part = (key: keyof Npk) => dosed.reduce((sum, a) => sum + a.ml * a.npk![key], 0) / total;
+  return { n: part("n"), p: part("p"), k: part("k") };
 }
 
 /** Everything nutrientText leaves out: the product and what it is dosed for. */

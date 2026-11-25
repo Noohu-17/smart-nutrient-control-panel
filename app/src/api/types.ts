@@ -244,6 +244,9 @@ export type DoseRequest = {
 /* ---------- POST /api/dose-requests/{id}/confirm (contract §11.3, states §8.1) ---------- */
 export type DoseConfirmed = { cmdId: string; state: "DISPATCHED" };
 
+/** A stock's N-P-K grade, % by weight: 24-0-0 is { n: 24, p: 0, k: 0 }. */
+export type Npk = { n: number; p: number; k: number };
+
 /* ---------- GET /api/zones/{zoneId}/dose-limits (contract §11.2, T1-37, T1-38) ---------- */
 /** One line's limits and what is left of its 24 h limit, for the dose form while typing, and what
     the line doses (nutrients.json, T1-38). */
@@ -255,6 +258,7 @@ export type DoseLineLimit = {
   strengthPct?: number | null;
   drum?: { id: string; volumeL: number } | null;
   purpose?: string | null;
+  npk?: Npk | null; // the N-P-K grade on the stock's label, % by weight
   pumpMlPerMin?: number | null;
   maxPerDoseMl: number;
   max24hMl: number;

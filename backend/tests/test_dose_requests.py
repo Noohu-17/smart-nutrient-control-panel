@@ -494,6 +494,18 @@ def test_a_zone_with_its_own_pump_rates_is_estimated_and_described_at_them(tmp_p
     }
 
 
+def test_dose_limits_give_each_stocks_npk_grade_where_the_pack_has_it(tmp_path, migrated_db):
+    """The label's N-P-K grade, for the dose form's stock details; null for a line without one."""
+    pack = write_dosing_pack(tmp_path / ORG)
+    nutrients = json.loads((pack / "nutrients.json").read_text(encoding="utf-8"))
+    nutrients["doseLines"]["A"]["npk"] = {"n": 24, "p": 0, "k": 0}
+    (pack / "nutrients.json").write_text(json.dumps(nutrients), encoding="utf-8")
+    seed(migrated_db, pack)
+    lines = limits(api_client(pack, migrated_db))
+    assert lines["A"]["npk"] == {"n": 24, "p": 0, "k": 0}
+    assert lines["B"]["npk"] is None
+
+
 def test_dose_limits_of_a_pack_that_doesnt_describe_its_lines_are_null(tmp_path, migrated_db):
     pack = write_dosing_pack(tmp_path / ORG)
     nutrients = json.loads((pack / "nutrients.json").read_text(encoding="utf-8"))
@@ -504,7 +516,7 @@ def test_dose_limits_of_a_pack_that_doesnt_describe_its_lines_are_null(tmp_path,
     (pack / "nutrients.json").write_text(json.dumps(nutrients), encoding="utf-8")
     seed(migrated_db, pack)
     line = limits(api_client(pack, migrated_db))["A"]
-    assert [line[key] for key in ("name", "compound", "strengthPct", "drum", "purpose")] == [None] * 5
+    assert [line[key] for key in ("name", "compound", "strengthPct", "drum", "purpose", "npk")] == [None] * 6
     assert line["pumpMlPerMin"] == 120  # hardware.json still gives the pump rate
 
 
