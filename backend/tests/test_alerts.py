@@ -13,6 +13,7 @@ from sqlalchemy import insert, select, update
 from test_dose_requests import ORG, SITE, handle, telemetry, write_dosing_pack
 from test_event import event
 from test_read_api import api_client
+from test_worker import zone_state
 
 from app.alerts import AlertRules
 from app.api.pack import SiteRef
@@ -187,6 +188,28 @@ def test_its_release_clears_it(api, worker):
         message="E-STOP released", systemAction="Zone 1 stays stopped", nextStep="Press Resume",
     ), EVENTS)
     assert only(api)["status"] == "CLEARED"
+
+
+def rebooted(**changes):
+    return event(
+        msgId=str(uuid.uuid4()), kind="REBOOTED", severity="WARNING", message="The Zone 1 controller restarted",
+        systemAction="All dosing and refill in Zone 1 are off; nothing was resumed",
+        nextStep="Review what happened, then press Resume in the app", detail={"reason": "POWER_ON"},
+    ) | changes
+
+
+def test_a_restart_stays_while_the_zone_is_stopped_and_clears_once_it_is_not(api, worker):
+    handle(worker, rebooted(), EVENTS)
+    handle(worker, zone_state(seq=11, stopped=True))
+    assert only(api)["status"] == "OPEN"  # waiting for Resume
+    handle(worker, zone_state(seq=12, stopped=False))  # Resume, or it came back running
+    assert only(api)["status"] == "CLEARED"
+
+
+def test_a_running_zone_doesnt_clear_another_zones_restart(api, worker):
+    handle(worker, rebooted(zone="Z1"), EVENTS)
+    handle(worker, zone_state(seq=11, stopped=False, zone="Z2", device="ZC2"), "farm/siet-ph1/zone/Z2/state")
+    assert only(api)["status"] == "OPEN"
 
 
 def test_an_info_event_on_its_own_raises_nothing(api, worker):

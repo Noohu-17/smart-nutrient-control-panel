@@ -458,7 +458,7 @@ Every event answers three questions (PRD rule 7): `message` (what happened), `sy
 | `PUMP_FAULT` (detail: `equipment`) | CRITICAL |
 | `CHILLER_FAULT` (detail: `equipment`) | CRITICAL |
 | `CLIMATE_MODE_REVERTED` (manual timer ended) | INFO |
-| `REBOOTED` (detail: `reason`) | WARNING |
+| `REBOOTED` (detail: `reason`); its alert clears once the controller's `ZONE_STATE` / `CLIMATE_STATE` says it is not stopped (Resume, or it came back running) | WARNING |
 
 ### 6.6 Command state, `CMD_STATE`
 

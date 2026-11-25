@@ -16,7 +16,9 @@ message:
 - **Events.** An EVENT (§6.5) that is CRITICAL or WARNING raises an alert with its own
   message, systemAction and nextStep (PRD rule 7). Its pair clears it: ESTOP_RELEASED clears
   ESTOP_PRESSED, LEAK_CLEARED clears LEAK_DETECTED, and so on; MODE_CHANGED back to REMOTE
-  clears MODE_CHANGED. Other INFO events raise nothing.
+  clears MODE_CHANGED. REBOOTED has no pair: it clears once the controller's ZONE_STATE or
+  CLIMATE_STATE says it isn't stopped (a person pressed Resume, or it came back running), so it
+  never asks for a Resume there is nothing to resume. Other INFO events raise nothing.
 - **Silence** (T1-34, the worker's sweep every few seconds, worker/silence.py). DEVICE_OFFLINE
   for a device that has been heard from at least once, once its last will has come or it has
   sent nothing for `events.DEVICE_OFFLINE.thresholdS` (§14's 3 minutes if the pack gives none),
@@ -45,7 +47,7 @@ from typing import TYPE_CHECKING, Any
 from sqlalchemy import Connection, delete, select, update
 from sqlalchemy.dialects.postgresql import insert
 
-from .contract import Envelope, Event, ZoneTelemetry
+from .contract import ClimateState, Envelope, Event, ZoneState, ZoneTelemetry
 from .db.models import Alert, PushOutbox
 from .timing import FRESH_FOR, OFFLINE_AFTER
 
@@ -399,6 +401,10 @@ def on_message(
     replay) and, for telemetry, the newest of its kind, so an old reading can't undo a new one."""
     if isinstance(message, Event):
         on_event(connection, org_id, message, now)
+    elif isinstance(message, ZoneState | ClimateState) and not message.stopped:
+        # the restart's "press Resume" is done, or was never needed (§8.3 rule 6)
+        where = message.zone if isinstance(message, ZoneState) else message.device
+        _clear(connection, org_id, message.site, f"REBOOTED:{where}", now)
     elif isinstance(message, ZoneTelemetry):
         for condition in zone_conditions(message, rules):
             judge(
