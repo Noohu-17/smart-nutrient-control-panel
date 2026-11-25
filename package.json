@@ -1,0 +1,13 @@
+{
+  "name": "smart-nutrient-control-panel",
+  "private": true,
+  "description": "Smart Nutrient Advisor: the control panel app (app/) with its back end, simulator and config packs. npm install, then npm run dev, runs the app on its fake API.",
+  "scripts": {
+    "postinstall": "npm --prefix app install",
+    "dev": "npm --prefix app run dev",
+    "build": "npm --prefix app run build",
+    "preview": "npm --prefix app run preview",
+    "test": "npm --prefix app test",
+    "lint": "npm --prefix app run lint"
+  }
+}

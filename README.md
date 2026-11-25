@@ -1,6 +1,10 @@
 # Smart Nutrient Advisor — Phase 2
 Remote nutrient dosing and climate monitoring for the Coimbatore polyhouse (2 NFT zones).
 
+## Run the control panel
+
+From the repo root: `npm install` (once; it installs `app/`), then `npm run dev` and open http://localhost:5173. It runs on the app's fake API, so no back end is needed. For the real back end, see `infra/readme.md` and run the app with `VITE_USE_MOCKS=false`.
+
 ## Folders
 - firmware/ — ESP32 controller code (zone + climate controllers)
 - backend/  — cloud API, MQTT broker config, database
