@@ -49,7 +49,7 @@ const USERS: FakeUser[] = [
     name: "Jack",
     email: "jack123@gmail.com",
     role: "OWNER",
-    password: "12345678",
+    password: "jk12345",
     twoFactor: true,
   },
   {
@@ -57,7 +57,7 @@ const USERS: FakeUser[] = [
     name: "Agronomist",
     email: "agronomist123@gmail.com",
     role: "AGRONOMIST",
-    password: "12345678",
+    password: "ag12345",
     twoFactor: true,
   },
   {
@@ -65,7 +65,7 @@ const USERS: FakeUser[] = [
     name: "Operator",
     email: "operator123@gmail.com",
     role: "OPERATOR",
-    password: "12345678",
+    password: "op12345",
     twoFactor: true,
   },
   {
@@ -73,7 +73,7 @@ const USERS: FakeUser[] = [
     name: "Viewer",
     email: "viewer123@gmail.com",
     role: "VIEWER",
-    password: "12345678",
+    password: "vw12345",
     twoFactor: true,
   },
   {
