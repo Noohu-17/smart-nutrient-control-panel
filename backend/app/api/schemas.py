@@ -8,7 +8,15 @@ dose lines or equipment IDs are plain dicts, because those keys come from the cl
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import UUID4, ConfigDict, Field, PlainSerializer, StrictBool, WithJsonSchema
+from pydantic import (
+    UUID4,
+    ConfigDict,
+    Field,
+    PlainSerializer,
+    StrictBool,
+    WithJsonSchema,
+    model_validator,
+)
 
 from ..contract import ContractModel
 from ..contract.envelope import Count, Number
@@ -371,11 +379,25 @@ class Drum(ContractModel):
 
 
 class Npk(ContractModel):
-    """A stock's N-P-K grade from its label, % by weight (nutrients.json npk)."""
+    """A stock's N-P-K grade, % by weight: the label's (nutrients.json npk), or as an Owner or
+    Agronomist set it (PUT /api/stocks/{line}/npk)."""
 
-    n: float
-    p: float
-    k: float
+    n: float = Field(ge=0, le=100)
+    p: float = Field(ge=0, le=100)
+    k: float = Field(ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _at_most_all_of_it(self) -> "Npk":
+        if self.n + self.p + self.k > 100:
+            raise ValueError("n + p + k can't be more than 100 %")
+        return self
+
+
+class StockNpk(ContractModel):
+    """PUT /api/stocks/{line}/npk's answer: the line and the grade it now has."""
+
+    line: str
+    npk: Npk
 
 
 class DoseLineLimit(ContractModel):

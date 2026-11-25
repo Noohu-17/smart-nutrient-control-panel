@@ -7,6 +7,7 @@ import { resetAlerts } from "../mocks/alerts";
 import { resetCommands } from "../mocks/commands";
 import { resetClimatePower } from "../mocks/data/climatePower";
 import { resetTelemetry } from "../mocks/data/telemetry";
+import { stockGrades } from "../mocks/data/zoneDetails";
 import { server } from "../mocks/node";
 import { resetOperations } from "../mocks/operations";
 import { resetPush } from "../mocks/push";
@@ -45,6 +46,7 @@ afterEach(() => {
   resetAlerts();
   resetOperations();
   resetPush();
+  stockGrades.clear();
 });
 
 afterAll(() => server.close());

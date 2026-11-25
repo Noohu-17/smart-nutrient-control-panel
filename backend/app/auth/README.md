@@ -68,6 +68,7 @@ The roles are §13's, checked on the server:
 | `POST /api/alerts/{alertId}/ack` | Owner, Agronomist, Operator |
 | `POST /api/sim/speed`, `/faults`, `/holds`, `/holds/release-all`, `DELETE /api/sim/holds/…` | Owner, Agronomist, Operator |
 | `POST /api/sim/reset` | Owner |
+| `PUT /api/stocks/{line}/npk` | Owner, Agronomist |
 | `GET/POST /api/users`, `PATCH /api/users/{id}`, `POST /api/users/{id}/invite` | Owner |
 
 ## Stop works while the database is down

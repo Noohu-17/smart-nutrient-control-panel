@@ -10,6 +10,7 @@ import { checkTitle, limitHint, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "..
 import { doseLineLabel, mixNpk, npkText, nutrientDetails, nutrientText } from "../../config/zoneText";
 import { DOSE_CARD } from "../zones/doseCard";
 import { CommandStatus } from "./CommandStatus";
+import { StockGradeEdit } from "./StockGrade";
 import { useStockShown } from "./stockShown";
 
 type Amounts = Record<string, string>;
@@ -27,14 +28,27 @@ const infoFor = (info: LineInfo, line: string) => info?.find((l) => l.line === l
 
 /** The short line naming a dose line's stock (nutrients.json, T2-30) and its label's N-P-K grade,
     the product and what it is for on hover; nothing if the pack doesn't say. */
-function NutrientNote({ info, id }: { info: DoseLineLimit | undefined; id?: string }) {
+function NutrientNote({
+  info,
+  id,
+  editable = false,
+}: {
+  info: DoseLineLimit | undefined;
+  id?: string;
+  /** the dose form's: Edit N-P-K for an Owner or Agronomist */
+  editable?: boolean;
+}) {
   const [shown] = useStockShown();
   const text = [nutrientText(info), info?.npk && npkText(info.npk)].filter(Boolean).join(" · ");
-  return text && shown ? (
-    <small className="nutrient-note" id={id} title={nutrientDetails(info)}>
-      {text}
-    </small>
-  ) : null;
+  if (!info || !text || !shown) return null;
+  return (
+    <>
+      <small className="nutrient-note" id={id} title={nutrientDetails(info)}>
+        {text}
+      </small>
+      {editable && <StockGradeEdit info={info} />}
+    </>
+  );
 }
 
 /** What the amounts make together: "This mix: N-P-K 14.5-13-0", once two stocks with a grade have
@@ -171,7 +185,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
                       {hint.text}
                     </small>
                   )}
-                  <NutrientNote info={info} id={aboutId} />
+                  <NutrientNote info={info} id={aboutId} editable />
                 </div>
               );
             })}

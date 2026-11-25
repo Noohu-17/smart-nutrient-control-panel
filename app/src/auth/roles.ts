@@ -9,7 +9,8 @@ export type Role = (typeof ROLES)[number];
 export const fromServerRole = (role: ServerRole) => (role.charAt(0) + role.slice(1).toLowerCase()) as Role;
 export const toServerRole = (role: Role) => role.toUpperCase() as ServerRole;
 
-export type Permission = "operate" | "ack" | "export" | "recipe" | "clearFault" | "sim" | "simReset";
+export type Permission =
+  "operate" | "ack" | "export" | "recipe" | "stockGrade" | "clearFault" | "sim" | "simReset";
 
 const STAFF: Role[] = ["Owner", "Agronomist", "Operator"];
 
@@ -18,6 +19,7 @@ export const CAN: Record<Permission, Role[]> = {
   ack: STAFF, // acknowledge alerts
   export: STAFF,
   recipe: ["Owner", "Agronomist"],
+  stockGrade: ["Owner", "Agronomist"], // a stock's N-P-K, like a recipe
   clearFault: ["Owner"],
   sim: STAFF, // playground: speed, failure drills, held values (§11.4)
   simReset: ["Owner"],
@@ -29,6 +31,7 @@ export const WHY: Record<Permission, string> = {
   ack: "Viewers can’t acknowledge alerts",
   export: "Viewers can’t export",
   recipe: "Only Owners and Agronomists change recipes",
+  stockGrade: "Only Owners and Agronomists change a stock’s N-P-K",
   clearFault: "Only Owners clear a latched fault",
   sim: "Viewers can’t change the simulated farm",
   simReset: "Only Owners reset the simulated farm",

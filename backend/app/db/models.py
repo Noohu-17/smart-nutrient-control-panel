@@ -525,3 +525,21 @@ class PushOutbox(Base):
     done_at: Mapped[datetime | None] = mapped_column(Timestamp)
     outcome: Mapped[str | None] = mapped_column(String(32))
     sent: Mapped[int | None]  # how many browsers took it
+
+
+class StockGrade(Base):
+    """A stock's N-P-K grade as an Owner or Agronomist set it in the app, over the pack's
+    nutrients.json npk (the label's), e.g. after a new product goes into drum A. One row per dose
+    line; who changed it is in the audit log (STOCK_NPK_CHANGED)."""
+
+    __tablename__ = "stock_grade"
+    __table_args__ = (_site_fk(),)
+
+    org_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    site_id: Mapped[str] = mapped_column(ID, primary_key=True)
+    line: Mapped[str] = mapped_column(String(16), primary_key=True)
+    n: Mapped[float]  # % by weight
+    p: Mapped[float]
+    k: Mapped[float]
+    updated_by: Mapped[str] = mapped_column(ID)  # user_id
+    updated_at: Mapped[datetime] = mapped_column(Timestamp)

@@ -13,11 +13,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, Path
-from sqlalchemy import Connection, insert
+from sqlalchemy import Connection, insert, select
+from sqlalchemy.dialects.postgresql import insert as upsert
 
 from ..auth import audit
-from ..auth.access import STAFF, Caller, allowed
-from ..db.models import DoseRequest
+from ..auth.access import AGRONOMIST, OWNER, STAFF, Caller, allowed
+from ..db.models import DoseRequest, StockGrade
 from ..errors import ApiError
 from . import queries
 from .dosing import DoseInputError, review, validate_lines
@@ -30,6 +31,8 @@ from .schemas import (
     DoseRequestBody,
     DoseReview,
     FarmZone,
+    Npk,
+    StockNpk,
     ZoneStatus,
 )
 
@@ -37,6 +40,9 @@ DAY = timedelta(hours=24)
 
 may_dose = allowed(*STAFF, why="Viewers can’t dose")  # §11.2: Owner, Agronomist, Operator
 MayDose = Annotated[Caller, Depends(may_dose)]
+# the stock's N-P-K is the agronomy's, as a recipe is (§13)
+may_grade = allowed(OWNER, AGRONOMIST, why="Only Owners and Agronomists change a stock's N-P-K")
+MayGrade = Annotated[Caller, Depends(may_grade)]
 
 
 def _zone_and_dosing(pack: Pack, zone_id: str) -> tuple[FarmZone, ZoneDosing]:
@@ -137,12 +143,13 @@ def get_dose_limits(
     with _database(engine) as connection:
         status = _status(connection, site, zone)
         dosed = _dosed_24h(connection, site, zone, dosing, status, datetime.now(UTC))
+        grades = _grades(connection, site)
     return DoseLimits(
         zone=zone.id,
         lines=[
             DoseLineLimit(
                 line=line,
-                **_about(dosing, line),
+                **_about(dosing, line, grades.get(line)),
                 max_per_dose_ml=per_dose.get(line, 0),
                 max24h_ml=per_day.get(line, 0),
                 dosed24h_ml=dosed.get(line, 0),
@@ -153,8 +160,18 @@ def get_dose_limits(
     )
 
 
-def _about(dosing: ZoneDosing, line: str) -> dict[str, Any]:
-    """What the line doses and its pump rate (T1-38); null for what the pack doesn't say."""
+def _grades(connection: Connection, site: SiteRef) -> dict[str, Npk]:
+    """The N-P-K grades set in the app, by dose line (stock_grade)."""
+    rows = connection.execute(
+        select(StockGrade.line, StockGrade.n, StockGrade.p, StockGrade.k)
+        .where(StockGrade.org_id == site.org_id, StockGrade.site_id == site.site_id)
+    )
+    return {row.line: Npk(n=row.n, p=row.p, k=row.k) for row in rows}
+
+
+def _about(dosing: ZoneDosing, line: str, grade: Npk | None = None) -> dict[str, Any]:
+    """What the line doses and its pump rate (T1-38); null for what the pack doesn't say. `grade`,
+    the N-P-K set in the app, stands over the pack's."""
     stock = dosing.stock.get(line)
     return {
         "name": stock.name if stock else None,
@@ -162,12 +179,50 @@ def _about(dosing: ZoneDosing, line: str) -> dict[str, Any]:
         "strength_pct": stock.strength_pct if stock else None,
         "drum": stock.drum if stock else None,
         "purpose": stock.purpose if stock else None,
-        "npk": stock.npk if stock else None,
+        "npk": grade or (stock.npk if stock else None),
         "pump_ml_per_min": dosing.pump_ml_per_min.get(line),
     }
 
 
+def set_stock_npk(
+    line: Annotated[str, Path(max_length=16)],
+    body: Npk,
+    pack: PackDep,
+    engine: EngineDep,
+    site: SiteDep,
+    caller: MayGrade,
+) -> StockNpk:
+    """Set a stock's N-P-K grade, e.g. after a new product goes into its drum: Owner and Agronomist
+    only; 404 for a line no zone doses. It stands over the pack's npk for every zone's dose form."""
+    if line not in {name for zone in read_farm(pack).zones for name in zone.dose_lines}:
+        raise ApiError(404, "NOT_FOUND", f"No zone doses a line {line}")
+    with _database(engine) as connection:
+        before = _grades(connection, site).get(line)
+        if before is None:
+            stock = read_dosing(pack, read_farm(pack).zones[0].id).stock.get(line)
+            before = stock.npk if stock else None
+        values = {"n": body.n, "p": body.p, "k": body.k, "updated_by": caller.user_id,
+                  "updated_at": datetime.now(UTC)}
+        connection.execute(
+            upsert(StockGrade)
+            .values(org_id=site.org_id, site_id=site.site_id, line=line, **values)
+            .on_conflict_do_update(index_elements=["org_id", "site_id", "line"], set_=values)
+        )
+        audit.write(connection, site, caller.user_id, caller.role, "STOCK_NPK_CHANGED", line,
+                    {"from": before.model_dump() if before else None, "to": body.model_dump()})
+        connection.commit()
+    return StockNpk(line=line, npk=body)
+
+
 def add_dose_api(app: FastAPI) -> None:
+    app.add_api_route(
+        "/api/stocks/{line}/npk",
+        set_stock_npk,
+        methods=["PUT"],
+        response_model=StockNpk,
+        responses=_errors(401, 403, 404, 422, 503),
+        tags=["dosing"],
+    )
     app.add_api_route(
         "/api/dose-requests",
         create_dose_request,

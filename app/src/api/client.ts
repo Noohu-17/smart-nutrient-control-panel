@@ -83,6 +83,14 @@ export const postJson = <T>(path: string, body?: unknown, headers: Record<string
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
+/** PUT with a JSON body: a setting replaced whole (PUT /stocks/{line}/npk). */
+export const putJson = <T>(path: string, body: unknown) =>
+  send<T>(path, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...writeHeaders() },
+    body: JSON.stringify(body),
+  });
+
 /** DELETE, with a JSON body when the route takes one (DELETE /push/subscriptions { endpoint }). */
 export const deleteJson = <T>(path: string, body?: unknown) =>
   send<T>(

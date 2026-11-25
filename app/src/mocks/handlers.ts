@@ -7,6 +7,7 @@ import type {
   DoseRequest,
   DoseRequestBody,
   Farm,
+  Npk,
   PowerStatus,
   SimFaultBody,
   SimHold,
@@ -27,7 +28,7 @@ import { buildClimateStatus, buildPowerStatus } from "./data/climatePower";
 import { zoneDosing } from "./data/dosing";
 import { farmLayout } from "./data/layout";
 import { buildZoneStatus, findZone } from "./data/telemetry";
-import { doseLimits } from "./data/zoneDetails";
+import { doseLimits, stockGrades } from "./data/zoneDetails";
 import { sensorCatalogue } from "./data/sensors";
 import { DoseInputError, runDoseChecks, validateLines } from "./dosing";
 import { ackEntry, listOperations, recordOperation } from "./operations";
@@ -301,6 +302,28 @@ export const handlers = [
     const dosing = zoneDosing(zoneId);
     if (!zone || !dosing) return apiError(404, "NOT_FOUND", `There is no zone ${zoneId}`);
     return HttpResponse.json(doseLimits(zone, dosing));
+  }),
+
+  // PUT /api/stocks/:line/npk · a stock's N-P-K grade, Owner and Agronomist (the gate checks the role)
+  http.put("/api/stocks/:line/npk", async ({ params, request }) => {
+    await networkDelay();
+    const line = String(params.line);
+    if (!["Z1", "Z2"].some((z) => findZone(z)?.doseLines.includes(line)))
+      return apiError(404, "NOT_FOUND", `No zone doses a line ${line}`);
+    const body = (await request.json()) as Partial<Npk>;
+    const parts = [body.n, body.p, body.k];
+    if (
+      parts.some((v) => typeof v !== "number" || v < 0 || v > 100) ||
+      parts.reduce((a, v) => a! + v!, 0)! > 100
+    )
+      return apiError(
+        422,
+        "VALIDATION_ERROR",
+        "n, p and k are each a % from 0 to 100, together no more than 100",
+      );
+    const npk = { n: body.n!, p: body.p!, k: body.k! };
+    stockGrades.set(line, npk);
+    return HttpResponse.json({ line, npk });
   }),
 
   // POST /api/dose-requests · run the safety checks; nothing is sent to the farm (contract §11.3)

@@ -2,7 +2,7 @@
 // built as the real one builds them (backend/app/api/pack.py, T1-38).
 // recipes.json and nutrients.json are copies of config/clients/client_A's; handlers.test.ts fails if
 // they drift apart. client_A's io_map.json puts no controller on the rig, so every link is MQTT.
-import type { DoseLimits, FarmZone, ZoneCrop } from "../../api/types";
+import type { DoseLimits, FarmZone, Npk, ZoneCrop } from "../../api/types";
 import { zoneProfile } from "../../config/zoneText";
 import type { ZoneDosing } from "./dosing";
 import nutrientsJson from "./nutrients.json";
@@ -39,6 +39,10 @@ export function zoneDetails(zone: FarmZone) {
   return { profile: { ...zoneProfile(zone), tdsPpmPerMsCm: null }, crop };
 }
 
+/** The N-P-K grades set with PUT /api/stocks/{line}/npk since the page loaded; client_A's stocks
+    have none of their own. */
+export const stockGrades = new Map<string, Npk>();
+
 /** GET /api/zones/{zoneId}/dose-limits (contract §11.2): the limits the fake review checks, and
     what each line doses. */
 export function doseLimits(zone: FarmZone, dosing: ZoneDosing): DoseLimits {
@@ -55,7 +59,7 @@ export function doseLimits(zone: FarmZone, dosing: ZoneDosing): DoseLimits {
         strengthPct: stock.strengthPct ?? null,
         drum: stock.drum ?? null,
         purpose: stock.purpose ?? null,
-        npk: null, // client_A's stocks have no label grade
+        npk: stockGrades.get(line) ?? null, // client_A's stocks have no label grade
         pumpMlPerMin: dosing.pumpMlPerMin[line] ?? null,
         maxPerDoseMl: dosing.limits.maxPerDoseMl[line] ?? 0,
         max24hMl,

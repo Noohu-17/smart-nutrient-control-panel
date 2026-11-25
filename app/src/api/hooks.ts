@@ -1,11 +1,12 @@
 // src/api/hooks.ts · TanStack Query hooks. Screens call these, never fetch.
 import { useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ApiError, deleteJson, getJson, postJson } from "./client";
+import { ApiError, deleteJson, getJson, postJson, putJson } from "./client";
 import { isFinalCommand, isMixing } from "../config/dosing";
 import type {
   ClimateStatus,
   Command,
   DoseConfirmed,
+  Npk,
   DoseLimits,
   DoseRequest,
   DoseRequestBody,
@@ -171,6 +172,16 @@ export function usePower() {
 
 /** GET /api/zones/{zoneId}/dose-limits · each line's limits and what is left today (T1-37), so the
     dose form can warn while typing. As often as the zone, since a finished dose changes it. */
+/** PUT /api/stocks/{line}/npk: a stock's N-P-K grade, for every zone's dose form. */
+export function useSetStockNpk() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ line, npk }: { line: string; npk: Npk }) =>
+      putJson<{ line: string; npk: Npk }>(`/stocks/${encodeURIComponent(line)}/npk`, npk),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["dose-limits"] }),
+  });
+}
+
 export function useDoseLimits(zoneId: string) {
   const pollMs = usePollMs(ONE_MINUTE);
   return useQuery({

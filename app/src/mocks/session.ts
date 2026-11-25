@@ -245,6 +245,9 @@ const OWNER_ONLY: [RegExp, string][] = [
   [/^\/api\/sim\/reset$/, "Only an Owner can reset the simulated farm"],
   [/^\/api\/users(\/|$)/, "Only an Owner manages users"],
 ];
+const OWNER_AND_AGRONOMIST: [RegExp, string][] = [
+  [/^\/api\/stocks\//, "Only Owners and Agronomists change a stock's N-P-K"],
+];
 // Stop: every role (§13). Web Push: everyone signed in (§11.2), demo users get 403 from the route itself
 const ANY_ROLE = new Set([
   "/api/stop",
@@ -275,6 +278,9 @@ export function gate(request: Request) {
   if (ANY_ROLE.has(path)) return undefined;
   const ownerOnly = OWNER_ONLY.find(([pattern]) => pattern.test(path));
   if (ownerOnly && session.user.role !== "OWNER") return apiError(403, "FORBIDDEN", ownerOnly[1]);
+  const agronomy = OWNER_AND_AGRONOMIST.find(([pattern]) => pattern.test(path));
+  if (agronomy && !["OWNER", "AGRONOMIST"].includes(session.user.role))
+    return apiError(403, "FORBIDDEN", agronomy[1]);
   if (session.user.role === "VIEWER") return apiError(403, "FORBIDDEN", viewerReason(path));
   return undefined;
 }

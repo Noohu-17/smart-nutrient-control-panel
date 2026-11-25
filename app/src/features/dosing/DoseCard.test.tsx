@@ -19,6 +19,54 @@ async function enter(amounts: Record<string, string>, { role = "Operator" as Rol
 const checks = () => within(screen.getByRole("list", { name: "Safety checks" }));
 const startButton = () => screen.getByRole("button", { name: "Start dose" });
 
+describe("a stock's N-P-K", () => {
+  it("an Agronomist adds it, then edits it; the dose form shows the saved grade", async () => {
+    const { user, card } = await enter({}, { role: "Agronomist" });
+    await user.click(await card.findByRole("button", { name: "Edit Stock A's N-P-K" }));
+    const grade = within(card.getByRole("group", { name: "Stock A's N-P-K" }));
+    await user.type(grade.getByLabelText("N %"), "15.5");
+    await user.type(grade.getByLabelText("P %"), "0");
+    await user.type(grade.getByLabelText("K %"), "0");
+    await user.click(grade.getByRole("button", { name: "Save" }));
+    expect(await card.findByText(/N-P-K 15.5-0-0/)).toBeInTheDocument();
+    expect(card.queryByRole("group", { name: "Stock A's N-P-K" })).not.toBeInTheDocument();
+
+    await user.click(card.getByRole("button", { name: "Edit Stock A's N-P-K" }));
+    const again = within(card.getByRole("group", { name: "Stock A's N-P-K" }));
+    expect(again.getByLabelText("N %")).toHaveValue(15.5); // starts from the saved grade
+    await user.clear(again.getByLabelText("N %"));
+    await user.type(again.getByLabelText("N %"), "12{Enter}"); // Enter saves, not the dose form
+    expect(await card.findByText(/N-P-K 12-0-0/)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Review safety checks" })).not.toBeInTheDocument();
+  });
+
+  it("won't save a grade over 100 %, and Cancel keeps the old one", async () => {
+    const { user, card } = await enter({}, { role: "Owner" });
+    await user.click(await card.findByRole("button", { name: "Edit Stock B's N-P-K" }));
+    const grade = within(card.getByRole("group", { name: "Stock B's N-P-K" }));
+    await user.type(grade.getByLabelText("N %"), "60");
+    await user.type(grade.getByLabelText("P %"), "30");
+    await user.type(grade.getByLabelText("K %"), "20");
+    expect(grade.getByText("Together they can't be more than 100 %")).toBeInTheDocument();
+    expect(grade.getByRole("button", { name: "Save" })).toBeDisabled();
+    await user.click(grade.getByRole("button", { name: "Cancel" }));
+    expect(card.queryByText(/N-P-K d/)).not.toBeInTheDocument(); // still none
+  });
+
+  it("has no N-P-K to set for the acid line", async () => {
+    const { card } = await enter({}, { role: "Owner" });
+    await card.findByRole("button", { name: "Edit Stock A's N-P-K" });
+    expect(card.getByRole("button", { name: "Edit Stock B's N-P-K" })).toBeInTheDocument();
+    expect(card.queryByRole("button", { name: "Edit Acid's N-P-K" })).not.toBeInTheDocument();
+  });
+
+  it.each(["Operator", "Viewer"] as Role[])("a %s sees the grade but can't edit it", async (role) => {
+    const { card } = await enter({}, { role });
+    await card.findByText(/Calcium nitrate/);
+    expect(card.queryByRole("button", { name: /N-P-K/ })).not.toBeInTheDocument();
+  });
+});
+
 describe("Manual dose and review", () => {
   it("shows one amount field per dosing line in the zone's config", async () => {
     server.use(
