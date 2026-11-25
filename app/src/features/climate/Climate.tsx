@@ -3,6 +3,8 @@ import { EmptyState } from "../../components/EmptyState";
 import { ReadingCard } from "../../components/ReadingCard";
 import { RoleButton } from "../../components/RoleButton";
 import { AIR_READINGS, airPositionSpec, ELEC_ROOM_READING } from "../../config/readings";
+import { ZoneSourceChip } from "../zones/ZoneLive";
+import { climateSource, hasClimateController } from "./climateText";
 
 /** Climate page: air inside and outside, each air sensor position and the electrical room (contract §11.2).
     While the controller is offline its last values show grey, never as the air now. */
@@ -15,7 +17,13 @@ export function Climate() {
   return (
     <>
       <div className="phead">
-        <h1>Climate</h1>
+        <div className="title-row">
+          <h1>Climate</h1>
+          {/* layout climate.source: the simulator may play the climate on a real farm (DM-2) */}
+          {farm.data && hasClimateController(farm.data) && (
+            <ZoneSourceChip source={climateSource(farm.data)} />
+          )}
+        </div>
         <div className="actions">
           <RoleButton perm="operate">Control equipment</RoleButton>
         </div>

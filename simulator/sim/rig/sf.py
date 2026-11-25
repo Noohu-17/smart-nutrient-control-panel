@@ -86,7 +86,9 @@ def switch_off_command(*, command_id: str, target: str, relays: list[str], issue
 
 
 class Repeats:
-    """QoS 1 can deliver twice; (gateway, boot, schema, seq) is unique per message (CLOUD.md 1)."""
+    """QoS 1 can deliver twice; (gateway, boot, schema, seq) is unique per message (CLOUD.md 1),
+    except that each zone's sf/zone updates count their own seq (zone 1 at 42 while zone 2 is at
+    17), so the zone is part of the key too: zone 2's update 42 is not a repeat of zone 1's."""
 
     def __init__(self, size: int = 1024):
         self._seen: set[tuple[Any, ...]] = set()
@@ -97,6 +99,7 @@ class Repeats:
         key = tuple(document.get(k) for k in ("gateway", "boot", "schema", "seq"))
         if None in key:
             return False
+        key += (document.get("zone"),)  # None for a document about no one zone
         if key in self._seen:
             return True
         self._seen.add(key)

@@ -21,8 +21,9 @@ docker compose -f infra/docker-compose.dev.yml --profile rig up -d zone-controll
 A zone on the rig is `LIVE` in `layout.json` (`source`, contract 2.4; the default on a real
 farm): the service refuses a `SIMULATED` one, and the simulator never plays a live zone's
 controller, so the two can't both be ZC1. With no rig yet, start the stand-in too:
-`python -m sim.rig.fake --interval 10` (or `--profile fake-rig`). It publishes what gateway 1.0.0
-publishes and obeys `dose`, `switch` and `estop`; `--time-scale 10` runs doses ten times faster.
+`python -m sim.rig.fake --zones 1 2 --interval 10` (or `--profile fake-rig`); `--zones 1 2` plays
+both rig zones, as client_B puts Zone B on rig zone 2. It publishes what gateway 1.0.0 publishes
+and obeys `dose`, `switch` and `estop`; `--time-scale 10` runs doses ten times faster.
 With a pack that puts no zone on the rig (client_A), the service says so once and exits cleanly,
 so Compose (`restart: on-failure`) leaves it stopped.
 

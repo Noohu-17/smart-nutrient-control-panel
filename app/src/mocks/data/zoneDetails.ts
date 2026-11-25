@@ -23,16 +23,20 @@ const APPLIED = recipesJson.zones as Record<string, Applied>;
 /** GET /api/zones/{zoneId} `profile` and `crop` (contract §11.2). */
 export function zoneDetails(zone: FarmZone) {
   const applied = APPLIED[zone.id];
+  const recipe = applied && recipesJson.crops.find((c) => c.id === applied.crop);
+  const stage = recipe?.stages.find((s) => s.id === applied.stage);
   const crop: ZoneCrop | null = applied
     ? {
         crop: applied.crop,
-        name: recipesJson.crops.find((c) => c.id === applied.crop)?.name ?? null,
+        name: recipe?.name ?? null,
         variety: applied.variety ?? null,
         stage: applied.stage,
         plantedOn: applied.plantedOn ?? null,
+        ecTarget: stage?.ecTarget ?? null,
+        phTarget: stage?.phTarget ?? null,
       }
     : null;
-  return { profile: zoneProfile(zone), crop };
+  return { profile: { ...zoneProfile(zone), tdsPpmPerMsCm: null }, crop };
 }
 
 /** GET /api/zones/{zoneId}/dose-limits (contract §11.2): the limits the fake review checks, and

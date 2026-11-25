@@ -222,8 +222,15 @@ class ZoneProfile(ContractModel):
     sensors: dict[str, bool]  # each sensor, fitted (true) or not
     controller: str
     link: str  # how the controller reaches the back end: MQTT, or SF_GATEWAY on the rig (io_map.json)
+    # TDS ppm per mS/cm of the controller's probe (io_map.json); None when it reports EC itself
+    tds_ppm_per_ms_cm: float | None = None
     dose_lines: list[str]
     notes: str | None
+
+
+class TargetRange(ContractModel):
+    min: float
+    max: float
 
 
 class ZoneCrop(ContractModel):
@@ -234,6 +241,9 @@ class ZoneCrop(ContractModel):
     variety: str | None
     stage: str
     planted_on: date | None  # the farm's own calendar day, YYYY-MM-DD
+    # the stage's targets (recipes.json crops[].stages[]); None if the pack has no such stage
+    ec_target: TargetRange | None = None
+    ph_target: TargetRange | None = None
 
 
 class ZoneStatus(ContractModel):

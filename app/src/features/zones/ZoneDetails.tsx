@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { useFarm } from "../../api/hooks";
-import type { FarmZone } from "../../api/types";
+import { useDoseLimits, useFarm } from "../../api/hooks";
+import type { DoseLimits, FarmZone } from "../../api/types";
 import {
   cropDayText,
   cropName,
@@ -24,6 +24,16 @@ function Row({ term, children }: { term: string; children: ReactNode }) {
   );
 }
 
+/** Each dose line's stock drum (nutrients.json, from GET dose-limits): "N, P, K · 10 L each" when
+    they are all one size, else each line's own. Null when no line names its drum. */
+function drumsText(lines: DoseLimits["lines"]) {
+  const drums = lines.filter((l) => l.drum).map((l) => ({ line: l.line, litres: l.drum!.volumeL }));
+  if (!drums.length) return null;
+  if (drums.every((d) => d.litres === drums[0].litres))
+    return `${drums.map((d) => d.line).join(", ")} · ${drums[0].litres} L each`;
+  return drums.map((d) => `${d.line} ${d.litres} L`).join(" · ");
+}
+
 /** What the zone is and grows, from the config pack (T1-38, T2-30). Rows the pack leaves out are
     left out here too. */
 export function ZoneDetails({ zone }: { zone: FarmZone }) {
@@ -35,6 +45,7 @@ export function ZoneDetails({ zone }: { zone: FarmZone }) {
   const fitted = sensors.filter(([, on]) => on).map(([name]) => sensorName(name));
   const notFitted = sensors.filter(([, on]) => !on).map(([name]) => sensorName(name));
   const day = crop ? cropDayText(crop, farm.data?.timezone ?? "UTC", new Date()) : null;
+  const drums = drumsText(useDoseLimits(zone.id).data?.lines ?? []);
 
   return (
     <section className="zone-card" aria-labelledby="details-title">
@@ -73,6 +84,7 @@ export function ZoneDetails({ zone }: { zone: FarmZone }) {
         <Row term="Tank">
           {profile.tank.id} · {tankDetail(profile.tank)}
         </Row>
+        {drums && <Row term="Drums">{drums}</Row>}
         {sensors.length > 0 && (
           <Row term="Sensors fitted">
             {fitted.length ? fitted.join(", ") : "None"}

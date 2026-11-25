@@ -203,7 +203,8 @@ services:
   fake-rig:
     build: ../simulator
     profiles: [fake-rig]
-    command: ["python", "-m", "sim.rig.fake", "--interval", "10"]
+    # both rig zones: client_B puts ZC1 on rig zone 1 and ZC2 on rig zone 2 (io_map.json rigZone)
+    command: ["python", "-m", "sim.rig.fake", "--zones", "1", "2", "--interval", "10"]
     environment:
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"

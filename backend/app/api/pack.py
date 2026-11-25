@@ -98,7 +98,8 @@ def zone_sources(source: PackLike) -> dict[str, str]:
 
 def _profile(zone: FarmZone, links: dict[str, Any]) -> ZoneProfile:
     units = zone.growing_units or []
-    link = (links.get(zone.controller) or {}).get("link") or DIRECT_LINK
+    controller = links.get(zone.controller) or {}
+    link = controller.get("link") or DIRECT_LINK
     return ZoneProfile(
         name=zone.name,
         growing_system=zone.growing_system,
@@ -110,6 +111,7 @@ def _profile(zone: FarmZone, links: dict[str, Any]) -> ZoneProfile:
         sensors=zone.sensors or {},
         controller=zone.controller,
         link=link,
+        tds_ppm_per_ms_cm=controller.get("tdsPpmPerMsCm"),
         dose_lines=zone.dose_lines,
         notes=zone.notes,
     )
@@ -120,12 +122,15 @@ def _crop(recipes: dict[str, Any], zone_id: str) -> ZoneCrop | None:
     if applied is None:
         return None
     crop = next((c for c in recipes.get("crops", []) if c.get("id") == applied["crop"]), {})
+    stage = next((s for s in crop.get("stages", []) if s.get("id") == applied["stage"]), {})
     return ZoneCrop(
         crop=applied["crop"],
         name=crop.get("name"),
         variety=applied.get("variety"),
         stage=applied["stage"],
         planted_on=applied.get("plantedOn"),
+        ec_target=stage.get("ecTarget"),
+        ph_target=stage.get("phTarget"),
     )
 
 

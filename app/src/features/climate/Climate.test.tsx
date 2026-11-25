@@ -1,5 +1,5 @@
 // T2-15 done-when: the Climate page shows fake data
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { renderAt } from "../../test/render";
 
@@ -14,6 +14,21 @@ describe("Climate page on the fake API", () => {
     // positions come from layout.climate.airSensors
     for (const name of ["Pad end", "Middle", "Fan end"])
       expect(await screen.findByRole("group", { name })).toBeInTheDocument();
+  });
+
+  it("says who plays the climate: Simulated, or Live on a real farm", async () => {
+    renderAt("/climate");
+    const title = (await screen.findByRole("heading", { level: 1, name: "Climate" })).parentElement!;
+    expect(await within(title).findByText("Simulated")).toBeInTheDocument();
+  });
+
+  it.each(["client-b", "no-playground"] as const)("labels the climate on the %s scenario", async (mock) => {
+    window.history.replaceState(null, "", `/climate?mock=${mock}`);
+    renderAt("/climate");
+    const title = (await screen.findByRole("heading", { level: 1, name: "Climate" })).parentElement!;
+    expect(await within(title).findByText(mock === "client-b" ? "Simulated" : "Live")).toBeInTheDocument();
+    window.history.replaceState(null, "", "/");
+    window.sessionStorage.clear();
   });
 
   it("shows every value as old while the climate controller is offline", async () => {

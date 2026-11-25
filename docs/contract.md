@@ -976,10 +976,11 @@ The site always keeps an active Owner: turning off the last one, or giving them 
     "sensors": { "ec": true, "ph": true, "solTemp": true, "reservoirLevel": true, "circFlow": true, "dayTankLevel": true, "leak": true, "dissolvedOxygen": false },
     "controller": "ZC2",
     "link": "MQTT",
+    "tdsPpmPerMsCm": null,
     "doseLines": ["A", "B", "ACID"],
     "notes": ""
   },
-  "crop": { "crop": "BASIL", "name": "Basil", "variety": "Genovese", "stage": "SEEDLING", "plantedOn": "2026-11-08" }
+  "crop": { "crop": "BASIL", "name": "Basil", "variety": "Genovese", "stage": "SEEDLING", "plantedOn": "2026-11-08", "ecTarget": { "min": 1.0, "max": 1.4 }, "phTarget": { "min": 5.8, "max": 6.4 } }
 }
 ```
 
@@ -993,8 +994,8 @@ The site always keeps an active Owner: turning off the last one, or giving them 
 | `quality` | As sent, except that a value older than the fresh limit (section 14), or from a controller that is offline, is `STALE` instead of `OK`. `FAULT` and `OUT_OF_RANGE` stay as they are. |
 | `equipment`, `mode`, `estop`, `stopped`, `operation`, `latches`, `configVersion` | The latest `ZONE_STATE` (6.8), with its `outputs` under the name `equipment`. |
 | `leak`, `activeCmdId` | The latest `ZONE_TELEMETRY` (6.1). |
-| `profile` | What the zone is, from the config pack, never from the farm (T1-38): the layout zone's `name`, `growingSystem`, `growingUnits`, `size`, `position`, `sensors`, `controller`, `doseLines` and `notes`; `tank`, its `reservoir`; `plantSites`, every unit's plant sites added up; `link`, the controller's link in `io_map.json` (`MQTT` unless it names another). Fields the pack leaves out are `null`. |
-| `crop` | The zone's entry in `recipes.json` `zones`: `crop` and `stage`, the crop's `name`, `variety` and `plantedOn`. `null` when no recipe is applied to the zone. |
+| `profile` | What the zone is, from the config pack, never from the farm (T1-38): the layout zone's `name`, `growingSystem`, `growingUnits`, `size`, `position`, `sensors`, `controller`, `doseLines` and `notes`; `tank`, its `reservoir`; `plantSites`, every unit's plant sites added up; `link`, the controller's link in `io_map.json` (`MQTT` unless it names another); `tdsPpmPerMsCm`, the controller's TDS scale in `io_map.json` (ppm per mS/cm), `null` for a controller that reports EC itself. Fields the pack leaves out are `null`. |
+| `crop` | The zone's entry in `recipes.json` `zones`: `crop` and `stage`, the crop's `name`, `variety` and `plantedOn`; `ecTarget` and `phTarget`, `{ min, max }` from the stage in `recipes.json` `crops`, `null` if the crop has no such stage. `null` when no recipe is applied to the zone. |
 
 A zone that has never reported also answers `200`: `online` is `false`; `lastSeen`, `ts`, every reading, `mode`, `estop`, `leak`, `stopped`, `activeCmdId`, `operation` and `configVersion` are `null`; `quality` and `equipment` are `{}`; `latches` is `[]`. The state is unknown, so start commands are refused (8.3 rule 7).
 
@@ -1527,6 +1528,7 @@ Role-limited controls are **shown disabled with a lock icon and a one-line reaso
 | v1.0, per-zone pump rates | `hardware.json` (2.5): a zone whose pumps run at their own rate has `pumps.zones.<zone>.doseLines.<line>.flowMlPerS`, which its lines take instead of `pumps.doseLines.<line>.flowMlPerS`; a zone without it keeps the shared rates, so no pack changes unless it adds one. The dose review's `estimate.durationMin`, `pumpMlPerMin` in `GET /zones/{zoneId}/dose-limits` (11.2), the simulator's pumps and the rig's dose times use the zone's rate. client_B's Zone B (`ZC2`) runs on the rig's Zone 2 at 1 L/min (T1-31). MQTT messages don't change, so they keep `"v": 1` (16). | Track 1 |
 | v1.0, simulated climate | `climate.source` in `layout.json` (2.4), `LIVE` or `SIMULATED`, with the zones' default; always in `GET /farm` (11.2). The simulator plays a simulated climate controller (and the power monitor) even when every zone is live, and builds no model for a live zone; `simulator.json` `model.air.dailyCycle` moves the simulated air through the day. client_B's climate is simulated until it has hardware (DM-2). MQTT messages don't change, so they keep `"v": 1` (16). | Track 4 |
 | v1.0, sensors by farm type | `sensors.json` (2.5, optional): the sensor catalogue per farm type, from the "Sensors by farm type" sheet; `GET /sensors` (11.2) answers it (DM-3). MQTT messages don't change, so they keep `"v": 1` (16). | Track 2 |
+| v1.0, crop targets and tank size | The zone answer (11.2): `crop.ecTarget` and `crop.phTarget`, the stage's targets, and `profile.tdsPpmPerMsCm`, the controller's TDS scale, so the app shows the targets in mS/cm and ppm. The dose review (11.3) projects EC and pH on the tank's reported litres, never more than its `volumeL` (or `usableL`). MQTT messages don't change, so they keep `"v": 1` (16). | Track 2 |
 
 ### v1.0 section review
 

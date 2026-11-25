@@ -22,6 +22,10 @@ const zoneById = (id: string) => zones.find((z) => z.id === id)!;
 type Applied = { crop: string; variety: string; stage: string; plantedOn: string };
 type Line = "N" | "P" | "K";
 
+/** The applied crop's stage in recipes.json, with its EC and pH targets. */
+const stageOf = (applied: Applied) =>
+  recipes.crops.find((c) => c.id === applied.crop)?.stages.find((s) => s.id === applied.stage);
+
 /** GET /api/zones/{zoneId}: a zone that hasn't reported yet (§11.2), with its profile and crop. */
 function zoneAnswer(zone: FarmZone): ZoneStatus {
   const links = ioMap.controllers as Record<string, { link?: string }>;
@@ -54,10 +58,17 @@ function zoneAnswer(zone: FarmZone): ZoneStatus {
     operation: null,
     latches: [],
     configVersion: null,
-    profile: { ...zoneProfile(zone), link: links[zone.controller]?.link ?? "MQTT" },
+    profile: {
+      ...zoneProfile(zone),
+      link: links[zone.controller]?.link ?? "MQTT",
+      tdsPpmPerMsCm: (ioMap.controllers as Record<string, { tdsPpmPerMsCm?: number }>)[zone.controller]
+        ?.tdsPpmPerMsCm,
+    },
     crop: applied && {
       ...applied,
       name: recipes.crops.find((c) => c.id === applied.crop)!.name,
+      ecTarget: stageOf(applied)?.ecTarget,
+      phTarget: stageOf(applied)?.phTarget,
     },
   };
 }
@@ -164,11 +175,20 @@ describe("client_B with the real back end's answers", () => {
     expect(row("Zone size")).toBe("3 × 4 m");
     expect(row("Position")).toBe("First NFT bay from the door");
     expect(row("Tank")).toBe("R1 · 90 L");
+    expect(await panel.findByText("N, P, K · 10 L each")).toBeInTheDocument(); // the drums
     expect(row("Sensors fitted")).toBe(
       "EC, pH, Solution temp, Tank levelNot fitted: Circulation flow, Day-tank level, Leak, Dissolved oxygen",
     );
     expect(row("Controller")).toBe("ZC1 · Prototype rig gateway");
     expect(row("Notes")).toMatch(/^Runs on the prototype rig's Zone 1/);
+  });
+
+  it("shows Zone A's EC and pH targets, EC also in ppm on the rig's TDS scale", async () => {
+    renderAt("/zone/Z1");
+    const ec = await screen.findByText("Target 0.80–1.20 (400–600 ppm)");
+    expect(ec.closest("[role=group]")).toHaveAccessibleName("EC");
+    const ph = screen.getByText("Target 5.80–6.20");
+    expect(ph.closest("[role=group]")).toHaveAccessibleName("pH");
   });
 
   it("shows Zone B on the rig's Zone 2 (T1-31)", async () => {

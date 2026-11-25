@@ -161,6 +161,7 @@ export type ZoneProfile = {
   sensors: Record<string, boolean>;
   controller: string;
   link: string; // MQTT, or SF_GATEWAY for a zone on the prototype rig
+  tdsPpmPerMsCm?: number | null; // the controller's TDS scale (io_map.json); null when it reports EC
   doseLines: DoseLine[];
   notes: string | null;
 };
@@ -172,6 +173,8 @@ export type ZoneCrop = {
   variety: string | null;
   stage: string; // SEEDLING, GROWING …
   plantedOn: string | null; // the farm's calendar day, YYYY-MM-DD
+  ecTarget?: { min: number; max: number } | null; // the stage's targets (recipes.json crops)
+  phTarget?: { min: number; max: number } | null;
   daysToHarvest?: number | null; // not in the config pack yet
 };
 

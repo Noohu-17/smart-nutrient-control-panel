@@ -126,6 +126,7 @@ describe("fake API (MSW)", () => {
       tank: { id: "R2", volumeL: 1300, usableL: 1200 },
       controller: "ZC2",
       link: "MQTT",
+      tdsPpmPerMsCm: null, // an MQTT controller reports EC itself
     });
     expect(t.crop).toEqual({
       crop: "BASIL",
@@ -133,6 +134,8 @@ describe("fake API (MSW)", () => {
       variety: "Genovese",
       stage: "SEEDLING",
       plantedOn: "2026-11-08",
+      ecTarget: { min: 1.0, max: 1.4 }, // the stage's targets in recipes.json
+      phTarget: { min: 5.8, max: 6.4 },
     });
   });
 

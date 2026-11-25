@@ -64,6 +64,18 @@ def test_client_b_crops_have_their_variety_and_planting_day():
     assert all(isinstance(c.planted_on, date) for c in crops.values())
 
 
+def test_client_b_crops_carry_their_stages_targets_and_the_probes_ppm_scale():
+    """Test 22: Zone A's lettuce seedlings, EC 0.8–1.2 mS/cm (400–600 ppm on the rig's 0.5 TDS
+    scale) and pH 5.8–6.2, from the farm details form."""
+    details = read_zone_details(CLIENT_B)
+    profile, crop = details["Z1"]
+    assert as_sent(crop)["ecTarget"] == {"min": 0.8, "max": 1.2}
+    assert as_sent(crop)["phTarget"] == {"min": 5.8, "max": 6.2}
+    assert profile.tds_ppm_per_ms_cm == 500
+    # a zone on an MQTT controller reports EC itself: no ppm scale
+    assert read_zone_details(CLIENT_A)["Z1"][0].tds_ppm_per_ms_cm is None
+
+
 def test_client_b_dose_lines_say_what_they_dose():
     stock = read_dosing(CLIENT_B, "Z1").stock
     assert [(line, s.compound, s.strength_pct, s.drum.volume_l) for line, s in stock.items()] == [

@@ -47,7 +47,7 @@ class FakeZone:
     tds_ppm: float | None = 650.0
     temp_c: float | None = 24.5
     level_pct: float | None = 62.5
-    liters: float | None = 560.0
+    liters: float | None = 56.0  # 62.5 % of client_B's 90 L main tank
     estop: bool = False
     relays: dict[str, bool] = field(default_factory=lambda: dict.fromkeys(RELAYS, False))
 
@@ -307,7 +307,10 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
     load_dotenv(SIM_ROOT / ".env")
     logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    fake = FakeRig(load_settings(), load_rig_settings(), zones=args.zones,
+    # A new boot on every start, as the gateway's own count rises on each power-on: the service
+    # drops a repeated (gateway, boot, schema, seq), so a restart with boot 1 and seq 1 again would
+    # be ignored as old until its seq passed the last run's.
+    fake = FakeRig(load_settings(), load_rig_settings(), zones=args.zones, boot=int(time.time()),
                    interval_s=args.interval, time_scale=args.time_scale)
     loop_factory = asyncio.SelectorEventLoop if sys.platform == "win32" else None
     try:

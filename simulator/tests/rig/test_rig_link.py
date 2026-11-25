@@ -84,3 +84,15 @@ def test_client_b_runs_both_its_zones_through_one_gateway(tmp_path):
         link.on_message(f"{SETTINGS.telemetry_topic}/sf/zone/{n}", json.dumps(document),
                         retained=True)
     assert [d.hal.latest["zone"] for d in devices] == [1, 2]
+
+
+def test_each_zones_updates_count_their_own_seq(tmp_path):
+    """Zone 1's update 60 and zone 2's update 60 are two updates, not a QoS 1 repeat (the gateway
+    counts each zone's seq on its own); the same zone's 60 again is a repeat and is dropped."""
+    client_b = Path(__file__).parents[3] / "config" / "clients" / "client_B"
+    settings = load_settings({"SIM_CLIENT_DIR": str(client_b), "SIM_STATE_DIR": str(tmp_path)})
+    link, devices = service.build(settings, SETTINGS)
+    for n, ph in ((1, 6.1), (2, 6.3), (2, 5.0)):  # the last is zone 2's 60 again, changed
+        document = zone_doc(ts=T0, seq=60, water_quality={"ph": ph}) | {"zone": n}
+        link.on_message(f"{SETTINGS.telemetry_topic}/sf/zone/{n}", json.dumps(document))
+    assert [d.hal.latest["water_quality"]["ph"] for d in devices] == [6.1, 6.3]

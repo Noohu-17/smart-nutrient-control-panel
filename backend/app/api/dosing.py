@@ -194,7 +194,10 @@ def review(
         f"{zone.reservoir.id} at {shown_pct}%, below the {_number(minimum or 0)}% minimum to dose",
     )
 
-    litres = readings.reservoir_l or zone.reservoir.usable_l
+    # never more than the tank holds: a level reading above it is wrong, and would make a dose
+    # look smaller than it is
+    tank_l = zone.reservoir.volume_l or zone.reservoir.usable_l
+    litres = min(readings.reservoir_l or tank_l, tank_l)
     ec = ph = None
     if readings.ec is not None:
         added = sum(a.ml * dosing.ec_per_ml_per_l.get(a.line, 0) for a in dosing_lines)

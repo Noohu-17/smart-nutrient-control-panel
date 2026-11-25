@@ -17,9 +17,16 @@ export function ZoneStatusChip({ status }: { status: ZoneStatus }) {
   return <StatusChip tone="ok">{`Updated ${formatAge(status.ageS ?? 0)}`}</StatusChip>;
 }
 
-/** The zone's reading tiles. Grey when offline or stale; "Loading" until the first answer. */
+/** The zone's reading tiles. Grey when offline or stale; "Loading" until the first answer. EC and pH
+    show the crop stage's targets; EC also in ppm on a controller with a TDS probe. */
 export function ZoneReadings({ status }: { status: ZoneStatus }) {
   const { t, loading, offline, stale } = status;
+  const targets = { ec: t?.crop?.ecTarget, ph: t?.crop?.phTarget };
+  const ppm = t?.profile?.tdsPpmPerMsCm;
+  const ecNote =
+    targets.ec && ppm
+      ? `${Math.round(targets.ec.min * ppm)}–${Math.round(targets.ec.max * ppm)} ppm`
+      : undefined;
   return (
     <div className="readings">
       {ZONE_READINGS.map((spec) => (
@@ -28,6 +35,8 @@ export function ZoneReadings({ status }: { status: ZoneStatus }) {
           spec={spec}
           value={t?.readings[spec.key]}
           quality={t?.quality[spec.key]}
+          target={spec.key === "ec" || spec.key === "ph" ? (targets[spec.key] ?? undefined) : undefined}
+          targetNote={spec.key === "ec" ? ecNote : undefined}
           stale={offline || stale}
           loading={loading}
         />

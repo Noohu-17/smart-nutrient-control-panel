@@ -356,6 +356,12 @@ def test_a_projection_outside_the_safety_limits_blocks(api, worker):
     assert message == "Projected EC 2.47, pH 5.9 is outside the safety limits (EC up to 2.4, pH 5.5–6.8)"
 
 
+def test_the_projection_never_uses_more_litres_than_the_tank_holds(api, worker):
+    # a level reading ten times R1's 1300 L: 240 mL into 1300 L adds 0.09, not 0.01 into 13000 L
+    ready_zone(worker, readings={"reservoirL": 13000})
+    assert review(api)["projected"]["ec"] == 1.71
+
+
 def test_a_projection_outside_the_target_warns(api, worker):
     ready_zone(worker, readings={"ec": 1.75})
     body = review(api)

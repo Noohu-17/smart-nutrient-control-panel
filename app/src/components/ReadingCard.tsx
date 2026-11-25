@@ -44,6 +44,7 @@ export function ReadingCard({
   value,
   quality,
   target,
+  targetNote,
   stale = false,
   loading = false,
 }: {
@@ -51,6 +52,8 @@ export function ReadingCard({
   value: number | null | undefined;
   quality?: Quality;
   target?: Range;
+  /** the target in another unit, e.g. "400–600 ppm" */
+  targetNote?: string;
   /** controller offline or readings old: grey, whatever the value says */
   stale?: boolean;
   /** still waiting for the first answer */
@@ -65,6 +68,7 @@ export function ReadingCard({
         {target && (
           <span>
             Target {formatReading(target.min, spec)}–{formatReading(target.max, spec)}
+            {targetNote && ` (${targetNote})`}
           </span>
         )}
       </span>

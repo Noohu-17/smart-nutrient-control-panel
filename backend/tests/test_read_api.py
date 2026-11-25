@@ -302,7 +302,8 @@ def test_a_zone_that_has_never_reported_answers_as_the_contract_says(api):
         "profile": {
             "name": "Zone 2", "growingSystem": None, "growingUnits": [], "plantSites": None,
             "size": None, "position": None, "tank": {"id": "R2", "usableL": 1200}, "sensors": {},
-            "controller": "ZC2", "link": "MQTT", "doseLines": ["A", "B", "ACID"], "notes": None,
+            "controller": "ZC2", "link": "MQTT", "tdsPpmPerMsCm": None, "doseLines": ["A", "B", "ACID"],
+            "notes": None,
         },
         "crop": None,
     }
