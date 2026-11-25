@@ -3,7 +3,9 @@
 //
 // Its own compose project and ports, so it never touches another checkout's sna-dev stack:
 //   API http://localhost:8010 · simulator control 8110 · PostgreSQL 5442 · MQTT 1893
-// client_A with the simulator (the virtual farm: zones, climate, Simulator page).
+// client_B (the Coimbatore farm): both zones LIVE from the prototype rig through the zone controller
+// service (profile rig, simulator/sim/rig/README.md), the house climate and power from the
+// simulator (profile sim). Until the rig's gateway reaches this broker, the zones show no readings.
 // On Windows, Docker runs in WSL (Ubuntu); elsewhere, docker is called directly.
 //
 // npm run backend:stop stops it (the database is kept); npm run backend:logs shows the api log.
@@ -14,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const ENV = {
-  CLIENT: "client_A",
+  CLIENT: "client_B",
   API_PORT: "8010",
   SIM_CONTROL_PORT: "8110",
   POSTGRES_PORT: "5442",
@@ -24,7 +26,7 @@ const API = `http://localhost:${ENV.API_PORT}`;
 const WSL = process.platform === "win32";
 
 function compose(args, { input, quiet } = {}) {
-  const base = ["compose", "-p", "control-panel", "-f", "infra/docker-compose.dev.yml", "--profile", "sim", ...args];
+  const base = ["compose", "-p", "control-panel", "-f", "infra/docker-compose.dev.yml", "--profile", "sim", "--profile", "rig", ...args];
   const env = Object.entries(ENV).map(([k, v]) => `${k}=${v}`);
   const [cmd, argv] = WSL
     ? ["wsl", ["-d", "Ubuntu", "-u", "root", "--cd", ROOT, "--", "env", ...env, "docker", ...base]]

@@ -3,7 +3,7 @@ Remote nutrient dosing and climate monitoring for the Coimbatore polyhouse (2 NF
 
 ## Run the control panel
 
-From the repo root: `npm install` (once; it installs `app/`), then `npm run dev` and open the address it prints (http://localhost:5173 when that port is free). It runs on the **real back end**: `scripts/control-panel/backend.mjs` first starts it in Docker (on Windows, Docker in WSL Ubuntu), with the database, MQTT, the worker and the simulated farm (client_A), and the app talks to it (`app/.env.real`). The first start builds the images and takes a few minutes. Its own Docker project `control-panel` and ports (API 8010, simulator control 8110, PostgreSQL 5442, MQTT 1893), so another checkout's stack keeps running.
+From the repo root: `npm install` (once; it installs `app/`), then `npm run dev` and open the address it prints (http://localhost:5173 when that port is free). It runs on the **real back end**: `scripts/control-panel/backend.mjs` first starts it in Docker (on Windows, Docker in WSL Ubuntu), with the database, MQTT and the worker, for **client_B** (Hydroponic polyhouse, Coimbatore): NFT Zone A and NFT Zone B are LIVE from the prototype rig through the zone controller service (`simulator/sim/rig/README.md`), and the house climate and power come from the simulator. The app talks to it (`app/.env.real`). Until the rig's gateway reaches this broker, both zones show Offline with no readings. The first start builds the images and takes a few minutes. Its own Docker project `control-panel` and ports (API 8010, simulator control 8110, PostgreSQL 5442, MQTT 1893), so another checkout's stack keeps running.
 
 Sign-in accounts (local dev only; `scripts/control-panel/users.py`):
 
