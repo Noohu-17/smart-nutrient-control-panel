@@ -170,7 +170,7 @@ export function zoneTags(
   ].filter((tag): tag is string => Boolean(tag));
 }
 
-/** The short line under a dose amount: "Nitrogen · City Greens Grow 24% · Leaf and stem growth".
+/** The short line under a dose amount: "Grow: nitrogen and calcium · City Greens Grow 24-00-00, N 24% · …".
     The name is left out when it only repeats the line's label, e.g. client_A's "Stock A". */
 export function nutrientText(info: DoseLineLimit | undefined) {
   if (!info) return null;

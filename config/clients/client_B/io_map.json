@@ -3,7 +3,7 @@
   "_meta": {
     "client": "client_B",
     "placeholder": true,
-    "note": "controllers.ZC1: Zone A is the prototype rig's Zone 1, the actuator box (farm details form, R-1, sections 5 and 7): N, P and K on IN1-IN3 (GPIO14, 27, 26) are relay1-relay3; IN4 (GPIO25) is the water inlet. controllers.ZC2: Zone B is the rig's Zone 2, the gateway's own relay board (snm-prototype-extension-v1 gateway README): N, P and K on IN1-IN3 (GPIO39, 40, 41) are relay1-relay3; IN4 (GPIO42) is the solenoid valve that fills the Zone B tank. Its pumps run at their own rate (hardware.json pumps.zones.Z2). Both zones' TDS probes use the 0.5 factor (500 scale: the sensor box's and the gateway's firmware both multiply by 0.5). The drums have no level sensors. gateway is the firmware's default name (MG_GATEWAY_NAME, gateway-01) for the team to confirm.",
+    "note": "controllers.ZC1: Zone A is the prototype rig's Zone 1, the actuator box (farm details form, R-1, sections 5 and 7): A, B and C (Grow, Flora and Thrive) on IN1-IN3 (GPIO14, 27, 26) are relay1-relay3; IN4 (GPIO25) is the water inlet. controllers.ZC2: Zone B is the rig's Zone 2, the gateway's own relay board (snm-prototype-extension-v1 gateway README): A, B and C (Grow, Flora and Thrive) on IN1-IN3 (GPIO39, 40, 41) are relay1-relay3; IN4 (GPIO42) is the solenoid valve that fills the Zone B tank. Its pumps run at their own rate (hardware.json pumps.zones.Z2). Both zones' TDS probes use the 0.5 factor (500 scale: the sensor box's and the gateway's firmware both multiply by 0.5). The drums have no level sensors. gateway is the firmware's default name (MG_GATEWAY_NAME, gateway-01) for the team to confirm.",
     "placeholderKeys": ["controllers.ZC1.gateway", "controllers.ZC2.gateway"]
   },
   "controllers": {
@@ -11,7 +11,7 @@
       "link": "SF_GATEWAY",
       "gateway": "gateway-01",
       "rigZone": 1,
-      "pumps": { "N": "relay1", "P": "relay2", "K": "relay3" },
+      "pumps": { "A": "relay1", "B": "relay2", "C": "relay3" },
       "tdsPpmPerMsCm": 500,
       "dayTankLevelSensors": false
     },
@@ -19,7 +19,7 @@
       "link": "SF_GATEWAY",
       "gateway": "gateway-01",
       "rigZone": 2,
-      "pumps": { "N": "relay1", "P": "relay2", "K": "relay3" },
+      "pumps": { "A": "relay1", "B": "relay2", "C": "relay3" },
       "tdsPpmPerMsCm": 500,
       "dayTankLevelSensors": false
     }

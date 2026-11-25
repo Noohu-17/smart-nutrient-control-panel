@@ -99,7 +99,7 @@ def test_both_packs_pass_the_checks_the_import_runs(folder):
 def test_a_pack_in_memory_gets_the_same_problems_as_the_same_pack_in_a_folder(tmp_path):
     folder = shutil.copytree(CLIENT_B, tmp_path / "client_B")
     limits = json.loads((folder / "limits.json").read_text(encoding="utf-8"))
-    limits["zones"]["Z1"]["limits"]["maxPerDoseMl"] = {"N": 2}  # P and K left out
+    limits["zones"]["Z1"]["limits"]["maxPerDoseMl"] = {"A": 2}  # B and C left out
     (folder / "limits.json").write_text(json.dumps(limits), encoding="utf-8")
     (folder / "climate.json").unlink()
 
@@ -441,14 +441,14 @@ def test_a_pack_with_a_negative_limit_is_refused_and_nothing_is_stored(migrated_
     config_store.import_folder(migrated_db, CLIENT_B)
     folder = shutil.copytree(CLIENT_B, tmp_path / "client_B")
     limits = json.loads((folder / "limits.json").read_text(encoding="utf-8"))
-    limits["zones"]["Z1"]["limits"]["maxPerDoseMl"]["N"] = -50
+    limits["zones"]["Z1"]["limits"]["maxPerDoseMl"]["A"] = -50
     (folder / "limits.json").write_text(json.dumps(limits, indent=2), encoding="utf-8")
     with pytest.raises(config_store.Refused) as refused:
         config_store.import_folder(migrated_db, folder)
-    assert any("zone Z1: limits.maxPerDoseMl.N must be mL > 0, got -50" in p for p in refused.value.problems)
+    assert any("zone Z1: limits.maxPerDoseMl.A must be mL > 0, got -50" in p for p in refused.value.problems)
     assert [row.version for row in config_store.versions(migrated_db, "client_B")] == [1]
     newest = config_store.stored(migrated_db, "client_B")
-    assert newest.json("limits.json")["zones"]["Z1"]["limits"]["maxPerDoseMl"]["N"] == 2
+    assert newest.json("limits.json")["zones"]["Z1"]["limits"]["maxPerDoseMl"]["A"] == 2
 
 
 def test_the_app_runs_from_the_database(migrated_db):
@@ -467,7 +467,7 @@ def test_the_app_runs_from_the_database(migrated_db):
     assert [z["zone"] for z in zones.json()["items"]] == ["Z1", "Z2"]
     assert zones.json()["items"][0]["profile"]["link"] == "SF_GATEWAY"  # io_map.json, from the database
     assert limits.status_code == 200
-    assert [line["name"] for line in limits.json()["lines"]] == ["Nitrogen", "Phosphorus", "Potassium"]
+    assert [line["name"] for line in limits.json()["lines"]] == ["Grow: nitrogen and calcium", "Flora: phosphorus", "Thrive: potassium and magnesium"]
 
 
 def test_the_command_line_imports_lists_and_exports(migrated_db, monkeypatch, tmp_path, capsys):

@@ -67,9 +67,9 @@ def test_client_b_crops_have_their_variety_and_planting_day():
 def test_client_b_dose_lines_say_what_they_dose():
     stock = read_dosing(CLIENT_B, "Z1").stock
     assert [(line, s.compound, s.strength_pct, s.drum.volume_l) for line, s in stock.items()] == [
-        ("N", "City Greens Grow", 24, 10),
-        ("P", "City Greens Grow Flora", 26, 10),
-        ("K", "City Greens Grow Thrive", 19, 10),
+        ("A", "City Greens Grow 24-00-00, N", 24, 10),
+        ("B", "City Greens Flora 05-26-00, P", 26, 10),
+        ("C", "City Greens Thrive 06-00-19, K", 19, 10),
     ]
 
 

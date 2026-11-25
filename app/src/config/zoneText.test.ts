@@ -25,7 +25,7 @@ const lettuce: ZoneCrop = {
   plantedOn: "2026-11-10",
 };
 
-const lineInfo = (line: "N" | "P" | "K"): DoseLineLimit => {
+const lineInfo = (line: "A" | "B" | "C"): DoseLineLimit => {
   const { name, compound, strengthPct, drum, purpose } = nutrientsB.doseLines[line];
   return {
     line,
@@ -131,19 +131,20 @@ describe("growing units and nutrients", () => {
   });
 
   it("describe each of client_B's nutrients in one short line", () => {
-    expect(nutrientText(lineInfo("N"))).toBe("Nitrogen · City Greens Grow 24% · Leaf and stem growth");
-    expect(nutrientText(lineInfo("P"))).toBe(
-      "Phosphorus · City Greens Grow Flora 26% · Roots, flowering and fruit set",
+    expect(nutrientText(lineInfo("A"))).toBe(
+      "Grow: nitrogen and calcium · City Greens Grow 24-00-00, N 24% · Vegetative growth: leaves, chlorophyll and strong cell walls",
     );
-    expect(nutrientText(lineInfo("K"))).toBe(
-      "Potassium · City Greens Grow Thrive 19% · Fruit quality, sturdy plants and water balance",
+    expect(nutrientText(lineInfo("B"))).toBe(
+      "Flora: phosphorus · City Greens Flora 05-26-00, P 26% · Root development, flowering and overall growth",
+    );
+    expect(nutrientText(lineInfo("C"))).toBe(
+      "Thrive: potassium and magnesium · City Greens Thrive 06-00-19, K 19% · Overall growth and plant strength",
     );
   });
 
   it("don't repeat a name that is already the line's label", () => {
     const stockA = {
-      ...lineInfo("N"),
-      line: "A",
+      ...lineInfo("A"),
       name: "Stock A",
       compound: "Calcium nitrate",
       strengthPct: 10,
@@ -154,7 +155,7 @@ describe("growing units and nutrients", () => {
   });
 
   it("say nothing for a line the pack doesn't describe", () => {
-    const bare = { ...lineInfo("N"), name: null, compound: null, strengthPct: null, purpose: null };
+    const bare = { ...lineInfo("A"), name: null, compound: null, strengthPct: null, purpose: null };
     expect(nutrientText(bare)).toBeNull();
     expect(nutrientText(undefined)).toBeNull();
   });
