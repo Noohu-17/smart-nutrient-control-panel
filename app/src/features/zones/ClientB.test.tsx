@@ -20,7 +20,7 @@ import { renderAt } from "../../test/render";
 const zones = layout.zones as FarmZone[];
 const zoneById = (id: string) => zones.find((z) => z.id === id)!;
 type Applied = { crop: string; variety: string; stage: string; plantedOn: string };
-type Line = "N" | "P" | "K";
+type Line = "A" | "B" | "C";
 
 /** The applied crop's stage in recipes.json, with its EC and pH targets. */
 const stageOf = (applied: Applied) =>
@@ -175,7 +175,7 @@ describe("client_B with the real back end's answers", () => {
     expect(row("Zone size")).toBe("3 × 4 m");
     expect(row("Position")).toBe("First NFT bay from the door");
     expect(row("Tank")).toBe("R1 · 90 L");
-    expect(await panel.findByText("N, P, K · 10 L each")).toBeInTheDocument(); // the drums
+    expect(await panel.findByText("A, B, C · 10 L each")).toBeInTheDocument(); // the drums
     expect(row("Sensors fitted")).toBe(
       "EC, pH, Solution temp, Tank levelNot fitted: Circulation flow, Day-tank level, Leak, Dissolved oxygen",
     );
@@ -206,22 +206,22 @@ describe("client_B with the real back end's answers", () => {
     const user = userEvent.setup();
     renderAt("/zone/Z1", { role: "Operator" });
     const card = within((await screen.findByRole("heading", { name: "Manual dose" })).closest("section")!);
-    const nitrogen = "City Greens Grow 24%";
-    await card.findByText(nitrogen);
+    const grow = "Grow: nitrogen and calcium";
+    await card.findByText(grow);
     // each amount is described by its limits (T1-37), then what it doses
     const limit = "Up to 2 mL a dose · 8 mL left today";
-    expect(card.getByLabelText("Nitrogen (N)")).toHaveAccessibleDescription(`${limit} ${nitrogen}`);
-    expect(card.getByLabelText("Phosphorus (P)")).toHaveAccessibleDescription(
-      `${limit} City Greens Grow Flora 26%`,
-    );
-    expect(card.getByLabelText("Potassium (K)")).toHaveAccessibleDescription(
-      `${limit} City Greens Grow Thrive 19%`,
+    expect(card.getByLabelText("Stock A")).toHaveAccessibleDescription(`${limit} ${grow}`);
+    expect(card.getByLabelText("Stock B")).toHaveAccessibleDescription(`${limit} Flora: phosphorus`);
+    expect(card.getByLabelText("Stock C")).toHaveAccessibleDescription(`${limit} Thrive: potassium and magnesium`);
+    expect(card.getByText(grow)).toHaveAttribute(
+      "title",
+      "City Greens Grow 24-00-00, N 24% · Vegetative growth: leaves, chlorophyll and strong cell walls",
     );
 
-    await user.type(card.getByLabelText("Nitrogen (N)"), "2");
+    await user.type(card.getByLabelText("Stock A"), "2");
     await user.click(card.getByRole("button", { name: "Review dose" }));
     await screen.findByRole("heading", { name: "Review safety checks" });
     const summary = screen.getByText("2 mL", { selector: ".dose-summary b" }).closest("li")!;
-    expect(summary).toHaveTextContent(nitrogen);
+    expect(summary).toHaveTextContent(grow);
   });
 });

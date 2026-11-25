@@ -170,24 +170,31 @@ export function zoneTags(
   ].filter((tag): tag is string => Boolean(tag));
 }
 
-/** A dose amount's label: the nutrient the pack names, with the line's letter when the line has no
-    name of its own ("Nitrogen (N)", "Acid (pH down)"); otherwise the line's name, e.g. "Stock A". */
+const isGeneric = (line: string) => lineName(line) === `Line ${line}`;
+const stockText = (info: DoseLineLimit) =>
+  info.compound && info.strengthPct != null ? `${info.compound} ${info.strengthPct}%` : info.compound;
+
+/** A dose amount's label: the line's own name, "Stock A", as written on the drum; for a line with
+    no name of its own, the nutrient the pack names with the line's letter, "Nitrogen (N)". */
 export function doseLineLabel(line: string, info: DoseLineLimit | undefined) {
-  if (!info?.name) return lineName(line);
-  return lineName(line) === `Line ${line}` ? `${info.name} (${line})` : info.name;
+  return info?.name && isGeneric(line) ? `${info.name} (${line})` : lineName(line);
 }
 
-/** The short line under a dose amount: the stock, "City Greens Grow 24%", or what it is for when
-    the pack names no stock. What it is for is nutrientPurpose, shown on hover. */
+/** The short line under a dose amount: what the stock is, "Grow: nitrogen and calcium", or the
+    product when the label already names the nutrient. The rest is nutrientDetails, on hover. */
 export function nutrientText(info: DoseLineLimit | undefined) {
   if (!info) return null;
-  if (info.compound) return info.strengthPct != null ? `${info.compound} ${info.strengthPct}%` : info.compound;
-  return info.purpose || null;
+  const name = info.name && info.name !== lineName(info.line) && !isGeneric(info.line) ? info.name : null;
+  return name || stockText(info) || info.purpose || null;
 }
 
-/** What a dose line is for ("Leaf and stem growth"), when the stock line doesn't already say it. */
-export const nutrientPurpose = (info: DoseLineLimit | undefined) =>
-  (info?.compound && info.purpose) || undefined;
+/** Everything nutrientText leaves out: the product and what it is dosed for. */
+export function nutrientDetails(info: DoseLineLimit | undefined) {
+  if (!info) return undefined;
+  const shown = nutrientText(info);
+  const parts = [stockText(info), info.purpose].filter((part) => part && part !== shown);
+  return parts.length ? parts.join(" · ") : undefined;
+}
 
 /** "Planted 10 Nov 2026" in the farm's own calendar. */
 export function plantedText(plantedOn: string) {

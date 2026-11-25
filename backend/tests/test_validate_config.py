@@ -71,24 +71,24 @@ def test_both_client_packs_are_valid():
         ("recipes.json", lambda d: d["zones"]["Z1"].pop("variety"), "zone Z1: variety must be"),
         ("recipes.json", lambda d: d["zones"]["Z2"].update(plantedOn="2026-02-30"), "zone Z2: plantedOn must be"),
         ("recipes.json", lambda d: d["zones"]["Z1"].update(plantedOn="10/11/2026"), "zone Z1: plantedOn must be"),
-        ("nutrients.json", lambda d: d["doseLines"]["N"].pop("compound"), "doseLines.N.compound must be text"),
-        ("nutrients.json", lambda d: d["doseLines"]["P"].update(strengthPct=0), "doseLines.P.strengthPct must be a number > 0"),
-        ("nutrients.json", lambda d: d["doseLines"]["K"].update(strengthPct=140), "doseLines.K.strengthPct must be a number > 0"),
-        ("nutrients.json", lambda d: d["doseLines"]["N"].pop("drum"), "doseLines.N.drum needs an id"),
-        ("nutrients.json", lambda d: d["doseLines"]["N"]["drum"].update(volumeL=5),
-         "doseLines.N.drum: 5 L is less than a 10 L day-tank"),
-        ("nutrients.json", lambda d: d["doseLines"]["P"]["drum"].update(id="DRUM-N"), "DRUM-N already holds line N's stock"),
-        ("hardware.json", lambda d: d["pumps"]["doseLines"].pop("K"), "pumps.doseLines.K.flowMlPerS must be a number > 0"),
+        ("nutrients.json", lambda d: d["doseLines"]["A"].pop("compound"), "doseLines.A.compound must be text"),
+        ("nutrients.json", lambda d: d["doseLines"]["B"].update(strengthPct=0), "doseLines.B.strengthPct must be a number > 0"),
+        ("nutrients.json", lambda d: d["doseLines"]["C"].update(strengthPct=140), "doseLines.C.strengthPct must be a number > 0"),
+        ("nutrients.json", lambda d: d["doseLines"]["A"].pop("drum"), "doseLines.A.drum needs an id"),
+        ("nutrients.json", lambda d: d["doseLines"]["A"]["drum"].update(volumeL=5),
+         "doseLines.A.drum: 5 L is less than a 10 L day-tank"),
+        ("nutrients.json", lambda d: d["doseLines"]["B"]["drum"].update(id="DRUM-A"), "DRUM-A already holds line A's stock"),
+        ("hardware.json", lambda d: d["pumps"]["doseLines"].pop("C"), "pumps.doseLines.C.flowMlPerS must be a number > 0"),
         # T1-31: a zone's own pump rates, hardware.json pumps.zones
-        ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"]["N"].update(flowMlPerS=0),
-         "pumps.zones.Z2.doseLines.N.flowMlPerS must be a number > 0"),
+        ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"]["A"].update(flowMlPerS=0),
+         "pumps.zones.Z2.doseLines.A.flowMlPerS must be a number > 0"),
         ("hardware.json", lambda d: d["pumps"]["zones"].update(Z9={"doseLines": {}}), "pumps.zones.Z9: layout.json has no zone Z9"),
         ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"].update(ACID={"flowMlPerS": 1}),
          "pumps.zones.Z2.doseLines.ACID: zone Z2 has no dose line ACID"),
         ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"].pop("doseLines"), 'pumps.zones.Z2: needs a "doseLines" object'),
         ("hardware.json", lambda d: d["pumps"].update(zones=[]), "pumps.zones must be an object"),
-        ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"]["N"].update(flowMlPerS=0.001),
-         "controllers.ZC2: line N's largest dose, 2 mL at 0.001 mL/s, is 2000 s of pumping"),
+        ("hardware.json", lambda d: d["pumps"]["zones"]["Z2"]["doseLines"]["A"].update(flowMlPerS=0.001),
+         "controllers.ZC2: line A's largest dose, 2 mL at 0.001 mL/s, is 2000 s of pumping"),
         # DM-3: the sensor catalogue
         ("sensors.json", lambda d: d.pop("farmTypes"), 'needs a "growingSystems" object and a non-empty "farmTypes"'),
         ("sensors.json", lambda d: d["growingSystems"].pop("NFT"), "zone Z1 grows in NFT, which growingSystems leaves out"),
@@ -112,11 +112,11 @@ def limits(data, zone_id="Z1"):
 @pytest.mark.parametrize(
     ("change", "said"),
     [
-        (lambda d: limits(d)["maxPerDoseMl"].update(N=-50), "zone Z1: limits.maxPerDoseMl.N must be mL > 0, got -50"),
-        (lambda d: limits(d)["maxPerDoseMl"].update(P=0), "zone Z1: limits.maxPerDoseMl.P must be mL > 0, got 0"),
-        (lambda d: limits(d)["maxPerDoseMl"].update(K="lots"), "zone Z1: limits.maxPerDoseMl.K must be mL > 0, got 'lots'"),
-        (lambda d: limits(d, "Z2")["max24hMl"].update(N=-8), "zone Z2: limits.max24hMl.N must be mL > 0, got -8"),
-        (lambda d: limits(d)["maxPerDoseMl"].update(K=9), "zone Z1: limits.maxPerDoseMl.K 9 mL is more than max24hMl.K 8 mL"),
+        (lambda d: limits(d)["maxPerDoseMl"].update(A=-50), "zone Z1: limits.maxPerDoseMl.A must be mL > 0, got -50"),
+        (lambda d: limits(d)["maxPerDoseMl"].update(B=0), "zone Z1: limits.maxPerDoseMl.B must be mL > 0, got 0"),
+        (lambda d: limits(d)["maxPerDoseMl"].update(C="lots"), "zone Z1: limits.maxPerDoseMl.C must be mL > 0, got 'lots'"),
+        (lambda d: limits(d, "Z2")["max24hMl"].update(A=-8), "zone Z2: limits.max24hMl.A must be mL > 0, got -8"),
+        (lambda d: limits(d)["maxPerDoseMl"].update(C=9), "zone Z1: limits.maxPerDoseMl.C 9 mL is more than max24hMl.C 8 mL"),
         (lambda d: limits(d).update(ecCeiling=0), "zone Z1: limits.ecCeiling must be a number > 0, got 0"),
         (lambda d: limits(d).update(ecCeiling=-1.2), "zone Z1: limits.ecCeiling must be a number > 0, got -1.2"),
         (lambda d: limits(d).update(phMin=-1), "zone Z1: limits.phMin must be a number within 0-14, got -1"),
@@ -144,7 +144,7 @@ def test_limits_at_their_edges_are_valid(tmp_path):
     clients = tmp_path / "clients"
     pack = shutil.copytree(CLIENTS / "client_B", clients / "client_B")
     data = json.loads((pack / "limits.json").read_text(encoding="utf-8"))
-    limits(data)["maxPerDoseMl"]["N"] = limits(data)["max24hMl"]["N"]
+    limits(data)["maxPerDoseMl"]["A"] = limits(data)["max24hMl"]["A"]
     limits(data).update(phMin=0, phMax=14, minReservoirPctToDose=0)
     limits(data, "Z2")["minReservoirPctToDose"] = 100
     data["zones"]["Z1"]["dose"]["mixWaitS"] = 0

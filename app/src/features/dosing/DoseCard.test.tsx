@@ -78,8 +78,8 @@ describe("Manual dose and review", () => {
       expect(card.getByLabelText(label)).toHaveAccessibleDescription(
         /^Up to 300 mL a dose · 1,260 mL left today /,
       );
-    expect(card.getByLabelText("Acid (pH down)")).toHaveAccessibleDescription(
-      "Up to 100 mL a dose · 340 mL left today Phosphoric acid 10%",
+    expect(card.getByLabelText("Acid")).toHaveAccessibleDescription(
+      "Up to 100 mL a dose · 340 mL left today Acid (pH down)",
     );
   });
 

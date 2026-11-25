@@ -5,7 +5,7 @@ import type { ChipTone } from "../components/StatusChip";
    limit from GET /api/zones/{zoneId}/dose-limits or the check messages, so nothing here decides
    what may be dosed: the review still checks. */
 
-const LINE_NAMES: Record<string, string> = { A: "Stock A", B: "Stock B", ACID: "Acid" };
+const LINE_NAMES: Record<string, string> = { A: "Stock A", B: "Stock B", C: "Stock C", ACID: "Acid" };
 
 /** "Stock A" for a known line; any other line from the config still shows as "Line X". */
 export const lineName = (line: string) => LINE_NAMES[line] ?? `Line ${line}`;

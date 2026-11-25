@@ -169,9 +169,9 @@ def test_client_b_runs_both_zones_on_the_rig_at_their_own_pump_rates():
     zone_a, zone_b = load_rig_zones(CLIENT_B)
     assert (zone_a.device_id, zone_a.zone_id, zone_a.target) == ("ZC1", "Z1", "zone:1")
     assert (zone_b.device_id, zone_b.zone_id, zone_b.target) == ("ZC2", "Z2", "zone:2")
-    assert zone_a.pumps == zone_b.pumps == {"N": "relay1", "P": "relay2", "K": "relay3"}
-    assert zone_a.pump_ml_per_s == {"N": 0.25, "P": 0.25, "K": 0.25}
-    assert zone_b.pump_ml_per_s == {"N": 16.667, "P": 16.667, "K": 16.667}
+    assert zone_a.pumps == zone_b.pumps == {"A": "relay1", "B": "relay2", "C": "relay3"}
+    assert zone_a.pump_ml_per_s == {"A": 0.25, "B": 0.25, "C": 0.25}
+    assert zone_b.pump_ml_per_s == {"A": 16.667, "B": 16.667, "C": 16.667}
     assert not zone_a.pumps_on_gateway and zone_b.pumps_on_gateway
     assert load_farm(CLIENT_B).zones == {}
 
@@ -186,8 +186,8 @@ def test_each_client_b_zone_times_its_doses_at_its_own_pump_rate(tmp_path):
     """2 mL, Zone B's largest dose, is 0.12 s of the gateway's relay; on Zone A it is 8 s."""
     hal_a, sent_a = client_b_hal(tmp_path, "Z1")
     hal_b, sent_b = client_b_hal(tmp_path, "Z2")
-    hal_a.run_pump_for("PUMP_N", 2, "dose/N")
-    hal_b.run_pump_for("PUMP_N", 2, "dose/N")
+    hal_a.run_pump_for("PUMP_A", 2, "dose/A")
+    hal_b.run_pump_for("PUMP_A", 2, "dose/A")
     assert [(c["target"], c["args"]["relay"], c["args"]["seconds"]) for c in sent_a] == [
         ("zone:1", "relay1", 8.0)]
     assert [(c["target"], c["args"]["relay"], c["args"]["seconds"]) for c in sent_b] == [
@@ -199,10 +199,10 @@ def test_a_client_b_zone_b_dose_of_1_ml_is_too_short_for_the_rig(tmp_path, caplo
     loaded, and the rig is never sent it (the line delivers nothing)."""
     caplog.set_level("WARNING", logger="sim.rig")
     hal_b, sent_b = client_b_hal(tmp_path, "Z2")
-    assert "Z2: line N's pump runs 16.667 mL/s, so a dose under 2 mL" in caplog.text
+    assert "Z2: line A's pump runs 16.667 mL/s, so a dose under 2 mL" in caplog.text
     assert "Z1:" not in caplog.text  # 1 mL at 0.25 mL/s is 4 s
-    hal_b.run_pump_for("PUMP_K", 1, "small/K")
-    assert sent_b == [] and not hal_b.pump_running("PUMP_K")
+    hal_b.run_pump_for("PUMP_C", 1, "small/C")
+    assert sent_b == [] and not hal_b.pump_running("PUMP_C")
 
 
 @pytest.mark.parametrize(

@@ -203,8 +203,13 @@ services:
   fake-rig:
     build: ../simulator
     profiles: [fake-rig]
-    # both rig zones: client_B puts ZC1 on rig zone 1 and ZC2 on rig zone 2 (io_map.json rigZone)
-    command: ["python", "-m", "sim.rig.fake", "--zones", "1", "2", "--interval", "10"]
+    # both rig zones: client_B puts ZC1 on rig zone 1 and ZC2 on rig zone 2 (io_map.json rigZone).
+    # Each starts inside its crop's targets (recipes.json) and under its solution-temperature alarm
+    # (alerts.json), so a demo starts calm: Zone A lettuce EC 1.0 (500 ppm), pH 6.0, 21 °C; Zone B
+    # spinach EC 1.5 (750 ppm), pH 6.2, 20.5 °C.
+    command: ["python", "-m", "sim.rig.fake", "--zones", "1", "2", "--interval", "10",
+              "--set", "1:tds_ppm=500", "--set", "1:ph=6.0", "--set", "1:temp_c=21",
+              "--set", "2:tds_ppm=750", "--set", "2:ph=6.2", "--set", "2:temp_c=20.5"]
     environment:
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"

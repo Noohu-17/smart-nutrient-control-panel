@@ -55,7 +55,7 @@ if (command === "logs") {
 }
 
 console.log("Starting the back end (first time: a few minutes to build)…");
-compose(["up", "-d"]);
+compose(["up", "-d", "--build"]); // --build: a changed back end or simulator is rebuilt, the rest is cached
 
 process.stdout.write("Waiting for the API");
 let healthy = false;

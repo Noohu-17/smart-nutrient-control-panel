@@ -299,12 +299,31 @@ def _zone_of(target: Any) -> int | None:
     return {"actuator-node-01": 1}.get(target)
 
 
+READINGS = ("ph", "tds_ppm", "temp_c", "level_pct", "liters")
+
+
+def _reading(item: str, parser: argparse.ArgumentParser) -> tuple[int, str, float]:
+    """"1:tds_ppm=500" -> (1, "tds_ppm", 500.0)."""
+    try:
+        zone, rest = item.split(":", 1)
+        key, value = rest.split("=", 1)
+        if key not in READINGS:
+            raise ValueError(key)
+        return int(zone), key, float(value)
+    except ValueError:
+        parser.error(f"--set {item}: give ZONE:KEY=VALUE, KEY one of {', '.join(READINGS)}")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="A stand-in for the prototype rig's gateway.")
     parser.add_argument("--zones", type=int, nargs="+", default=[1])
     parser.add_argument("--interval", type=float, default=30.0, help="seconds between updates")
     parser.add_argument("--time-scale", type=float, default=1.0, help="run doses this much faster")
+    readings = ", ".join(READINGS)
+    parser.add_argument("--set", action="append", default=[], metavar="ZONE:KEY=VALUE",
+                        help=f"a zone's starting reading, e.g. 1:tds_ppm=500 ({readings})")
     args = parser.parse_args(argv)
+    start = [_reading(item, parser) for item in args.set]
     load_dotenv(SIM_ROOT / ".env")
     logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     # A new boot on every start, as the gateway's own count rises on each power-on: the service
@@ -312,6 +331,10 @@ def main(argv: list[str] | None = None) -> None:
     # be ignored as old until its seq passed the last run's.
     fake = FakeRig(load_settings(), load_rig_settings(), zones=args.zones, boot=int(time.time()),
                    interval_s=args.interval, time_scale=args.time_scale)
+    for zone, key, value in start:
+        if zone not in fake.zones:
+            parser.error(f"--set {zone}:{key}: zone {zone} isn't in --zones")
+        setattr(fake.zones[zone], key, value)
     loop_factory = asyncio.SelectorEventLoop if sys.platform == "win32" else None
     try:
         with asyncio.Runner(loop_factory=loop_factory) as runner:

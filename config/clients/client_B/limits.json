@@ -15,8 +15,8 @@
   "zones": {
     "Z1": {
       "limits": {
-        "maxPerDoseMl": { "N": 2, "P": 2, "K": 2 },
-        "max24hMl": { "N": 8, "P": 8, "K": 8 },
+        "maxPerDoseMl": { "A": 2, "B": 2, "C": 2 },
+        "max24hMl": { "A": 8, "B": 8, "C": 8 },
         "ecCeiling": 1.2,
         "phMin": 5.5,
         "phMax": 6.5,
@@ -26,8 +26,8 @@
     },
     "Z2": {
       "limits": {
-        "maxPerDoseMl": { "N": 2, "P": 2, "K": 2 },
-        "max24hMl": { "N": 8, "P": 8, "K": 8 },
+        "maxPerDoseMl": { "A": 2, "B": 2, "C": 2 },
+        "max24hMl": { "A": 8, "B": 8, "C": 8 },
         "ecCeiling": 1.8,
         "phMin": 5.7,
         "phMax": 6.8,

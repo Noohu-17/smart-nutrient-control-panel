@@ -7,7 +7,7 @@ import { Icon } from "../../components/Icon";
 import { LockedButton } from "../../components/LockedButton";
 import { StatusChip } from "../../components/StatusChip";
 import { checkTitle, limitHint, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
-import { doseLineLabel, nutrientPurpose, nutrientText } from "../../config/zoneText";
+import { doseLineLabel, nutrientDetails, nutrientText } from "../../config/zoneText";
 import { DOSE_CARD } from "../zones/doseCard";
 import { CommandStatus } from "./CommandStatus";
 import { useStockShown } from "./stockShown";
@@ -31,7 +31,7 @@ function NutrientNote({ info, id }: { info: DoseLineLimit | undefined; id?: stri
   const [shown] = useStockShown();
   const text = nutrientText(info);
   return text && shown ? (
-    <small className="nutrient-note" id={id} title={nutrientPurpose(info)}>
+    <small className="nutrient-note" id={id} title={nutrientDetails(info)}>
       {text}
     </small>
   ) : null;
