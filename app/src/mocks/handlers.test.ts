@@ -1,0 +1,264 @@
+// src/mocks/handlers.test.ts · T2-4 · the fake API answers like the contract says
+import { describe, expect, it } from "vitest";
+import configFeatures from "../../../config/clients/client_A/features.json";
+import configLayout from "../../../config/clients/client_A/layout.json";
+import configAlerts from "../../../config/clients/client_A/alerts.json";
+import configLimits from "../../../config/clients/client_A/limits.json";
+import configNutrients from "../../../config/clients/client_A/nutrients.json";
+import configRecipes from "../../../config/clients/client_A/recipes.json";
+import configScenarios from "../../../config/clients/client_A/scenarios.json";
+import configSensors from "../../../config/clients/client_A/sensors.json";
+import type { ClimateStatus, DoseLimits, Farm, PowerStatus, ServerRole, ZoneStatus } from "../api/types";
+import { csrfHeaders, fakeSignIn } from "./session";
+import { hold } from "./sim";
+import mockAlerts from "./data/alerts.json";
+import mockFeatures from "./data/features.json";
+import mockLayout from "./data/layout.json";
+import mockLimits from "./data/limits.json";
+import mockNutrients from "./data/nutrients.json";
+import mockRecipes from "./data/recipes.json";
+import mockScenarios from "./data/scenarios.json";
+import mockSensors from "./data/sensors.json";
+
+// Fields of the zone response example under GET /zones/{zoneId} in docs/contract.md §11.2 (T1-10),
+// which the real back end (T1-12) answers. simTs is left out: playground readings only.
+const ZONE_FIELDS = [
+  "zone",
+  "source", // LIVE or SIMULATED, from the layout (§2.4, T1-33)
+  "online",
+  "lastSeen",
+  "ts",
+  "readings",
+  "quality",
+  "equipment",
+  "mode",
+  "estop",
+  "leak",
+  "stopped",
+  "activeCmdId",
+  "operation",
+  "latches",
+  "configVersion",
+  "profile", // what the zone is and grows, from the config pack (T1-38)
+  "crop",
+];
+const READING_FIELDS = [
+  "ec",
+  "ph",
+  "solTempC",
+  "reservoirPct",
+  "reservoirL",
+  "circFlowLpm",
+  "doMgL",
+  "dayTankPct",
+  "dayTankL",
+];
+
+const get = (path: string) => fetch(`/api${path}`);
+
+describe("fake API (MSW)", () => {
+  it("GET /api/health says ok", async () => {
+    const res = await get("/health");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ status: "OK", database: "UP", broker: "UP" });
+  });
+
+  it("GET /api/farm returns Zone A and Zone B from layout.json", async () => {
+    const farm = (await (await get("/farm")).json()) as Farm;
+    expect(farm.site).toBe("siet-ph1");
+    expect(farm.zones.map((z) => [z.id, z.name])).toEqual([
+      ["Z1", "Zone A"],
+      ["Z2", "Zone B"],
+    ]);
+  });
+
+  it("the mock layout is an exact copy of config/clients/client_A/layout.json", () => {
+    expect(mockLayout).toEqual(configLayout);
+  });
+
+  it("GET /api/farm carries the features, a copy of config/clients/client_A/features.json", async () => {
+    const farm = (await (await get("/farm")).json()) as Farm;
+    expect(farm.features).toEqual(configFeatures);
+    expect(mockFeatures).toEqual(configFeatures);
+  });
+
+  it("the mock alerts.json is an exact copy of config/clients/client_A/alerts.json", () => {
+    expect(mockAlerts).toEqual(configAlerts);
+  });
+
+  it("GET /api/alerts raises EC_HIGH while EC is held above the limit, and a Viewer can't acknowledge it", async () => {
+    hold({ target: "Z1", metric: "ec", value: 2.8, gradual: false });
+    await get("/zones/Z1"); // the app sees the zone first, as it does on screen
+    const { items } = (await (await get("/alerts")).json()) as { items: { id: string; kind: string }[] };
+    expect(items.map((a) => a.kind)).toEqual(["EC_HIGH"]);
+    const ack = (role: ServerRole) => {
+      fakeSignIn(role);
+      return fetch(`/api/alerts/${items[0].id}/ack`, { method: "POST", headers: csrfHeaders() });
+    };
+    expect((await ack("VIEWER")).status).toBe(403);
+    const acked = (await (await ack("OWNER")).json()) as { status: string; acknowledgedBy: string };
+    expect(acked).toMatchObject({ status: "ACKNOWLEDGED", acknowledgedBy: "Demo Owner" });
+  });
+
+  it("the mock limits are an exact copy of config/clients/client_A/limits.json", () => {
+    expect(mockLimits).toEqual(configLimits);
+  });
+
+  it("the mock recipes and nutrients are exact copies of config/clients/client_A's", () => {
+    expect(mockRecipes).toEqual(configRecipes);
+    expect(mockNutrients).toEqual(configNutrients);
+  });
+
+  it("GET /api/sensors is config/clients/client_A/sensors.json without its _meta (DM-3)", async () => {
+    expect(mockSensors).toEqual(configSensors);
+    const res = await get("/sensors");
+    expect(res.status).toBe(200);
+    const catalogue = Object.fromEntries(Object.entries(configSensors).filter(([key]) => key !== "_meta"));
+    expect(await res.json()).toEqual(catalogue);
+  });
+
+  it("GET /api/zones/Z2 says what the zone is and grows, as the back end does (T1-38)", async () => {
+    const t = (await (await get("/zones/Z2")).json()) as ZoneStatus;
+    expect(t.profile).toMatchObject({
+      name: "Zone B",
+      growingSystem: "NFT",
+      plantSites: 4 * 252,
+      tank: { id: "R2", volumeL: 1300, usableL: 1200 },
+      controller: "ZC2",
+      link: "MQTT",
+      tdsPpmPerMsCm: null, // an MQTT controller reports EC itself
+    });
+    expect(t.crop).toEqual({
+      crop: "BASIL",
+      name: "Basil",
+      variety: "Genovese",
+      stage: "SEEDLING",
+      plantedOn: "2026-11-08",
+      ecTarget: { min: 1.0, max: 1.4 }, // the stage's targets in recipes.json
+      phTarget: { min: 5.8, max: 6.4 },
+    });
+  });
+
+  it("GET /api/zones/Z1/dose-limits says what each line doses (T1-38)", async () => {
+    const answer = (await (await get("/zones/Z1/dose-limits")).json()) as DoseLimits;
+    expect(answer.lines.map((l) => l.line)).toEqual(["A", "B", "ACID"]);
+    expect(answer.lines[2]).toMatchObject({
+      name: "Acid (pH down)",
+      compound: "Phosphoric acid",
+      strengthPct: 10,
+      purpose: "Lowers pH",
+      maxPerDoseMl: 100,
+    });
+    expect((await get("/zones/Z9/dose-limits")).status).toBe(404);
+  });
+
+  it("the mock scenarios are an exact copy of config/clients/client_A/scenarios.json", () => {
+    expect(mockScenarios).toEqual(configScenarios);
+  });
+
+  it("GET /api/zones/Z1 has exactly the fields of the contract §11.2 zone response (T1-10)", async () => {
+    const res = await get("/zones/Z1");
+    expect(res.status).toBe(200);
+    const t = (await res.json()) as ZoneStatus;
+
+    expect(Object.keys(t).sort()).toEqual([...ZONE_FIELDS].sort());
+    expect(Object.keys(t.readings).sort()).toEqual([...READING_FIELDS].sort());
+    expect(t).toMatchObject({ zone: "Z1", online: true, mode: "REMOTE", stopped: false, latches: [] });
+    expect(new Date(t.ts!).toISOString()).toBe(t.ts); // ISO-8601 UTC with milliseconds and Z
+    expect(t.lastSeen).toBe(t.ts);
+    // first answer is the contract's own example
+    expect(t.readings).toMatchObject({
+      ec: 1.62,
+      ph: 6.04,
+      solTempC: 23.4,
+      reservoirPct: 78,
+      reservoirL: 936,
+      circFlowLpm: 31,
+    });
+    expect(t.readings.doMgL).toBeNull(); // no DO sensor fitted in the layout
+    expect(t.readings.dayTankL).toEqual({ A: 32, B: 33, ACID: 40.5 });
+    expect(t.quality).toEqual({ ec: "OK", ph: "OK", solTempC: "OK", reservoirPct: "OK", circFlowLpm: "OK" });
+    expect(Object.keys(t.equipment)).toEqual([
+      "Z1-CIRC",
+      "Z1-REFILL",
+      "Z1-DOSE-A",
+      "Z1-DOSE-B",
+      "Z1-DOSE-ACID",
+    ]);
+    expect(t).toMatchObject({ estop: false, leak: false, activeCmdId: null, operation: null });
+  });
+
+  it("GET /api/zones lists every zone in layout order", async () => {
+    const res = await get("/zones");
+    expect(res.status).toBe(200);
+    const { items } = (await res.json()) as { items: ZoneStatus[] };
+    expect(items.map((z) => z.zone)).toEqual(["Z1", "Z2"]);
+  });
+
+  it("readings move a little between requests, as live data would", async () => {
+    const first = (await (await get("/zones/Z1")).json()) as ZoneStatus;
+    const second = (await (await get("/zones/Z1")).json()) as ZoneStatus;
+    expect(Math.abs(second.readings.ec! - first.readings.ec!)).toBeLessThan(0.05);
+  });
+
+  it("GET /api/climate answers like contract §11.2, positions from the layout", async () => {
+    const res = await get("/climate");
+    expect(res.status).toBe(200);
+    const c = (await res.json()) as ClimateStatus;
+    expect(c).toMatchObject({ online: true, mode: "MANUAL", manualUntil: null, stopped: false, latches: [] });
+    // §11.2: the answer carries no message envelope
+    for (const key of [
+      "v",
+      "type",
+      "msgId",
+      "site",
+      "device",
+      "bootId",
+      "seq",
+      "runTimeTodayMin",
+      "setpoints",
+    ])
+      expect(c).not.toHaveProperty(key);
+    // first answer is the contract example
+    expect(c.readings).toEqual({
+      airTempC: 31.2,
+      airTempByPosC: { PAD_END: 29.4, MIDDLE: 31.0, FAN_END: 33.1 },
+      airRh: 71,
+      outsideTempC: 33.8,
+      outsideRh: 58,
+      elecRoomTempC: 34.0,
+      vpdKpa: 1.32, // §1: from air temp and RH
+    });
+    expect(c.equipment).toMatchObject({
+      fanStage: 2,
+      FAN1: "ON",
+      FAN3: "OFF",
+      PAD1: "ON",
+      CH1: { state: "ON", setpointC: 22 },
+    });
+  });
+
+  it("GET /api/power answers like contract §11.2", async () => {
+    const res = await get("/power");
+    expect(res.status).toBe(200);
+    const p = (await res.json()) as PowerStatus;
+    expect(p).toMatchObject({
+      online: true,
+      mains: "OK",
+      phases: { l1V: 231, l2V: 229, l3V: 233 },
+      source: "MAINS",
+      generator: "STOPPED",
+      ats: "MAINS",
+      ups: { onBattery: false, batteryPct: 100, runtimeMin: 42 },
+      quality: {},
+    });
+    for (const key of ["v", "type", "msgId", "site", "device", "bootId", "seq"])
+      expect(p).not.toHaveProperty(key);
+  });
+
+  it("GET /api/zones/Z9 is a 404 with the contract error body", async () => {
+    const res = await get("/zones/Z9");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: { code: "NOT_FOUND", message: "There is no zone Z9" } });
+  });
+});

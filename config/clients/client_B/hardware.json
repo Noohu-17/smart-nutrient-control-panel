@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "pumps.doseLines: Zone A's calibrated pump rate, 15 mL/min = 0.25 mL/s for N, P and K (farm details form, R-1, section 5: average of three 60 s runs); a zone without its own rates takes these. pumps.zones.Z2.doseLines: Zone B's own pumps, the gateway's relays (rig Zone 2), which run 1 L/min = 16.667 mL/s, 67 times faster (the gateway's MG_Z2_PUMP_ML_PER_MIN, snm-prototype-extension-v1 gateway README). That rate is the gateway's setting, not yet timed at the farm as Zone A's was: at 16.667 mL/s, 1 mL is 0.06 s of pumping, under the rig's shortest dose (0.1 s), so Zone B's smallest dose that runs is 2 mL.",
+    "placeholderKeys": ["pumps.zones.Z2.doseLines"],
+    "sources": {
+      "pumps.zones.Z2.doseLines": "PLACEHOLDER: the gateway's configured 1 L/min, until each pump is timed as Zone A's were (three 60 s runs into a measuring cylinder)."
+    }
+  },
+  "sensors": {},
+  "pumps": {
+    "doseLines": {
+      "N": { "flowMlPerS": 0.25 },
+      "P": { "flowMlPerS": 0.25 },
+      "K": { "flowMlPerS": 0.25 }
+    },
+    "zones": {
+      "Z2": {
+        "doseLines": {
+          "N": { "flowMlPerS": 16.667 },
+          "P": { "flowMlPerS": 16.667 },
+          "K": { "flowMlPerS": 16.667 }
+        }
+      }
+    }
+  },
+  "valves": {},
+  "fans": {}
+}

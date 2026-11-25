@@ -1,0 +1,9 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder values until the panel I/O list exists. Do not use for a real farm."
+  },
+  "controllers": {}
+}

@@ -1,0 +1,15 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder demo users until real accounts are created at commissioning. Do not use for a real farm.",
+    "passwordFrom": "env"
+  },
+  "users": [
+    { "id": "demo-owner", "name": "Demo Owner", "email": "owner@example.com", "role": "OWNER" },
+    { "id": "demo-agronomist", "name": "Demo Agronomist", "email": "agronomist@example.com", "role": "AGRONOMIST" },
+    { "id": "demo-operator", "name": "Demo Operator", "email": "operator@example.com", "role": "OPERATOR" },
+    { "id": "demo-viewer", "name": "Demo Viewer", "email": "viewer@example.com", "role": "VIEWER" }
+  ]
+}

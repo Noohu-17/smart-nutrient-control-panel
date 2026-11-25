@@ -1,0 +1,32 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder values until the agronomy EC/pH targets arrive (OPEN-5). Do not use for a real farm. zones is the recipe each zone is on until recipes can be applied (POST /zones/{zoneId}/recipe); its crops and stages are the contract's scenario example (11.4.1). Each zone also names the crop's variety and plantedOn, the day it was planted (YYYY-MM-DD, the farm's own date) (T1-38)."
+  },
+  "zones": {
+    "Z1": { "crop": "LETTUCE", "variety": "Butterhead", "stage": "GROWING", "plantedOn": "2026-10-21" },
+    "Z2": { "crop": "BASIL", "variety": "Genovese", "stage": "SEEDLING", "plantedOn": "2026-11-08" }
+  },
+  "crops": [
+    {
+      "id": "LETTUCE",
+      "name": "Lettuce",
+      "stages": [
+        { "id": "SEEDLING", "ecTarget": { "min": 0.8, "max": 1.2 }, "phTarget": { "min": 5.8, "max": 6.2 }, "source": "PLACEHOLDER" },
+        { "id": "GROWING", "ecTarget": { "min": 1.2, "max": 1.8 }, "phTarget": { "min": 5.6, "max": 6.2 }, "source": "PLACEHOLDER" },
+        { "id": "READY", "ecTarget": { "min": 1.2, "max": 1.6 }, "phTarget": { "min": 5.6, "max": 6.2 }, "source": "PLACEHOLDER" }
+      ]
+    },
+    {
+      "id": "BASIL",
+      "name": "Basil",
+      "stages": [
+        { "id": "SEEDLING", "ecTarget": { "min": 1.0, "max": 1.4 }, "phTarget": { "min": 5.8, "max": 6.4 }, "source": "PLACEHOLDER" },
+        { "id": "GROWING", "ecTarget": { "min": 1.4, "max": 2.0 }, "phTarget": { "min": 5.8, "max": 6.4 }, "source": "PLACEHOLDER" },
+        { "id": "READY", "ecTarget": { "min": 1.4, "max": 1.8 }, "phTarget": { "min": 5.8, "max": 6.4 }, "source": "PLACEHOLDER" }
+      ]
+    }
+  ]
+}

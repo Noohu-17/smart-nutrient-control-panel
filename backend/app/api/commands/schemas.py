@@ -1,0 +1,72 @@
+"""Request and answer bodies for the command routes (contract §7.4, §7.8, §11.2, §11.3)."""
+
+from typing import Literal
+
+from pydantic import model_validator
+
+from ...contract import ContractModel
+from ...contract.farm_messages import CmdState, CommandLine, EcPh
+from ..schemas import ApiTime
+from .messages import StopScope
+
+
+class StopBody(ContractModel):
+    """{ "scope": "ALL_OPERATIONS" }, or { "scope": "ZONE", "zone": "Z1" } (§7.4)."""
+
+    scope: StopScope
+    zone: str | None = None
+
+    @model_validator(mode="after")
+    def _zone_only_with_scope_zone(self) -> "StopBody":
+        if (self.zone is not None) != (self.scope == "ZONE"):
+            raise ValueError("zone is needed with scope ZONE, and only then")
+        return self
+
+
+class ResumeBody(ContractModel):
+    """{ "zone": "Z1" }, or { "scope": "CLIMATE" } (§7.8, §11.2)."""
+
+    zone: str | None = None
+    scope: Literal["CLIMATE"] | None = None
+
+    @model_validator(mode="after")
+    def _a_zone_or_climate(self) -> "ResumeBody":
+        if (self.zone is None) == (self.scope is None):
+            raise ValueError('give either a zone or "scope": "CLIMATE"')
+        return self
+
+
+class CommandSent(ContractModel):
+    """202: the broker has the command (§11.3: { "cmdId": "6f1c…", "state": "DISPATCHED" })."""
+
+    cmd_id: str
+    state: Literal["DISPATCHED"]
+
+
+class CommandStatus(ContractModel):
+    """A command as its controller last reported it (CMD_STATE, §6.6), or DISPATCHED until then."""
+
+    cmd_id: str
+    device: str | None  # the controller that reported it; null while DISPATCHED
+    state: CmdState | Literal["DISPATCHED", "UNKNOWN"]  # UNKNOWN: left without replies (stuck.py)
+    reason: str | None  # a reason code (§8.4) when PARTIAL, FAILED, STOPPED, REJECTED or UNKNOWN
+    lines: list[CommandLine] | None  # DOSE only: requested and delivered mL per line
+    before: EcPh | None
+    after: EcPh | None
+    started_at: ApiTime | None
+    ended_at: ApiTime | None
+
+    @classmethod
+    def dispatched(cls, cmd_id: str) -> "CommandStatus":
+        """Sent, and nothing heard from the farm about it yet (§8.1)."""
+        return cls(
+            cmd_id=cmd_id,
+            device=None,
+            state="DISPATCHED",
+            reason=None,
+            lines=None,
+            before=None,
+            after=None,
+            started_at=None,
+            ended_at=None,
+        )

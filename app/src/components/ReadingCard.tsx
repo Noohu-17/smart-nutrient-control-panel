@@ -1,0 +1,82 @@
+import type { Quality } from "../api/types";
+import { formatReading, QUALITY_TEXT, type ReadingSpec } from "../config/readings";
+
+export type Range = { min: number; max: number };
+export type ReadingTone = "ok" | "warn" | "crit" | "off";
+
+/**
+ * Grey for an old or offline reading (or none yet), red for a sensor fault, amber outside the target
+ * band, green otherwise. A fault is a problem on the farm to act on, not just missing data.
+ */
+function readingTone(
+  value: number | null | undefined,
+  quality: Quality | undefined,
+  target: Range | undefined,
+  stale: boolean,
+): ReadingTone {
+  if (stale) return "off";
+  if (quality === "FAULT") return "crit";
+  if (value === null || value === undefined) return "off";
+  if (quality && quality !== "OK") return quality === "OUT_OF_RANGE" ? "warn" : "off";
+  if (target && (value < target.min || value > target.max)) return "warn";
+  return "ok";
+}
+
+function statusText(
+  tone: ReadingTone,
+  value: number | null | undefined,
+  quality: Quality | undefined,
+  target: Range | undefined,
+  stale: boolean,
+  loading: boolean,
+) {
+  if (loading) return "Loading";
+  if (quality && quality !== "OK") return QUALITY_TEXT[quality];
+  if (tone === "off") return stale ? QUALITY_TEXT.STALE : "No data";
+  // say which way it is off, so the grower knows whether to raise or lower it
+  if (tone === "warn") return target && value! < target.min ? "Too low" : "Too high";
+  return target ? "In target" : undefined;
+}
+
+/** One reading: label, value with unit, target band and a status line, coloured by quality and target. */
+export function ReadingCard({
+  spec,
+  value,
+  quality,
+  target,
+  targetNote,
+  stale = false,
+  loading = false,
+}: {
+  spec: ReadingSpec;
+  value: number | null | undefined;
+  quality?: Quality;
+  target?: Range;
+  /** the target in another unit, e.g. "400–600 ppm" */
+  targetNote?: string;
+  /** controller offline or readings old: grey, whatever the value says */
+  stale?: boolean;
+  /** still waiting for the first answer */
+  loading?: boolean;
+}) {
+  const tone = readingTone(value, quality, target, stale);
+  const status = statusText(tone, value, quality, target, stale, loading);
+  return (
+    <div className={`reading reading-${tone}`} role="group" aria-label={spec.label}>
+      <span className="reading-head">
+        <span>{spec.label}</span>
+        {target && (
+          <span>
+            Target {formatReading(target.min, spec)}–{formatReading(target.max, spec)}
+            {targetNote && ` (${targetNote})`}
+          </span>
+        )}
+      </span>
+      <span className="reading-value">
+        <b>{formatReading(value, spec)}</b>
+        {spec.unit && <small>{spec.unit}</small>}
+      </span>
+      {status && <span className="reading-status">{status}</span>}
+    </div>
+  );
+}

@@ -1,0 +1,5 @@
+# Test and lint tools: on laptops, not in the simulator's server image.
+-r requirements.txt
+pytest==9.2.0
+ruff==0.17.3
+pydantic==2.14.1  # checks messages against the contract models in backend/app/contract (T1-7)

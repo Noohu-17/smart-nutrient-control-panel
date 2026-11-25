@@ -1,0 +1,31 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "client_B is a real farm: its zones are LIVE on the prototype rig (io_map.json, the zone controller service) and are never simulated, so there is no zone model or demoStart here. Its climate has no hardware yet, so layout.json climate.source is SIMULATED and the simulator plays only the climate controller (CC1) and the power monitor (PM1), from model.air and model.power below (DM-2). speedOptions is real time only: a live farm never runs faster (T1-33).",
+    "placeholderKeys": ["model.air", "model.power"],
+    "sources": {
+      "model.air": "PLACEHOLDER: a typical day in a Coimbatore polyhouse in late November, not measured: about 27 C inside on average (warmer at the fan end), 72 % RH, 25 C and 78 % outside. Replace with the farm's own readings once an air sensor is fitted.",
+      "model.air.dailyCycle": "PLACEHOLDER: the air swings 8 C and 20 % RH over the day, warmest and driest at 14:00 local time, so the simulated readings move like a real day.",
+      "model.power": "PLACEHOLDER: three-phase mains at about 230 V (farm details form: 3 phase); no generator or UPS (layout.json power), so upsBatteryPct and upsRuntimeMin are not reported."
+    }
+  },
+  "speedOptions": [1],
+  "minRealReadingIntervalS": 5,
+  "model": {
+    "air": {
+      "tempByPosC": { "PAD_END": 26.0, "MIDDLE": 27.0, "FAN_END": 28.5 },
+      "rh": 72,
+      "outsideTempC": 25.0,
+      "outsideRh": 78,
+      "elecRoomTempC": 29.0,
+      "dailyCycle": { "tempSwingC": 8.0, "rhSwingPct": 20, "warmestHour": 14 }
+    },
+    "power": {
+      "phasesV": { "l1V": 230, "l2V": 231, "l3V": 229 },
+      "upsBatteryPct": 100,
+      "upsRuntimeMin": 0
+    }
+  }
+}

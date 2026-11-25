@@ -1,0 +1,304 @@
+# Staging stack: Caddy (HTTPS, the app and /api), the API, the worker, the notifier (Web Push),
+# PostgreSQL with TimescaleDB, the Mosquitto broker, the farm simulator and the zone controller
+# service for the zones on the prototype rig (T1-32). Steps: README.md,
+# "Deploy to staging".
+#
+# Published ports: Caddy (80, 443) and the broker's TLS port for the farm's gateway (8883).
+# The database and the broker's plain port 1883 are on a network with no route in or out, and
+# every MQTT client logs in with its own account (contract sections 3 and 4, infra/readme.md).
+# The notifier is the one back-end service with a route out, to the browsers' push services, on a
+# network of its own (outbound). It is also on internal, with the database, the API, the worker and
+# the broker, but calls only the database. It isn't on Caddy's network, publishes no port, and
+# nothing calls it (T1-41).
+#
+# Run from the repo root:
+#   docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml up -d --build
+
+name: sna-staging
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-backend-env: &backend-env
+  APP_ENV: staging
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_NAME: ${POSTGRES_DB:?set in infra/.env.staging}
+  DB_USER: ${POSTGRES_USER:?set in infra/.env.staging}
+  DB_PASSWORD: ${POSTGRES_PASSWORD:?set in infra/.env.staging}
+  SESSION_SECRET: ${SESSION_SECRET:?set in infra/.env.staging}
+  MQTT_HOST: mqtt
+  MQTT_PORT: "1883"
+  CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}
+
+x-device-passwords: &device-passwords
+  MQTT_PASSWORD_GW1: ${MQTT_PASSWORD_GW1:?set in infra/.env.staging}
+  MQTT_PASSWORD_ZC1: ${MQTT_PASSWORD_ZC1:?set in infra/.env.staging}
+  MQTT_PASSWORD_ZC2: ${MQTT_PASSWORD_ZC2:?set in infra/.env.staging}
+  MQTT_PASSWORD_CC1: ${MQTT_PASSWORD_CC1:?set in infra/.env.staging}
+  MQTT_PASSWORD_PM1: ${MQTT_PASSWORD_PM1:?set in infra/.env.staging}
+
+# The worker and the simulator have no port to ask, so their check is an open connection to
+# the broker: an established TCP socket to port 1883 (hex 075B).
+x-broker-connected: &broker-connected
+  test: ["CMD-SHELL", "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | grep -Eq ' [0-9A-F]+:075B 01 '"]
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 15s
+
+services:
+  caddy:
+    build:
+      context: ..
+      dockerfile: infra/caddy/Dockerfile
+      args:
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
+    image: sna-caddy:staging
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set in infra/.env.staging}
+      SITE_USER: ${SITE_USER:?set in infra/.env.staging}
+      SITE_PASSWORD_HASH: ${SITE_PASSWORD_HASH:?set in infra/.env.staging}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data  # certificates; losing them risks the certificate authority's rate limits
+      - caddy-config:/config
+    networks: [edge]
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    <<: *logging
+
+  api:
+    build: ../backend
+    image: sna-backend:staging
+    environment:
+      <<: *backend-env
+      MQTT_USERNAME: CLOUD-api
+      MQTT_PASSWORD: ${MQTT_PASSWORD_CLOUD_API:?set in infra/.env.staging}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-false}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?set in infra/.env.staging}  # Web Push (T1-41); the private key is the notifier's
+      SIM_CONTROL_URL: http://simulator:8100  # /api/sim forwards here, on the internal network
+    volumes:
+      - ../config:/config:ro  # the client config packs (contract 2.5), read only
+    networks: [edge, internal]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=8)"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    <<: *logging
+
+  # Builds or updates the database, imports the client's config pack (CLIENT_DIR) into it, then
+  # exits (T1-39). It runs on every `up`; both steps change nothing when the database is already
+  # current. A changed pack becomes the next config version: the import checks it first and stores
+  # nothing if it has a problem, so `up` stops here. The api and worker read the settings from the
+  # database only (APP_ENV staging: CONFIG_SOURCE database), and the api sends the new version's
+  # DEVICE_CONFIG to the zone controllers.
+  migrate:
+    build: ../backend
+    image: sna-backend:staging
+    command: ["sh", "-c", "alembic upgrade head && python -m app.db.config_store import"]
+    environment:
+      <<: *backend-env
+    volumes:
+      - ../config:/config:ro
+    networks: [internal]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    <<: *logging
+
+  worker:
+    build: ../backend
+    image: sna-backend:staging
+    command: ["python", "-m", "app.worker.main"]
+    stop_signal: SIGINT  # stops at once; as PID 1, Python would ignore Docker's default SIGTERM
+    environment:
+      <<: *backend-env
+      MQTT_USERNAME: CLOUD-worker
+      MQTT_PASSWORD: ${MQTT_PASSWORD_CLOUD_WORKER:?set in infra/.env.staging}
+    volumes:
+      - ../config:/config:ro
+    networks: [internal]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      mqtt:
+        condition: service_healthy
+    healthcheck: *broker-connected
+    restart: unless-stopped
+    <<: *logging
+
+  # Web Push for alerts (T1-41, backend/app/push/README.md): sends what the worker queues in the
+  # database to the browsers' push services. The only holder of the VAPID private key.
+  notifier:
+    build: ../backend
+    image: sna-backend:staging
+    command: ["python", "-m", "app.push.notifier"]
+    stop_signal: SIGINT
+    environment:
+      <<: *backend-env
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?set in infra/.env.staging}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?set in infra/.env.staging}
+    volumes:
+      - ../config:/config:ro
+    networks: [internal, outbound]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # A push round finished in the last 30 s (a file it touches; no port, nothing to reach).
+      test: ["CMD", "python", "-c", "import sys; from app.push.notifier import healthy; sys.exit(0 if healthy() else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+    <<: *logging
+
+  simulator:
+    build: ../simulator
+    image: sna-simulator:staging
+    stop_signal: SIGINT  # a clean stop: each device publishes its own offline status
+    environment:
+      <<: *device-passwords
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SIM_SPEED: ${SIM_SPEED:-}  # empty: the demo's speed (simulator.json demoStart.speed)
+      SIM_CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}
+      SIM_CONTROL_HOST: 0.0.0.0  # reachable on the internal network only
+      SIM_CONTROL_PORT: "8100"
+    volumes:
+      - ../config:/config:ro
+      - simulator-state:/app/.state  # bootIds must keep rising across restarts (contract 5)
+    # The playground control API (contract 11.4): the api reaches it at http://simulator:8100.
+    # Exposed on the internal network only, never published: people go through /api/sim.
+    expose: ["8100"]
+    networks: [internal]
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    healthcheck: *broker-connected
+    restart: unless-stopped
+    <<: *logging
+
+  # The zone controller service (T1-32): the zones io_map.json puts on the prototype rig, run by
+  # sim/controller on the rig's sf/* messages. The app sees them as any zone controller. It logs in
+  # twice on 1883, never from outside: as each rig zone's controller (ZC1 ...) for the contract
+  # topics, and as RIGLINK for the rig's sf/* topics. With a pack that puts no zone on the rig
+  # (client_A) it says so once and exits, and on-failure leaves it stopped.
+  zone-controller:
+    build: ../simulator
+    image: sna-simulator:staging
+    command: ["python", "-m", "sim.rig"]
+    stop_signal: SIGINT  # a clean stop: each rig zone's controller publishes its offline status
+    environment:
+      <<: *device-passwords
+      MQTT_PASSWORD_RIGLINK: ${MQTT_PASSWORD_RIGLINK:-}
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      SIM_CLIENT_DIR: ${CLIENT_DIR:?set in infra/.env.staging}
+      RIG_LINK_ID: RIGLINK
+      RIG_TELEMETRY_TOPIC: ${RIG_TELEMETRY_TOPIC:-}
+      RIG_COMMAND_TOPIC: ${RIG_COMMAND_TOPIC:-}
+    volumes:
+      - ../config:/config:ro
+      - rig-state:/app/.state  # nvs and bootIds survive a restart (contract 5, 8.3)
+    networks: [internal]
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    healthcheck: *broker-connected
+    restart: on-failure
+    <<: *logging
+
+  db:
+    image: timescale/timescaledb:2.30.2-pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set in infra/.env.staging}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in infra/.env.staging}
+      POSTGRES_DB: ${POSTGRES_DB:?set in infra/.env.staging}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      # Over TCP: while the image initialises, its temporary server listens on the socket only.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+    restart: unless-stopped
+    <<: *logging
+
+  mqtt:
+    image: eclipse-mosquitto:2.0.22
+    entrypoint: ["/bin/sh", "/mosquitto/staging/start.sh"]
+    environment:
+      <<: *device-passwords
+      MQTT_PASSWORD_CLOUD_API: ${MQTT_PASSWORD_CLOUD_API:?set in infra/.env.staging}
+      MQTT_PASSWORD_CLOUD_WORKER: ${MQTT_PASSWORD_CLOUD_WORKER:?set in infra/.env.staging}
+      # The site's ACL file (acl.conf: siet-ph1; acl-coimbatore-ph1.conf: client_B), and the rig's
+      # topic bases and logins for its two blocks (start.sh). Empty RIG_*: no rig on this farm.
+      MQTT_ACL: ${MQTT_ACL:-acl.conf}
+      RIG_TELEMETRY_TOPIC: ${RIG_TELEMETRY_TOPIC:-}
+      RIG_COMMAND_TOPIC: ${RIG_COMMAND_TOPIC:-}
+      RIG_GATEWAY_LOGIN: ${RIG_GATEWAY_LOGIN:-gateway-01}
+      MQTT_PASSWORD_RIGLINK: ${MQTT_PASSWORD_RIGLINK:-}
+    # MQTT over TLS for the farm's gateway: farm device logins only (start.sh). Plain 1883 is
+    # never published: the API, the worker and the simulator reach it on the internal network.
+    ports:
+      - "${MQTT_TLS_PORT:-8883}:8883"
+    volumes:
+      # Also secrets/ (git-ignored): device logins, and the broker's certificate and key.
+      - ./mosquitto/staging:/mosquitto/staging:ro
+      - mqtt-data:/mosquitto/data  # queued messages and retained state survive a restart
+    # internal: the back end and the simulator. broker-edge: only so 8883 can be published,
+    # since a port can't be published from a network with no route in.
+    networks: [internal, broker-edge]
+    healthcheck:
+      # Logging in proves the broker is up and its accounts loaded. The ACL drops the message itself.
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -u CLOUD-api -P \"$${MQTT_PASSWORD_CLOUD_API}\" -t healthcheck -m ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    <<: *logging
+
+networks:
+  edge:
+  internal:
+    internal: true  # no published ports and no route out
+  outbound:  # the notifier's route out to the push services, and nothing else on it
+  broker-edge:  # the broker alone, for its TLS port
+
+volumes:
+  caddy-data:
+  caddy-config:
+  db-data:
+  mqtt-data:
+  simulator-state:
+  rig-state:

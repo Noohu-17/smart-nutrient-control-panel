@@ -1,41 +1,89 @@
-PWA for Owner, Agronomist, Viewer and Engineer roles.
+# Smart Nutrient Advisor — Phase 2
+Remote nutrient dosing and climate monitoring for the Coimbatore polyhouse (2 NFT zones).
 
-## Fake API (MSW, T2-4)
+## Run the control panel
 
-`npm run dev` starts a fake back end inside the browser (`src/mocks/`). It answers:
+From the repo root: `npm install` (once; it installs `app/`), then `npm run dev` and open http://localhost:5173. It runs on the app's fake API, so no back end is needed. For the real back end, see `infra/readme.md` and run the app with `VITE_USE_MOCKS=false`.
 
-- `GET /api/health` → `{ "status": "OK", "database": "UP", "broker": "UP" }` (503 `DEGRADED` with `?mock=api-degraded`)
-- `GET /api/farm` → `src/mocks/data/layout.json` plus `features` from `src/mocks/data/features.json`, copies of the same files in `config/clients/client_A/` (a test fails if they differ)
-- `GET /api/zones`, `/api/zones/Z1`, `/api/zones/Z2` → the contract §11.2 zone response, as the real back end answers it; readings move a little on every request
-- `/api/sim/…` (contract §11.4, playground only) → a fake simulator in `src/mocks/sim.ts`: `GET state` and `scenario-options` (a copy of `config/clients/client_A/scenarios.json`, checked by a test), `POST speed`, `faults`, `holds`, `holds/release-all`, `reset`, and `DELETE holds/{target}/{metric}`. It keeps the speed, the simulated clock, running drills and held values until the page reloads, and answers 422 to a value `scenarios.json` doesn't allow. A drill or held value doesn't change the fake readings yet
-- `GET /api/devices` → every device in `layout.json`, in device-ID order, with `online` and `lastSeen` (contract §11.2); `?limit=` and `?cursor=` page it as the real back end does. ZC2 is offline with `?mock=z2-offline`
+## Folders
+- firmware/ — ESP32 controller code (zone + climate controllers)
+- backend/  — cloud API, MQTT broker config, database
+- app/      — PWA (Owner, Agronomist, Operator, Viewer, Engineer views)
+- docs/     — scope, tracker, interface contract, wiring, site photos, decisions
 
-Add `?mock=<name>` to the URL to see other states (kept for the tab; `?mock=normal` to go back):
-`z2-offline`, `z2-sensor-fault`, `z2-stale`, `z1-estop`, `farm-error`, `no-playground`, `slow`. See `src/mocks/scenario.ts`.
+## Checks (run before raising a PR)
 
-## Real back end (T2-12)
-
-Node 26 (`.nvmrc` at the repo root). Start the dev stack with the API and the simulator (`backend/README.md`), then:
+One command runs every check: Python 3.13, back end and simulator (ruff + pytest), app (lint + tests). From the repo root:
 
 ```
-# PowerShell
-$env:VITE_USE_MOCKS = "false"; npm run dev
-# bash
-VITE_USE_MOCKS=false npm run dev
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/check.ps1
 ```
 
-Or put `VITE_USE_MOCKS=false` in `app/.env.local` (not committed). Vite then sends `/api` to `http://localhost:8000`; set `VITE_API_TARGET` for another address. Leave `VITE_USE_MOCKS` unset (or `true`) for the fake API. Tests always use the fake API.
+It ends with "All checks passed." or lists what failed. Paste the output in your PR.
 
-## Demo mode (T2-17)
+Once per laptop: Python 3.13 (see `.python-version`) and the current Node LTS, then
+- `backend/` and `simulator/`: create a virtual environment (`py -3.13 -m venv .venv`) and run `pip install -r requirements-dev.txt` inside it;
+- `app/`: `npm ci`.
 
-`VITE_DEMO_MODE` decides whether the app says it is a demo:
+The back end's database tests run only when the dev stack is up (`docker compose -f infra/docker-compose.dev.yml up -d`); otherwise they show as skipped.
 
-| | Sign-in page | Every screen |
-| :--- | :--- | :--- |
-| On | Role picker (Owner, Agronomist, Operator, Viewer) | "Demo · simulated farm" banner at the top |
-| Off | No picker: "Sign-in with your own account is coming soon" | No banner |
+## Deploy to staging
 
-- **A build** (`npm run build`) is off unless built with `VITE_DEMO_MODE=true`. Staging (T1-19) builds with it.
-- **`npm run dev`** is on, so the role picker works as before; `VITE_DEMO_MODE=false npm run dev` to see the off look.
-- **Tests** run with it on; `src/app/DemoMode.test.tsx` switches it with `vi.stubEnv` to test both.
-- Off, a role picked earlier in a demo build doesn't sign anyone in.
+`infra/docker-compose.staging.yml` runs Caddy (HTTPS, the app and `/api`), the API, the worker, the notifier (Web Push for alerts), the database, the broker and the simulator. Published ports: Caddy's (80 and 443) and the broker's TLS port for the farm's gateway (8883). The database and the broker's plain port (1883) are internal only. On a server, the domain's DNS must point at it and ports 80, 443 and 8883 must be open. To try it on a laptop, keep `SITE_ADDRESS=localhost`.
+
+Before the farm's gateway can connect, the broker needs its certificate and the gateway its login: [infra/readme.md](infra/readme.md). Without the certificate the broker runs without 8883, and the rest of the stack works as before.
+
+1. Copy `infra/.env.example` to `infra/.env.staging` (git ignores it) and fill in every blank password. On a server, set `SITE_ADDRESS` to the domain.
+
+   Set the site's login too. Choose `SITE_USER`, then make the password's hash. This asks for the password twice and prints the hash:
+
+   ```
+   docker run --rm -it caddy:2.10.2-alpine caddy hash-password
+   ```
+
+   Paste it into `SITE_PASSWORD_HASH` between single quotes, so its `$` signs stay as they are: `SITE_PASSWORD_HASH='$2a$14$...'`. Only the hash goes in the file. Give the password itself to people separately.
+
+   `VITE_DEMO_MODE` (`true` or `false`) is built into the app; the app reads it from T2-17 on.
+
+   The first time only, make the Web Push key pair (T1-41). Put both lines in the file and in the password manager, and set `VAPID_SUBJECT` to `mailto:` and the team's mailbox. Keep the pair: with a new one, every browser has to turn notifications on again (`backend/app/push/README.md`):
+
+   ```
+   docker build -t sna-backend:staging backend && docker run --rm sna-backend:staging python -m app.push.keys
+   ```
+2. Start it from the repo root. The first `up` also creates the database. Every `up` runs the migrations and loads the client's `layout.json`, then starts the rest:
+
+   ```
+   docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml up -d --build
+   ```
+
+3. Check it. Every service should say `healthy`, and health should answer `{"status":"OK","database":"UP","broker":"UP"}`. The whole site asks for the login, so health needs it too, and curl asks for the password:
+
+   ```
+   docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml ps
+   curl -u <SITE_USER> https://<SITE_ADDRESS>/api/health
+   ```
+
+   On `localhost`, Caddy uses its own certificate, so add `-k` to curl and accept the browser's warning. Without the login every address answers `401`.
+
+4. The first time only, make the site's first Owner. It prints a random password once: put it in the password manager. Every API call except health needs a signed-in user (T1-35). At the first sign-in the Owner sets up two-factor with an authenticator app, then adds everyone else (`backend/app/auth/README.md`):
+
+   ```
+   docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml exec api python -m app.auth.users create-owner --email <email> --name "<name>"
+   ```
+
+5. Run the demo check, after every deploy and again before the demo. It plays the demo through the API (a dose, Stop and Resume, a blocked dose, a sensor fault) and prints PASS or FAIL for each step, then puts the demo farm back with Reset. It signs in to the site and to the app as the Owner. The passwords go in environment variables, never on the command line:
+
+   ```
+   $env:DEMO_CHECK_PASSWORD = "<the site password>"          # PowerShell; export DEMO_CHECK_PASSWORD=... in bash
+   $env:DEMO_CHECK_APP_PASSWORD = "<the Owner's password>"
+   $env:DEMO_CHECK_TOTP_SECRET = "<the Owner's two-factor secret>"   # the secret shown at two-factor setup
+   python scripts/demo-check.py https://<SITE_ADDRESS> --user <SITE_USER> --email <Owner's email> --speed 60
+   ```
+
+   `--speed 60` makes it take about a minute; Reset puts the start speed back. On `localhost` add `--insecure`, for the same certificate reason as `-k`. Against the dev stack it needs no site login, only the app's: `python scripts/demo-check.py http://localhost:8000 --email <email> --speed 60`, after making an Owner there with `python -m app.auth.users create-owner` from `backend/`. On a site without the playground it runs only the health and readings checks, so it never doses a real farm.
+
+Stop it with `down` in place of `up -d --build`. Data stays in Docker volumes (database, broker, simulator `.state`, certificates); `down -v` deletes all of it. The broker's logins and certificate are files in `infra/mosquitto/staging/secrets/`, not volumes, so `down -v` keeps them.
+
+Changing `POSTGRES_PASSWORD` later needs an `ALTER USER` in the database too, because the value only takes effect when the database is first created.
+
+To change the site's login, put the new `SITE_USER` or hash in `infra/.env.staging` and run `up -d caddy` in place of `up -d --build`. Changing `VITE_DEMO_MODE` needs `up -d --build caddy`, because it is built into the app.

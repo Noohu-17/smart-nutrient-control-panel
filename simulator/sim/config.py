@@ -1,0 +1,222 @@
+"""Read the client's config pack (contract 2.5): the same files the back end loads."""
+
+from __future__ import annotations
+
+import json
+import math
+import re
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+SITE_ID = re.compile(r"[a-z0-9]+(-[a-z0-9]+)*")  # contract 2.1: lowercase slug
+DEVICE_ID = re.compile(r"[A-Z][A-Z0-9]*")  # contract 2.2: GW1, ZC1 ...; also the MQTT client ID
+# The kinds of device the simulator knows how to play (layout.json "devices").
+DEVICE_KINDS = ("GATEWAY", "ZONE_CONTROLLER", "CLIMATE_CONTROLLER", "POWER_MONITOR")
+ZONE_SOURCES = ("LIVE", "SIMULATED")  # contract 2.4: real hardware runs the zone, or this simulator
+DEMO_ZONE_KEYS = ("reservoirPct", "ecMsCm", "ph", "solTempC", "dayTankPct")  # model.initialState's
+
+
+def read_pack_file(client_dir: Path, name: str) -> dict[str, Any]:
+    path = client_dir / name
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise ValueError(f"config pack file not found: {path}") from None
+    except json.JSONDecodeError as err:
+        raise ValueError(f"{path}: not valid JSON: {err}") from None
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: top level must be a JSON object")
+    return data
+
+
+def load_speed_options(client_dir: Path) -> tuple[float, ...]:
+    """Clock speeds the playground offers (simulator.json "speedOptions", contract 11.4)."""
+    options = read_pack_file(client_dir, "simulator.json").get("speedOptions")
+    if not isinstance(options, list) or not options or not all(
+        isinstance(x, (int, float)) and not isinstance(x, bool) and x >= 0 for x in options
+    ):
+        raise ValueError(f"simulator.json: speedOptions must list speeds >= 0, got {options!r}")
+    return tuple(options)
+
+
+def load_min_real_reading_interval_s(client_dir: Path) -> float:
+    """Fewest real seconds between periodic readings (simulator.json, 0 means no cap)."""
+    value = read_pack_file(client_dir, "simulator.json").get("minRealReadingIntervalS")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < 0
+    ):
+        raise ValueError(
+            f"simulator.json: minRealReadingIntervalS must be a number >= 0, got {value!r}"
+        )
+    return float(value)
+
+
+def playground_enabled(client_dir: Path) -> bool:
+    """features.json "playground": only playground sites carry simTs (contract 5)."""
+    value = read_pack_file(client_dir, "features.json").get("playground", False)
+    if not isinstance(value, bool):
+        raise ValueError(f"features.json: playground must be true or false, got {value!r}")
+    return value
+
+
+def load_zone_limits(client_dir: Path, zone_id: str) -> dict[str, Any]:
+    """A zone controller's own limits (limits.json), the shape DEVICE_CONFIG brings (7.7)."""
+    zones = read_pack_file(client_dir, "limits.json").get("zones")
+    zone = zones.get(zone_id) if isinstance(zones, dict) else None
+    limits = zone.get("limits") if isinstance(zone, dict) else None
+    if not isinstance(limits, dict):
+        raise ValueError(f"limits.json: zones.{zone_id}.limits must be an object, got {limits!r}")
+    return limits
+
+
+def load_zone_dose(client_dir: Path, zone_id: str) -> dict[str, Any]:
+    """A zone's dose settings (limits.json "dose": maxDurationS, mixWaitS, tolerancePct)."""
+    zones = read_pack_file(client_dir, "limits.json").get("zones")
+    zone = zones.get(zone_id) if isinstance(zones, dict) else None
+    dose = zone.get("dose") if isinstance(zone, dict) else None
+    if not isinstance(dose, dict):
+        raise ValueError(f"limits.json: zones.{zone_id}.dose must be an object, got {dose!r}")
+    return dose
+
+
+def pump_rate(hardware: Mapping[str, Any], zone_id: str, line: str) -> tuple[Any, str]:
+    """A dose line's pump rate in one zone (hardware.json, contract 2.5): flowMlPerS as written,
+    and the key it is under. A zone whose pumps run at their own rate has
+    pumps.zones.<zone>.doseLines.<line>; otherwise the line takes pumps.doseLines.<line>, the
+    rate the zones share. The same rule as the back end's packcheck.pump_rates."""
+    pumps = hardware.get("pumps") if isinstance(hardware, Mapping) else None
+    pumps = pumps if isinstance(pumps, Mapping) else {}
+    zones = pumps.get("zones") if isinstance(pumps.get("zones"), Mapping) else {}
+    own = zones.get(zone_id) if isinstance(zones.get(zone_id), Mapping) else {}
+    for key, lines in ((f"pumps.zones.{zone_id}.doseLines", own.get("doseLines")),
+                       ("pumps.doseLines", pumps.get("doseLines"))):
+        if isinstance(lines, Mapping) and line in lines:
+            entry = lines[line]
+            return (entry.get("flowMlPerS") if isinstance(entry, Mapping) else None,
+                    f"{key}.{line}.flowMlPerS")
+    return None, f"pumps.doseLines.{line}.flowMlPerS"
+
+
+def load_demo_start(client_dir: Path) -> dict[str, Any]:
+    """The playground farm's starting state, where POST /reset returns (simulator.json "demoStart").
+
+    Its scenario name, weather (one of scenarios.json "weather") and clock speed (one of
+    "speedOptions", or None), and per zone the model.initialState values that differ; the farm
+    model checks those values. With no demoStart, every zone starts as model.initialState, and
+    the scenario, weather and speed are None.
+    """
+    start = read_pack_file(client_dir, "simulator.json").get("demoStart")
+    if start is None:
+        return {"scenario": None, "weather": None, "speed": None, "zones": {}}
+    if not isinstance(start, dict):
+        raise ValueError(f"simulator.json: demoStart must be an object, got {start!r}")
+    scenario = start.get("scenario")
+    if not isinstance(scenario, str) or not scenario.strip():
+        raise ValueError(f"simulator.json: demoStart.scenario must be a name, got {scenario!r}")
+    weather = start.get("weather")
+    options = read_pack_file(client_dir, "scenarios.json").get("weather") or []
+    if weather not in options:
+        raise ValueError(
+            f"simulator.json: demoStart.weather must be one of scenarios.json weather "
+            f"{options}, got {weather!r}"
+        )
+    speed, speeds = start.get("speed"), load_speed_options(client_dir)
+    if speed is not None and (isinstance(speed, bool) or speed not in speeds):
+        raise ValueError(
+            f"simulator.json: demoStart.speed must be one of speedOptions {list(speeds)}, "
+            f"got {speed!r}"
+        )
+    zones = start.get("zones", {})
+    if not isinstance(zones, dict):
+        raise ValueError(f"simulator.json: demoStart.zones must be an object, got {zones!r}")
+    for zone_id, values in zones.items():  # a zone the layout doesn't have is ignored
+        if not isinstance(values, dict) or not set(values) <= set(DEMO_ZONE_KEYS):
+            raise ValueError(
+                f"simulator.json: demoStart.zones.{zone_id} may set {list(DEMO_ZONE_KEYS)}, "
+                f"got {values!r}"
+            )
+    return {"scenario": scenario, "weather": weather, "speed": speed, "zones": zones}
+
+
+def load_site(client_dir: Path) -> str:
+    """The site ID used in every topic, farm/{site}/... (layout.json "site")."""
+    site = read_pack_file(client_dir, "layout.json").get("site")
+    if not isinstance(site, str) or not SITE_ID.fullmatch(site):
+        raise ValueError(f"layout.json: site must be a lowercase slug, got {site!r}")
+    return site
+
+
+def load_devices(client_dir: Path) -> tuple[dict[str, Any], ...]:
+    """The devices to play: one per entry in layout.json "devices", in file order.
+
+    Each entry has an "id" and a "kind", plus kind-specific fields such as a zone
+    controller's "zone". Remove an entry and that device is no longer played.
+    """
+    devices = read_pack_file(client_dir, "layout.json").get("devices")
+    if not isinstance(devices, list) or not devices:
+        raise ValueError(f'layout.json: "devices" must be a non-empty list, got {devices!r}')
+    seen = set()
+    for device in devices:
+        if not isinstance(device, dict):
+            raise ValueError(f"layout.json: each device must be an object, got {device!r}")
+        device_id, kind = device.get("id"), device.get("kind")
+        if not isinstance(device_id, str) or not DEVICE_ID.fullmatch(device_id):
+            raise ValueError(f"layout.json: device id must look like GW1 or ZC1, got {device_id!r}")
+        if device_id in seen:
+            raise ValueError(f"layout.json: device {device_id} is listed more than once")
+        if kind not in DEVICE_KINDS:
+            raise ValueError(
+                f"layout.json: device {device_id} kind must be one of {list(DEVICE_KINDS)}, "
+                f"got {kind!r}"
+            )
+        seen.add(device_id)
+    return tuple(devices)
+
+
+def zone_sources(client_dir: Path) -> dict[str, str]:
+    """Each zone's source (layout.json, contract 2.4): LIVE, run by real hardware or the zone
+    controller service, or SIMULATED, played here. Left out, a zone is SIMULATED on a playground
+    site and LIVE everywhere else, so a real farm's zone is never simulated by mistake."""
+    default = "SIMULATED" if playground_enabled(client_dir) else "LIVE"
+    sources = {}
+    for zone in read_pack_file(client_dir, "layout.json").get("zones") or ():
+        if not isinstance(zone, dict):
+            continue
+        source = zone.get("source", default)
+        if source not in ZONE_SOURCES:
+            raise ValueError(
+                f"layout.json: zone {zone.get('id')!r} source must be LIVE or SIMULATED, "
+                f"got {source!r}"
+            )
+        sources[zone.get("id")] = source
+    return sources
+
+
+def climate_source(client_dir: Path) -> str:
+    """The climate's source (layout.json climate.source, contract 2.4), as a zone's: LIVE, a real
+    climate controller, or SIMULATED, played here. Left out, it is SIMULATED on a playground site
+    and LIVE everywhere else. A real farm whose zones are on hardware but whose climate isn't yet
+    (client_B) sets SIMULATED, and the simulator plays only its climate (and power)."""
+    climate = read_pack_file(client_dir, "layout.json").get("climate")
+    default = "SIMULATED" if playground_enabled(client_dir) else "LIVE"
+    source = climate.get("source", default) if isinstance(climate, dict) else default
+    if source not in ZONE_SOURCES:
+        raise ValueError(f"layout.json: climate.source must be LIVE or SIMULATED, got {source!r}")
+    return source
+
+
+def simulated_devices(client_dir: Path) -> tuple[dict[str, Any], ...]:
+    """The devices the simulator plays: every layout.json device except a LIVE zone's controller,
+    which its hardware plays, and the climate controller when the climate is LIVE (contract 2.4).
+    A LIVE zone has no model here either (farm.load_farm)."""
+    live = {zone for zone, source in zone_sources(client_dir).items() if source == "LIVE"}
+    climate_live = climate_source(client_dir) == "LIVE"
+    return tuple(
+        device for device in load_devices(client_dir)
+        if not (device["kind"] == "ZONE_CONTROLLER" and device.get("zone") in live)
+        and not (device["kind"] == "CLIMATE_CONTROLLER" and climate_live)
+    )

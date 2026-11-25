@@ -1,0 +1,154 @@
+{
+  "vectorFormat": 1,
+  "id": "ZC-DOSE-ESTOP-01",
+  "title": "A DOSE that arrives while the zone E-STOP is pressed is refused with ESTOP, and no pump runs",
+  "contract": {
+    "version": "v1.0",
+    "refs": ["9 rule 1", "8.4 ESTOP", "7.1", "7.2", "6.5", "6.6", "6.8", "8.3 rule 5", "9 rule 4", "9 rule 6", "9 rule 10", "14"]
+  },
+  "device": "ZC1",
+  "site": "siet-ph1",
+  "zone": "Z1",
+  "stepPeriodMs": 100,
+  "runUntilMs": 15000,
+  "assumptions": [
+    "Pressing the E-STOP also sets stopped (contract 6.8). A start command is then refused with ESTOP rather than ZONE_STOPPED, because ESTOP comes first (contract 9 rule 1).",
+    "HAL names are provisional until io_map.json is agreed (contract 2.5): inputs ESTOP, MODE_REMOTE, MODE_MAINT, LEAK; outputs PUMP_<line> for each entry in doseLines (OPEN-12), REFILL_VALVE, CIRC_PUMP; sensors as listed in start.sensors.",
+    "Circulation keeps running while the E-STOP is pressed (contract 6.5 example: 'circulation keeps running').",
+    "The command is fresh and passes every other controller check (REMOTE, idle, within per-dose and 24 h limits, day-tanks and reservoir above minimum, fresh EC and pH, no latch, not stopped before the E-STOP), so ESTOP is the only reason to refuse it."
+  ],
+  "start": {
+    "wallClockUtc": "2026-11-09T04:55:00.000Z",
+    "doseLines": ["A", "B", "ACID"],
+    "dayTanks": { "A": { "usableL": 50 }, "B": { "usableL": 50 }, "ACID": { "usableL": 50 } },
+    "config": {
+      "configVersion": 7,
+      "limits": {
+        "maxPerDoseMl": { "A": 300, "B": 300, "ACID": 100 },
+        "max24hMl": { "A": 1500, "B": 1500, "ACID": 400 },
+        "ecCeiling": 2.4,
+        "phMin": 5.5,
+        "phMax": 6.8,
+        "minReservoirPctToDose": 30
+      },
+      "autoRefill": { "enabled": false, "startBelowPct": 60, "stopAtPct": 90, "maxRunMin": 30 },
+      "alarms": { "solTempMaxC": 26.0, "circFlowMinLpm": 15.0 }
+    },
+    "inputs": { "ESTOP": false, "MODE_REMOTE": true, "MODE_MAINT": false, "LEAK": false },
+    "sensors": {
+      "EC": { "value": 1.51, "status": "OK" },
+      "PH": { "value": 6.21, "status": "OK" },
+      "SOL_TEMP": { "value": 23.4, "status": "OK" },
+      "RESERVOIR_PCT": { "value": 78, "status": "OK" },
+      "CIRC_FLOW": { "value": 31.0, "status": "OK" },
+      "DAYTANK_A_PCT": { "value": 64, "status": "OK" },
+      "DAYTANK_B_PCT": { "value": 66, "status": "OK" },
+      "DAYTANK_ACID_PCT": { "value": 81, "status": "OK" }
+    },
+    "outputs": { "CIRC_PUMP": true, "REFILL_VALVE": false, "PUMP_A": false, "PUMP_B": false, "PUMP_ACID": false },
+    "controller": {
+      "mode": "REMOTE",
+      "stopped": false,
+      "latches": [],
+      "operation": null,
+      "dosed24hMl": { "A": 0, "B": 0, "ACID": 0 },
+      "recentCmdIds": []
+    },
+    "nvs": {}
+  },
+  "timeline": [
+    {
+      "atMs": 1000,
+      "action": "SET_INPUTS",
+      "inputs": { "ESTOP": true },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/event",
+            "type": "EVENT",
+            "match": { "zone": "Z1", "kind": "ESTOP_PRESSED", "severity": "CRITICAL" },
+            "nonEmpty": ["message", "systemAction", "nextStep"]
+          },
+          {
+            "topic": "farm/siet-ph1/zone/Z1/state",
+            "type": "ZONE_STATE",
+            "match": {
+              "zone": "Z1",
+              "estop": true,
+              "stopped": true,
+              "operation": null,
+              "outputs": {
+                "Z1-CIRC": "ON",
+                "Z1-REFILL": "CLOSED",
+                "Z1-DOSE-A": "OFF",
+                "Z1-DOSE-B": "OFF",
+                "Z1-DOSE-ACID": "OFF"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 2000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "50b21b1d-0553-4dcf-9de0-807ab4cef83b",
+        "ts": "2026-11-09T04:55:01.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "f7b2e691-083e-4c56-b05d-16c4705eb3bb",
+        "kind": "DOSE",
+        "issuedAt": "2026-11-09T04:55:01.800Z",
+        "expiresAt": "2026-11-09T04:56:01.800Z",
+        "issuedBy": "user:42",
+        "target": { "zone": "Z1" },
+        "lines": [
+          { "line": "A", "ml": 120 },
+          { "line": "B", "ml": 120 },
+          { "line": "ACID", "ml": 30 }
+        ],
+        "order": ["A", "B", "ACID"],
+        "mixWaitS": 300,
+        "limits": {
+          "maxPerDoseMl": { "A": 300, "B": 300, "ACID": 100 },
+          "max24hMl": { "A": 1500, "B": 1500, "ACID": 400 },
+          "ecCeiling": 2.4,
+          "phMin": 5.5,
+          "phMax": 6.8
+        },
+        "maxDurationS": 600,
+        "tolerancePct": 5
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": { "cmdId": "f7b2e691-083e-4c56-b05d-16c4705eb3bb", "state": "REJECTED", "reason": "ESTOP" }
+          }
+        ]
+      }
+    }
+  ],
+  "never": {
+    "outputsOn": ["PUMP_A", "PUMP_B", "PUMP_ACID", "REFILL_VALVE"],
+    "outputsOff": ["CIRC_PUMP"],
+    "messages": [
+      { "type": "CMD_STATE", "match": { "cmdId": "f7b2e691-083e-4c56-b05d-16c4705eb3bb", "state": "ACCEPTED" } },
+      { "type": "CMD_STATE", "match": { "cmdId": "f7b2e691-083e-4c56-b05d-16c4705eb3bb", "state": "EXECUTING" } },
+      { "type": "CMD_STATE", "match": { "cmdId": "f7b2e691-083e-4c56-b05d-16c4705eb3bb", "state": "COMPLETED" } },
+      { "type": "CMD_STATE", "match": { "cmdId": "f7b2e691-083e-4c56-b05d-16c4705eb3bb", "state": "PARTIAL" } },
+      { "type": "CMD_STATE", "match": { "cmdId": "f7b2e691-083e-4c56-b05d-16c4705eb3bb", "state": "FAILED" } },
+      { "type": "CMD_STATE", "match": { "cmdId": "f7b2e691-083e-4c56-b05d-16c4705eb3bb", "state": "STOPPED" } }
+    ]
+  },
+  "final": {
+    "outputs": { "CIRC_PUMP": true, "REFILL_VALVE": false, "PUMP_A": false, "PUMP_B": false, "PUMP_ACID": false },
+    "lastZoneState": { "estop": true, "stopped": true, "operation": null }
+  }
+}

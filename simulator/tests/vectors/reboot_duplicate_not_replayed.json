@@ -1,0 +1,341 @@
+{
+  "vectorFormat": 1,
+  "id": "ZC-REBOOT-04",
+  "title": "The interrupted cmdId sent again after a reboot gets its state, and doesn't run",
+  "contract": {
+    "version": "v1.0",
+    "refs": [
+      "8.3 rule 1",
+      "8.3 rule 6"
+    ]
+  },
+  "device": "ZC1",
+  "site": "siet-ph1",
+  "zone": "Z1",
+  "stepPeriodMs": 100,
+  "runUntilMs": 5000,
+  "assumptions": [
+    "The last 50 cmdIds survive a reboot (8.3 rule 1).",
+    "Apart from what this vector tests, the command is fresh and passes every other check in contract 9 rule 1."
+  ],
+  "start": {
+    "wallClockUtc": "2026-11-09T04:55:00.000Z",
+    "doseLines": [
+      "A",
+      "B",
+      "ACID"
+    ],
+    "dayTanks": {
+      "A": {
+        "usableL": 50
+      },
+      "B": {
+        "usableL": 50
+      },
+      "ACID": {
+        "usableL": 50
+      }
+    },
+    "config": {
+      "configVersion": 7,
+      "limits": {
+        "maxPerDoseMl": {
+          "A": 300,
+          "B": 300,
+          "ACID": 100
+        },
+        "max24hMl": {
+          "A": 1500,
+          "B": 1500,
+          "ACID": 400
+        },
+        "ecCeiling": 2.4,
+        "phMin": 5.5,
+        "phMax": 6.8,
+        "minReservoirPctToDose": 30
+      },
+      "autoRefill": {
+        "enabled": false,
+        "startBelowPct": 60,
+        "stopAtPct": 90,
+        "maxRunMin": 30
+      },
+      "alarms": {
+        "solTempMaxC": 26.0,
+        "circFlowMinLpm": 15.0
+      }
+    },
+    "inputs": {
+      "ESTOP": false,
+      "MODE_REMOTE": true,
+      "MODE_MAINT": false,
+      "LEAK": false
+    },
+    "sensors": {
+      "EC": {
+        "value": 1.51,
+        "status": "OK"
+      },
+      "PH": {
+        "value": 6.21,
+        "status": "OK"
+      },
+      "SOL_TEMP": {
+        "value": 23.4,
+        "status": "OK"
+      },
+      "RESERVOIR_PCT": {
+        "value": 78,
+        "status": "OK"
+      },
+      "CIRC_FLOW": {
+        "value": 31.0,
+        "status": "OK"
+      },
+      "DAYTANK_A_PCT": {
+        "value": 64,
+        "status": "OK"
+      },
+      "DAYTANK_B_PCT": {
+        "value": 66,
+        "status": "OK"
+      },
+      "DAYTANK_ACID_PCT": {
+        "value": 81,
+        "status": "OK"
+      }
+    },
+    "outputs": {
+      "CIRC_PUMP": true,
+      "REFILL_VALVE": false,
+      "PUMP_A": false,
+      "PUMP_B": false,
+      "PUMP_ACID": false
+    },
+    "controller": {
+      "mode": "REMOTE",
+      "stopped": false,
+      "latches": [],
+      "operation": null,
+      "dosed24hMl": {
+        "A": 0,
+        "B": 0,
+        "ACID": 0
+      },
+      "recentCmdIds": []
+    },
+    "nvs": {}
+  },
+  "timeline": [
+    {
+      "atMs": 1000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "4b18fd49-20ce-443f-bca0-618a8eaab98f",
+        "ts": "2026-11-09T04:55:00.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "cfd38519-aa93-4215-aafa-cd984868a9e3",
+        "kind": "DOSE",
+        "issuedAt": "2026-11-09T04:55:00.800Z",
+        "expiresAt": "2026-11-09T04:56:00.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        },
+        "lines": [
+          {
+            "line": "A",
+            "ml": 120
+          }
+        ],
+        "order": [
+          "A"
+        ],
+        "mixWaitS": 300,
+        "limits": {
+          "maxPerDoseMl": {
+            "A": 300,
+            "B": 300,
+            "ACID": 100
+          },
+          "max24hMl": {
+            "A": 1500,
+            "B": 1500,
+            "ACID": 400
+          },
+          "ecCeiling": 2.4,
+          "phMin": 5.5,
+          "phMax": 6.8
+        },
+        "maxDurationS": 600,
+        "tolerancePct": 5
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "cfd38519-aa93-4215-aafa-cd984868a9e3",
+              "state": "ACCEPTED"
+            }
+          },
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "cfd38519-aa93-4215-aafa-cd984868a9e3",
+              "state": "EXECUTING"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 2000,
+      "action": "REBOOT",
+      "reason": "REBOOT",
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "cfd38519-aa93-4215-aafa-cd984868a9e3",
+              "state": "FAILED",
+              "reason": "REBOOT_MID_DOSE"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 3000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "3d68a049-3c78-45bb-a71b-b6681d1872f1",
+        "ts": "2026-11-09T04:55:02.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "0b08fab8-7a19-4496-8264-1885451ff10d",
+        "kind": "RESUME",
+        "issuedAt": "2026-11-09T04:55:02.800Z",
+        "expiresAt": "2026-11-09T04:56:02.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        }
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "0b08fab8-7a19-4496-8264-1885451ff10d",
+              "state": "ACCEPTED"
+            }
+          },
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "0b08fab8-7a19-4496-8264-1885451ff10d",
+              "state": "COMPLETED"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "atMs": 4000,
+      "action": "DELIVER_COMMAND",
+      "topic": "farm/siet-ph1/zone/Z1/cmd",
+      "message": {
+        "v": 1,
+        "type": "CMD",
+        "msgId": "aa6d6049-260a-437b-affd-0434060c7ca4",
+        "ts": "2026-11-09T04:55:03.800Z",
+        "site": "siet-ph1",
+        "device": "CLOUD",
+        "cmdId": "cfd38519-aa93-4215-aafa-cd984868a9e3",
+        "kind": "DOSE",
+        "issuedAt": "2026-11-09T04:55:03.800Z",
+        "expiresAt": "2026-11-09T04:56:03.800Z",
+        "issuedBy": "user:42",
+        "target": {
+          "zone": "Z1"
+        },
+        "lines": [
+          {
+            "line": "A",
+            "ml": 120
+          }
+        ],
+        "order": [
+          "A"
+        ],
+        "mixWaitS": 300,
+        "limits": {
+          "maxPerDoseMl": {
+            "A": 300,
+            "B": 300,
+            "ACID": 100
+          },
+          "max24hMl": {
+            "A": 1500,
+            "B": 1500,
+            "ACID": 400
+          },
+          "ecCeiling": 2.4,
+          "phMin": 5.5,
+          "phMax": 6.8
+        },
+        "maxDurationS": 600,
+        "tolerancePct": 5
+      },
+      "expect": {
+        "messages": [
+          {
+            "topic": "farm/siet-ph1/zone/Z1/cmd/state",
+            "type": "CMD_STATE",
+            "count": 1,
+            "match": {
+              "cmdId": "cfd38519-aa93-4215-aafa-cd984868a9e3",
+              "state": "FAILED",
+              "reason": "REBOOT_MID_DOSE"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "never": {
+    "outputsOn": [],
+    "outputsOff": [
+      "CIRC_PUMP"
+    ],
+    "messages": []
+  },
+  "final": {
+    "outputs": {
+      "CIRC_PUMP": true,
+      "REFILL_VALVE": false,
+      "PUMP_A": false,
+      "PUMP_B": false,
+      "PUMP_ACID": false
+    }
+  }
+}

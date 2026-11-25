@@ -1,0 +1,18 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Placeholder values until parts are bought. Do not use for a real farm. pumps.doseLines: each dosing line's pump flow (T4-8); 2 mL/s is the Track 3 guide's illustration (2.1 mL/s), not a datasheet value. Every installed line needs an entry."
+  },
+  "sensors": {},
+  "pumps": {
+    "doseLines": {
+      "A": { "flowMlPerS": 2.0 },
+      "B": { "flowMlPerS": 2.0 },
+      "ACID": { "flowMlPerS": 2.0 }
+    }
+  },
+  "valves": {},
+  "fans": {}
+}

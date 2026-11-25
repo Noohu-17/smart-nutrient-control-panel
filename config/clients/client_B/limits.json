@@ -1,0 +1,39 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "From the farm details form (R-1), section 8, except the keys in placeholderKeys, which are proposed for the team to check. maxPerDoseMl, max24hMl and mixWaitS are the form's. ecCeiling is the top of each zone's EC/TDS target range (TDS ppm / 500, the probes' 0.5 factor): the dose review never doses above it. phMin and phMax are the pH target range widened by 0.3 each way, so a reading just outside the target doesn't block every dose (the rig has no pH-down pump). minReservoirPctToDose is the low level, 20 % of each zone's 90 L main tank = 18 L (review of #82). maxDurationS is the rig's longest single dose (600 s); tolerancePct is the contract default.",
+    "placeholderKeys": [
+      "zones.*.limits.phMin",
+      "zones.*.limits.phMax",
+      "zones.*.limits.minReservoirPctToDose",
+      "zones.*.dose.maxDurationS",
+      "zones.*.dose.tolerancePct"
+    ]
+  },
+  "zones": {
+    "Z1": {
+      "limits": {
+        "maxPerDoseMl": { "N": 2, "P": 2, "K": 2 },
+        "max24hMl": { "N": 8, "P": 8, "K": 8 },
+        "ecCeiling": 1.2,
+        "phMin": 5.5,
+        "phMax": 6.5,
+        "minReservoirPctToDose": 20
+      },
+      "dose": { "maxDurationS": 600, "mixWaitS": 600, "tolerancePct": 5 }
+    },
+    "Z2": {
+      "limits": {
+        "maxPerDoseMl": { "N": 2, "P": 2, "K": 2 },
+        "max24hMl": { "N": 8, "P": 8, "K": 8 },
+        "ecCeiling": 1.8,
+        "phMin": 5.7,
+        "phMax": 6.8,
+        "minReservoirPctToDose": 20
+      },
+      "dose": { "maxDurationS": 600, "mixWaitS": 600, "tolerancePct": 5 }
+    }
+  }
+}

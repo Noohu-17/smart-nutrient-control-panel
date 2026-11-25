@@ -1,0 +1,221 @@
+# Local development stack: PostgreSQL with TimescaleDB, the Mosquitto MQTT broker,
+# and the FastAPI back end (backend/).
+#
+# DEV ONLY. MQTT has no TLS and no passwords, and the database uses a default password.
+# Staging uses per-device MQTT accounts and ACLs (contract sections 3 and 4).
+# All ports are bound to 127.0.0.1, so nothing is reachable from the network.
+#
+# Run from the repo root:
+#   docker compose -f infra/docker-compose.dev.yml up -d --build   start (rebuilds the api image)
+#   docker compose -f infra/docker-compose.dev.yml ps              every service should be "healthy"
+#   curl http://localhost:8000/api/health                           {"status":"OK","database":"UP","broker":"UP"}
+#   docker compose -f infra/docker-compose.dev.yml exec api alembic upgrade head    build or update the database
+#   docker compose -f infra/docker-compose.dev.yml exec api python -m app.db.seed   load the client's layout.json
+#   docker compose -f infra/docker-compose.dev.yml exec api python -m app.db.config_store import
+#                                                                   store the client's pack in the database (T1-39)
+#   docker compose -f infra/docker-compose.dev.yml down            stop (add -v to also delete the database)
+#
+# The simulator usually runs on the laptop (simulator/readme.md). To run it here instead, add
+# --profile sim; never both at once, or two copies of each device share one MQTT client ID.
+# Either way its playground control API (contract 11.4) is on http://127.0.0.1:8100.
+#
+# Zones on the prototype rig: --profile rig runs the zone controller service (T1-32), and
+# --profile fake-rig a stand-in for the rig; stop the simulator first (simulator/sim/rig/README.md).
+#
+# Web Push (T1-41): --profile push runs the notifier, with VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY and
+# VAPID_SUBJECT in infra/.env (python -m app.push.keys makes the pair; backend/app/push/README.md).
+#
+# Defaults can be overridden with environment variables or an infra/.env file:
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, POSTGRES_PORT, MQTT_PORT, API_PORT,
+#   SIM_CONTROL_PORT, SIM_SPEED, RIG_TELEMETRY_TOPIC, RIG_COMMAND_TOPIC, VAPID_PUBLIC_KEY,
+#   VAPID_PRIVATE_KEY, VAPID_SUBJECT,
+#   CLIENT (the config pack under config/clients/ that the api reads; default client_A),
+#   CONFIG_SOURCE (pack: the api reads that folder, the dev default; database: the newest
+#   version imported with app.db.config_store, as on a server)
+
+name: sna-dev
+
+services:
+  db:
+    image: timescale/timescaledb:2.30.2-pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sna}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sna-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-sna}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  mqtt:
+    image: eclipse-mosquitto:2.0.22
+    ports:
+      - "127.0.0.1:${MQTT_PORT:-1883}:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-h", "localhost", "-t", "healthcheck", "-m", "ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build: ../backend
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-sna}
+      DB_USER: ${POSTGRES_USER:-sna}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sna-dev-only}
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      CONFIG_SOURCE: ${CONFIG_SOURCE:-pack}
+      # /api/sim forwards here (contract 11.4): the simulator below, with --profile sim
+      SIM_CONTROL_URL: ${SIM_CONTROL_URL:-http://simulator:8100}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}  # Web Push (T1-41); empty: GET /api/push/key is 503
+    volumes:
+      - ../config:/config:ro  # the client config packs (contract 2.5), read only
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=8)"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+  # Stores what the farm sends (backend/README.md). Until `alembic upgrade head` has run it
+  # logs "database not ready" and waits. It has no port, so `ps` shows it as just "running".
+  worker:
+    build: ../backend
+    command: ["python", "-m", "app.worker.main"]
+    stop_signal: SIGINT  # stops at once; as PID 1, Python would ignore Docker's default SIGTERM
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-sna}
+      DB_USER: ${POSTGRES_USER:-sna}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sna-dev-only}
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      CONFIG_SOURCE: ${CONFIG_SOURCE:-pack}
+    volumes:
+      - ../config:/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      mqtt:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Web Push for alerts (T1-41), only with --profile push: sends what the worker queues to the
+  # browsers' push services. Needs the VAPID keys in infra/.env (see the top of this file).
+  notifier:
+    build: ../backend
+    profiles: [push]
+    command: ["python", "-m", "app.push.notifier"]
+    stop_signal: SIGINT
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: ${POSTGRES_DB:-sna}
+      DB_USER: ${POSTGRES_USER:-sna}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-sna-dev-only}
+      CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-}
+    volumes:
+      - ../config:/config:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; from app.push.notifier import healthy; sys.exit(0 if healthy() else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    restart: unless-stopped
+
+  # The farm simulator, only with --profile sim. Its control API is for the back end alone
+  # (contract 11.4): published on 127.0.0.1, so only this machine reaches it.
+  simulator:
+    build: ../simulator
+    profiles: [sim]
+    stop_signal: SIGINT  # a clean stop: each device publishes its own offline status
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      SIM_SPEED: ${SIM_SPEED:-}  # empty: the demo's speed (simulator.json demoStart.speed)
+      SIM_CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      SIM_CONTROL_HOST: 0.0.0.0  # inside the container; the port below is this machine's only
+      SIM_CONTROL_PORT: "8100"
+    volumes:
+      - ../config:/config:ro
+      - sim-state:/app/.state  # bootIds must keep rising across restarts (contract 5)
+    ports:
+      - "127.0.0.1:${SIM_CONTROL_PORT:-8100}:8100"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # The zone controller service (T1-32), only with --profile rig: the zones io_map.json puts on
+  # the prototype rig (link SF_GATEWAY), run by sim/controller on the rig's sf/* messages. The
+  # app sees them as any zone controller. Those zones are LIVE in layout.json (contract 2.4), so
+  # the simulator never plays their controllers. The rig's topic bases (m/<workspace>/c/<channel>) come from the gateway's
+  # secrets: set them in infra/.env, never in git. Run it with CLIENT set to a pack that puts a
+  # zone on the rig (client_B, T1-31); with none (client_A) it says so once and stops.
+  zone-controller:
+    build: ../simulator
+    profiles: [rig]
+    command: ["python", "-m", "sim.rig"]
+    stop_signal: SIGINT  # a clean stop: ZC1 publishes its own offline status
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      SIM_CLIENT_DIR: /config/clients/${CLIENT:-client_A}
+      RIG_TELEMETRY_TOPIC: ${RIG_TELEMETRY_TOPIC:-m/dev/c/telemetry}
+      RIG_COMMAND_TOPIC: ${RIG_COMMAND_TOPIC:-m/dev/c/relay-cmd}
+    volumes:
+      - ../config:/config:ro
+      - rig-state:/app/.state  # nvs and bootIds survive a restart (contract 5, 8.3)
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    restart: on-failure  # a crash restarts it; "no zone on the rig" is a clean exit and stays down
+
+  # A stand-in for the rig's gateway (sim/rig/fake.py), only with --profile fake-rig.
+  fake-rig:
+    build: ../simulator
+    profiles: [fake-rig]
+    # both rig zones: client_B puts ZC1 on rig zone 1 and ZC2 on rig zone 2 (io_map.json rigZone)
+    command: ["python", "-m", "sim.rig.fake", "--zones", "1", "2", "--interval", "10"]
+    environment:
+      MQTT_HOST: mqtt
+      MQTT_PORT: "1883"
+      RIG_TELEMETRY_TOPIC: ${RIG_TELEMETRY_TOPIC:-m/dev/c/telemetry}
+      RIG_COMMAND_TOPIC: ${RIG_COMMAND_TOPIC:-m/dev/c/relay-cmd}
+    depends_on:
+      mqtt:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  sim-state:
+  rig-state:

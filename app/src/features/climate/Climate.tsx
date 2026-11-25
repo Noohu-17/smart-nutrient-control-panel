@@ -1,0 +1,83 @@
+import { useClimate, useFarm } from "../../api/hooks";
+import { EmptyState } from "../../components/EmptyState";
+import { ReadingCard } from "../../components/ReadingCard";
+import { RoleButton } from "../../components/RoleButton";
+import { AIR_READINGS, airPositionSpec, ELEC_ROOM_READING } from "../../config/readings";
+import { ZoneSourceChip } from "../zones/ZoneLive";
+import { climateSource, hasClimateController } from "./climateText";
+
+/** Climate page: air inside and outside, each air sensor position and the electrical room (contract §11.2).
+    While the controller is offline its last values show grey, never as the air now. */
+export function Climate() {
+  const farm = useFarm();
+  const climate = useClimate();
+  const c = climate.data;
+  const positions = farm.data?.climate.airSensors ?? [];
+
+  return (
+    <>
+      <div className="phead">
+        <div className="title-row">
+          <h1>Climate</h1>
+          {/* layout climate.source: the simulator may play the climate on a real farm (DM-2) */}
+          {farm.data && hasClimateController(farm.data) && (
+            <ZoneSourceChip source={climateSource(farm.data)} />
+          )}
+        </div>
+        <div className="actions">
+          <RoleButton perm="operate">Control equipment</RoleButton>
+        </div>
+      </div>
+      {climate.isPending ? (
+        <EmptyState title="Loading climate readings…" />
+      ) : climate.isError ? (
+        <EmptyState title="No climate readings yet">
+          Air temperature, humidity and equipment show here once the climate controller reports.
+        </EmptyState>
+      ) : c ? (
+        <>
+          <section className="climate-section" aria-labelledby="climate-air">
+            <h2 id="climate-air">Air</h2>
+            <div className="readings">
+              {AIR_READINGS.map((spec) => (
+                <ReadingCard
+                  key={spec.key}
+                  spec={spec}
+                  value={c.readings[spec.key]}
+                  quality={c.quality[spec.key]}
+                  stale={!c.online}
+                />
+              ))}
+            </div>
+          </section>
+          {positions.length > 0 && (
+            <section className="climate-section" aria-labelledby="climate-positions">
+              <h2 id="climate-positions">Air temp along the house</h2>
+              <div className="readings">
+                {positions.map((pos) => (
+                  <ReadingCard
+                    key={pos}
+                    spec={airPositionSpec(pos)}
+                    value={c.readings.airTempByPosC[pos]}
+                    stale={!c.online}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+          <section className="climate-section" aria-labelledby="climate-elec">
+            <h2 id="climate-elec">Electrical room</h2>
+            <div className="readings">
+              <ReadingCard
+                spec={ELEC_ROOM_READING}
+                value={c.readings.elecRoomTempC}
+                quality={c.quality.elecRoomTempC}
+                stale={!c.online}
+              />
+            </div>
+          </section>
+        </>
+      ) : null}
+    </>
+  );
+}

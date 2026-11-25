@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_B",
+    "placeholder": true,
+    "note": "client_B has no climate equipment: no fans, pad pumps, chillers, shade, HAF fans or foggers (layout.json climate is empty, and the farm details form, R-1, lists none). Nothing here is used; the values are client_A's so the file has its usual shape. Water temperature limits per zone are in alerts.json."
+  },
+  "fanStages": { "min": 0, "maxStageFrom": "layout.climate.fans" },
+  "chillerSetpointC": { "min": 18, "max": 28 },
+  "manualMinutes": { "min": 5, "max": 240 },
+  "foggerRunMin": [2, 3, 5],
+  "foggerBlockAboveRh": 85,
+  "setpoints": { "airTempMaxC": 30.0, "airRhMax": 85, "solTempMaxC": 24.0 }
+}

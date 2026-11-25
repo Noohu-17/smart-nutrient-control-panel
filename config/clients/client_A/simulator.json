@@ -1,0 +1,101 @@
+{
+  "v": 1,
+  "_meta": {
+    "client": "client_A",
+    "placeholder": true,
+    "note": "Farm-model values filled in T3-2, and the starting values telemetry needs in T4-5; Track 3 owns this file. None is verified by agronomy yet: each is a placeholder, a virtual-farm prototype value or calibrated to a contract example (see sources). Do not use for a real farm. speedOptions is real (contract 11.4); minRealReadingIntervalS and model.numerics are simulator settings, not farm values.",
+    "placeholderKeys": [
+      "model.ecPerGramPerL", "model.rawWater", "model.doseLines", "model.refill",
+      "model.phDrift", "model.solutionTemp", "model.plantUptake", "model.initialState",
+      "model.circulation", "model.air", "model.power", "model.mixing", "demoStart"
+    ],
+    "sources": {
+      "model.ecPerGramPerL": "PLACEHOLDER: k in EC = k*M/V; 1.0 is the Track 3 guide's placeholder. Only k x nutrientGPerMl is observable, so a jar test of each stock fixes the product.",
+      "model.rawWater.ecMsCm": "PROTOTYPE: virtual-farm runbook, 'raw water is EC 0.3 and pH 7.2'. Measure the SIET supply.",
+      "model.rawWater.ph": "PROTOTYPE: virtual-farm runbook, 'raw water is EC 0.3 and pH 7.2'. Measure the SIET supply.",
+      "model.rawWater.tempC": "PLACEHOLDER: no source. Measure the supply water at the polyhouse.",
+      "model.doseLines.A.nutrientGPerMl": "CONTRACT-EXAMPLE: calibrated so contract 6.6's illustrative dose (A 120 + B 120 mL into 936 L) raises EC by about 0.12 mS/cm. Needs a jar test of the real stock.",
+      "model.doseLines.B.nutrientGPerMl": "CONTRACT-EXAMPLE: as model.doseLines.A.nutrientGPerMl.",
+      "model.doseLines.A.phChangePerMlPer1000L": "PLACEHOLDER: stock A treated as pH-neutral.",
+      "model.doseLines.B.phChangePerMlPer1000L": "PLACEHOLDER: stock B treated as pH-neutral.",
+      "model.doseLines.ACID.nutrientGPerMl": "PLACEHOLDER: the acid's own EC contribution is ignored.",
+      "model.doseLines.ACID.phChangePerMlPer1000L": "CONTRACT-EXAMPLE: contract 6.6, 30 mL acid takes 936 L from pH 6.21 to 6.02 (-0.0059). The runbook's 100 mL story implies about -0.0048. Needs a titration of the SIET water with the real acid.",
+      "model.refill": "PLACEHOLDER: refill flow through the open valve, no source. Measure at the inlet.",
+      "model.phDrift.targetPh": "PROTOTYPE: assumes the solution drifts toward the raw water's pH (runbook 7.2).",
+      "model.phDrift.timeConstantH": "PLACEHOLDER: gives about +0.2 pH per day from 5.8. Agronomy to confirm from farm logs.",
+      "model.solutionTemp.airCouplingWPerK": "PLACEHOLDER: gives a time constant of about 6 h at 1200 L (4.7 h at 936 L).",
+      "model.plantUptake.referenceAirTempC": "PLACEHOLDER: no source.",
+      "model.plantUptake.waterChangePerDegC": "PLACEHOLDER: +3 % water uptake per degree C above reference; no source.",
+      "model.plantUptake.crops": "PLACEHOLDER: Track 3 order-of-magnitude estimate (about 225 plants per bench, 0.15-0.2 L per plant per day when grown), nutrient chosen so EC falls about 0.05 per day at 4 benches. BASIL copies LETTUCE: no crop-specific source. Agronomy to replace.",
+      "model.initialState": "CONTRACT-EXAMPLE: contract 6.1 telemetry example (78 %, EC 1.62, pH 6.04, 23.4 C). Scenarios may override.",
+      "model.initialState.dayTankPct": "CONTRACT-EXAMPLE: contract 6.1 telemetry example (A 64, B 66, ACID 81 %). Scenarios may override. Every installed line needs an entry.",
+      "model.initialState.chillerSetpointC": "CONTRACT-EXAMPLE: contract 6.2 telemetry example (22.0 C). Must lie inside climate.json chillerSetpointC.",
+      "model.mixing.timeConstantS": "PLACEHOLDER: (T4-11) how fast dosed stock spreads through the reservoir while circulation runs; the probes see a share 1 - exp(-t / timeConstantS) of it. 600 s mixes 95 % in 30 min, plausible for about 900 L stirred by channel return at 31 L/min (one turnover in about 30 min). Measure by dosing and logging EC every minute.",
+      "model.circulation.flowLpm": "CONTRACT-EXAMPLE: contract 6.1 telemetry example (31.0 L/min), the flow while the circulation pump runs. Measure at the pump.",
+      "model.air": "CONTRACT-EXAMPLE: contract 6.2 telemetry example. Held constant until a weather model exists (the scenario's region, month and weather). tempByPosC needs an entry for every layout.climate.airSensors position.",
+      "model.power": "CONTRACT-EXAMPLE: contract 6.3 example (231/229/233 V, UPS 100 %, 42 min). Held constant until the power drills exist (contract 11.4.3).",
+      "model.numerics": "NUMERICAL: solver settings, not farm values.",
+      "minRealReadingIntervalS": "NUMERICAL: fewest real seconds between periodic readings, so fast clocks don't flood the broker (T4-7). Not a farm value.",
+      "demoStart": "DEMO: the playground farm's starting state, and where POST /reset returns (T4-9, C-3). A healthy farm, with Zone A's EC 0.2 below its target: Z1 is LETTUCE GROWING, ecTarget 1.2-1.8 in recipes.json, whose middle is 1.5, so 1.30. The demo dose that brings it there is A 200 + B 200 mL (about +0.20 into 936 L, see model.doseLines): under limits.json maxPerDoseMl 300 per line and max24hMl 1500. Zone B sits at the middle of its target (BASIL SEEDLING, 1.0-1.4). zones.* override model.initialState for that zone; anything not given comes from model.initialState. weather must be one of scenarios.json weather. speed: the clock speed the demo starts at and Reset returns to, one of speedOptions, unless SIM_SPEED is set: at x60 a reading comes every 5 real seconds (5 simulated minutes), and the demo dose with its mix wait takes under a minute."
+    }
+  },
+  "demoStart": {
+    "scenario": "Demo farm",
+    "weather": "CLEAR",
+    "speed": 60,
+    "zones": {
+      "Z1": { "ecMsCm": 1.30 },
+      "Z2": { "ecMsCm": 1.20 }
+    }
+  },
+  "speedOptions": [0, 1, 60, 288],
+  "minRealReadingIntervalS": 5,
+  "model": {
+    "ecPerGramPerL": 1.0,
+    "rawWater": { "ecMsCm": 0.3, "ph": 7.2, "tempC": 26.0 },
+    "doseLines": {
+      "A":    { "nutrientGPerMl": 0.47, "phChangePerMlPer1000L": 0.0 },
+      "B":    { "nutrientGPerMl": 0.47, "phChangePerMlPer1000L": 0.0 },
+      "ACID": { "nutrientGPerMl": 0.0,  "phChangePerMlPer1000L": -0.0059 }
+    },
+    "refill": { "flowLpm": 30.0 },
+    "phDrift": { "targetPh": 7.2, "timeConstantH": 168.0 },
+    "solutionTemp": { "airCouplingWPerK": 230.0 },
+    "plantUptake": {
+      "referenceAirTempC": 25.0,
+      "waterChangePerDegC": 0.03,
+      "crops": {
+        "LETTUCE": {
+          "SEEDLING": { "waterLPerBenchPerH": 0.4, "nutrientGPerBenchPerH": 0.8 },
+          "GROWING":  { "waterLPerBenchPerH": 1.5, "nutrientGPerBenchPerH": 3.0 },
+          "READY":    { "waterLPerBenchPerH": 2.0, "nutrientGPerBenchPerH": 3.6 }
+        },
+        "BASIL": {
+          "SEEDLING": { "waterLPerBenchPerH": 0.4, "nutrientGPerBenchPerH": 0.8 },
+          "GROWING":  { "waterLPerBenchPerH": 1.5, "nutrientGPerBenchPerH": 3.0 },
+          "READY":    { "waterLPerBenchPerH": 2.0, "nutrientGPerBenchPerH": 3.6 }
+        }
+      }
+    },
+    "initialState": {
+      "reservoirPct": 78, "ecMsCm": 1.62, "ph": 6.04, "solTempC": 23.4,
+      "dayTankPct": { "A": 64, "B": 66, "ACID": 81 },
+      "chillerSetpointC": 22.0
+    },
+    "circulation": { "flowLpm": 31.0 },
+    "mixing": { "timeConstantS": 600 },
+    "air": {
+      "tempByPosC": { "PAD_END": 29.4, "MIDDLE": 31.0, "FAN_END": 33.1 },
+      "rh": 71,
+      "outsideTempC": 33.8,
+      "outsideRh": 58,
+      "elecRoomTempC": 34.0
+    },
+    "power": {
+      "phasesV": { "l1V": 231, "l2V": 229, "l3V": 233 },
+      "upsBatteryPct": 100,
+      "upsRuntimeMin": 42
+    },
+    "numerics": { "maxSubstepS": 60, "maxSubstepsPerCall": 100000 }
+  }
+}

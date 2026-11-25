@@ -1,0 +1,8 @@
+# Ruff settings for the back end. Same Python version as the rest of the project.
+target-version = "py313"
+line-length = 100
+
+[lint.isort]
+# backend/alembic/ is our migrations folder; the alembic import is the library.
+known-third-party = ["alembic"]
+known-first-party = ["app", "conftest"]

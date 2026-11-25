@@ -1,0 +1,45 @@
+/* Who may do what (contract §13). A hint for the screens only: the server enforces every rule,
+   and a disabled button is never the protection. */
+import type { ServerRole } from "../api/types";
+
+export const ROLES = ["Owner", "Agronomist", "Operator", "Viewer"] as const;
+export type Role = (typeof ROLES)[number];
+
+/** The server says OWNER, OPERATOR …; the screens say Owner, Operator … (T1-35). */
+export const fromServerRole = (role: ServerRole) => (role.charAt(0) + role.slice(1).toLowerCase()) as Role;
+export const toServerRole = (role: Role) => role.toUpperCase() as ServerRole;
+
+export type Permission = "operate" | "ack" | "export" | "recipe" | "clearFault" | "sim" | "simReset";
+
+const STAFF: Role[] = ["Owner", "Agronomist", "Operator"];
+
+export const CAN: Record<Permission, Role[]> = {
+  operate: STAFF, // dose, refill and climate equipment
+  ack: STAFF, // acknowledge alerts
+  export: STAFF,
+  recipe: ["Owner", "Agronomist"],
+  clearFault: ["Owner"],
+  sim: STAFF, // playground: speed, failure drills, held values (§11.4)
+  simReset: ["Owner"],
+};
+
+/** One-line reason shown under a locked button. */
+export const WHY: Record<Permission, string> = {
+  operate: "Viewers can’t operate equipment",
+  ack: "Viewers can’t acknowledge alerts",
+  export: "Viewers can’t export",
+  recipe: "Only Owners and Agronomists change recipes",
+  clearFault: "Only Owners clear a latched fault",
+  sim: "Viewers can’t change the simulated farm",
+  simReset: "Only Owners reset the simulated farm",
+};
+
+export const can = (role: Role, perm: Permission) => CAN[perm].includes(role);
+
+/** What each role is for, shown on the sign-in screen. */
+export const ROLE_TEXT: Record<Role, string> = {
+  Owner: "Everything, including faults, limits and users",
+  Agronomist: "Recipes, dosing, refills and climate",
+  Operator: "Day-to-day dosing, refills and climate",
+  Viewer: "Sees everything, can stop but not operate",
+};
