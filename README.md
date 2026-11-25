@@ -3,7 +3,7 @@ Remote nutrient dosing and climate monitoring for the Coimbatore polyhouse (2 NF
 
 ## Run the control panel
 
-From the repo root: `npm install` (once; it installs `app/`), then `npm run dev` and open http://localhost:5173. It runs on the app's fake API, so no back end is needed. For the real back end, see `infra/readme.md` and run the app with `VITE_USE_MOCKS=false`.
+From the repo root: `npm install` (once; it installs `app/`), then `npm run dev` and open http://localhost:5173. It runs on the app's fake API, so no back end is needed. Sign in with `owner@farm.test` / `fake-password`, then the code `123456` (two-step); `new-owner@farm.test` walks through setting up the authenticator; `operator@farm.test`, `agronomist@farm.test` and `viewer@farm.test` need no code. `npm run dev:demo` shows the demo role picker instead. For the real back end, see `infra/readme.md` and run the app with `VITE_USE_MOCKS=false`.
 
 ## Folders
 - firmware/ — ESP32 controller code (zone + climate controllers)

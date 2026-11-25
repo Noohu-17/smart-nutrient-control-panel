@@ -1,10 +1,11 @@
 {
   "name": "smart-nutrient-control-panel",
   "private": true,
-  "description": "Smart Nutrient Advisor: the control panel app (app/) with its back end, simulator and config packs. npm install, then npm run dev, runs the app on its fake API.",
+  "description": "Smart Nutrient Advisor: the control panel app (app/) with its back end, simulator and config packs. npm install, then npm run dev, runs the app on its fake API with the two-step sign-in; npm run dev:demo with the demo role picker.",
   "scripts": {
     "postinstall": "npm --prefix app install",
-    "dev": "npm --prefix app run dev",
+    "dev": "npm --prefix app run dev -- --mode login",
+    "dev:demo": "npm --prefix app run dev",
     "build": "npm --prefix app run build",
     "preview": "npm --prefix app run preview",
     "test": "npm --prefix app test",
