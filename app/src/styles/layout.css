@@ -80,6 +80,41 @@
   flex-direction: column;
   gap: var(--gap-sidebar);
 }
+/* who is signed in: the sidebar foot, as in the first demo; held at the window bottom while a long page scrolls */
+.me {
+  position: sticky;
+  bottom: var(--space-4);
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-tile);
+  background: var(--color-sidebar-raised);
+}
+.me > div {
+  min-width: 0;
+}
+.me .av {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--dot-ok);
+  color: var(--color-sidebar);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.me b {
+  color: var(--text-on-primary);
+  display: block;
+}
+.me span {
+  font-size: var(--text-caption-size);
+  color: var(--text-on-dark-muted);
+}
 .brand {
   display: flex;
   align-items: center;

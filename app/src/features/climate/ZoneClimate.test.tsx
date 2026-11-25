@@ -6,7 +6,7 @@ import { vpdKpa } from "../../config/readings";
 import { renderAt } from "../../test/render";
 
 const climateCard = async () =>
-  within((await screen.findByRole("heading", { name: "House climate" })).closest("section")!);
+  within((await screen.findByRole("heading", { name: "Climate" })).closest("section")!);
 
 function openWithScenario(path: string, scenario: string) {
   window.history.replaceState(null, "", `${path}?mock=${scenario}`);
@@ -82,7 +82,7 @@ describe("Climate card on the zone page", () => {
     openWithScenario("/zone/Z1", "no-climate");
     renderAt("/zone/Z1");
     await screen.findByRole("heading", { name: "Readings" });
-    expect(screen.queryByRole("heading", { name: "House climate" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Climate" })).not.toBeInTheDocument();
   });
 });
 
@@ -93,13 +93,13 @@ describe("Climate line on the zone cards", () => {
     const line = /°C · \d+ % · VPD \d+\.\d{2} kPa/;
     await waitFor(() => expect(screen.getAllByText(line)).toHaveLength(2)); // one per zone
     const lines = screen.getAllByText(line);
-    expect(within(lines[0]).getByText("House climate")).toBeInTheDocument(); // the full climate is on the zone page
+    expect(within(lines[0]).getByText("Climate")).toBeInTheDocument(); // the full climate is on the zone page
   });
 
   it("is left out on a site with no climate controller", async () => {
     openWithScenario("/", "no-climate");
     renderAt("/");
     await screen.findByRole("heading", { name: "Zone A" });
-    expect(screen.queryByText("House climate")).not.toBeInTheDocument();
+    expect(screen.queryByText("Climate")).not.toBeInTheDocument();
   });
 });

@@ -5,6 +5,7 @@ import { RoleButton } from "../../components/RoleButton";
 import {
   AIR_READINGS,
   airPositionSpec,
+  CLIMATE_ABOUT,
   climateVpd,
   ELEC_ROOM_READING,
   EMPTY_VALUE,
@@ -30,7 +31,7 @@ export function ZoneClimateCard({ farm }: { farm: Farm }) {
     <section className="zone-card" aria-labelledby="climate-title">
       <header className="zone-card-head">
         <div className="title-row">
-          <h2 id="climate-title">House climate</h2>
+          <h2 id="climate-title">Climate</h2>
           {/* layout climate.source: the simulator may play the climate on a real farm (DM-2) */}
           <ZoneSourceChip source={climateSource(farm)} />
         </div>
@@ -51,6 +52,7 @@ export function ZoneClimateCard({ farm }: { farm: Farm }) {
                 quality={c?.quality[spec.key]}
                 stale={stale}
                 loading={climate.isPending}
+                about={CLIMATE_ABOUT[spec.key]}
               />
             ))}
             <ReadingCard
@@ -58,6 +60,7 @@ export function ZoneClimateCard({ farm }: { farm: Farm }) {
               value={c ? climateVpd(c) : undefined}
               stale={stale}
               loading={climate.isPending}
+              about={CLIMATE_ABOUT[VPD_READING.key]}
             />
           </div>
           {positions.length > 0 && (
@@ -71,6 +74,7 @@ export function ZoneClimateCard({ farm }: { farm: Farm }) {
                     value={c?.readings.airTempByPosC[pos]}
                     stale={stale}
                     loading={climate.isPending}
+                    about={CLIMATE_ABOUT[pos]}
                   />
                 ))}
                 <ReadingCard
@@ -79,6 +83,7 @@ export function ZoneClimateCard({ farm }: { farm: Farm }) {
                   quality={c?.quality.elecRoomTempC}
                   stale={stale}
                   loading={climate.isPending}
+                  about={CLIMATE_ABOUT[ELEC_ROOM_READING.key]}
                 />
               </div>
             </>
@@ -110,7 +115,7 @@ function ClimateLine() {
   if (!c) return null;
   return (
     <p className="zone-climate-line">
-      <b>House climate</b> {formatReading(c.readings.airTempC, AIR_TEMP)} °C ·{" "}
+      <b>Climate</b> {formatReading(c.readings.airTempC, AIR_TEMP)} °C ·{" "}
       {formatReading(c.readings.airRh, AIR_RH)} % · VPD {formatReading(climateVpd(c), VPD_READING)} kPa
       {!c.online && " · offline"}
     </p>

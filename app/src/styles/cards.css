@@ -221,6 +221,12 @@
   border-radius: var(--radius-tile);
   background: var(--color-surface-subtle);
 }
+.zone-details .zone-details-wide {
+  grid-column: 1 / -1;
+}
+.zone-details-wide dd {
+  font-weight: var(--weight-regular);
+}
 .zone-details dt {
   font-size: var(--text-label-size);
   color: var(--text-secondary);
@@ -238,6 +244,9 @@
 }
 
 /* ---------- the zone's readings: every sensor of its farm type (DM-3), the missing ones greyed */
+.readings-missing {
+  margin-top: var(--space-3);
+}
 .reading.not-connected {
   border-style: dashed;
   border-color: var(--dashed-border);

@@ -156,10 +156,15 @@ export function ZoneSensorReadings({
             climate={climate.data}
           />
         ))}
-        {missing.map((sensor) => (
-          <NotConnectedCard key={sensor.id} sensor={sensor} />
-        ))}
       </div>
+      {/* their own rows under the live ones, never in a gap beside them */}
+      {missing.length > 0 && (
+        <div className="readings readings-missing">
+          {missing.map((sensor) => (
+            <NotConnectedCard key={sensor.id} sensor={sensor} />
+          ))}
+        </div>
+      )}
       <p className="readings-count">
         <StatusChip>{`${fitted.length} of ${sensors.length} sensors connected`}</StatusChip>
       </p>
