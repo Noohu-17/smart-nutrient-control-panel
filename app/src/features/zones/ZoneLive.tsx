@@ -2,6 +2,7 @@ import type { ZoneSource } from "../../api/types";
 import { ReadingCard } from "../../components/ReadingCard";
 import { StatusChip } from "../../components/StatusChip";
 import { formatAge, ZONE_READINGS } from "../../config/readings";
+import { readingTarget } from "./readingTarget";
 import type { ZoneStatus } from "./useZoneStatus";
 
 /** "Live" (real hardware, real time) or "Simulated" (played by the simulator), from GET /farm (§2.4). */
@@ -21,12 +22,6 @@ export function ZoneStatusChip({ status }: { status: ZoneStatus }) {
     show the crop stage's targets; EC also in ppm on a controller with a TDS probe. */
 export function ZoneReadings({ status }: { status: ZoneStatus }) {
   const { t, loading, offline, stale } = status;
-  const targets = { ec: t?.crop?.ecTarget, ph: t?.crop?.phTarget };
-  const ppm = t?.profile?.tdsPpmPerMsCm;
-  const ecNote =
-    targets.ec && ppm
-      ? `${Math.round(targets.ec.min * ppm)}–${Math.round(targets.ec.max * ppm)} ppm`
-      : undefined;
   return (
     <div className="readings">
       {ZONE_READINGS.map((spec) => (
@@ -35,8 +30,7 @@ export function ZoneReadings({ status }: { status: ZoneStatus }) {
           spec={spec}
           value={t?.readings[spec.key]}
           quality={t?.quality[spec.key]}
-          target={spec.key === "ec" || spec.key === "ph" ? (targets[spec.key] ?? undefined) : undefined}
-          targetNote={spec.key === "ec" ? ecNote : undefined}
+          {...readingTarget(status, spec.key)}
           stale={offline || stale}
           loading={loading}
         />

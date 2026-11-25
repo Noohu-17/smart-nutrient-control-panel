@@ -47,6 +47,8 @@ export function ReadingCard({
   targetNote,
   stale = false,
   loading = false,
+  note,
+  about,
 }: {
   spec: ReadingSpec;
   value: number | null | undefined;
@@ -58,6 +60,10 @@ export function ReadingCard({
   stale?: boolean;
   /** still waiting for the first answer */
   loading?: boolean;
+  /** a word in the head where a target would go, e.g. "Simulated" */
+  note?: string;
+  /** one short line on what it measures, e.g. "Acidity of the nutrient solution" */
+  about?: string;
 }) {
   const tone = readingTone(value, quality, target, stale);
   const status = statusText(tone, value, quality, target, stale, loading);
@@ -65,13 +71,20 @@ export function ReadingCard({
     <div className={`reading reading-${tone}`} role="group" aria-label={spec.label}>
       <span className="reading-head">
         <span>{spec.label}</span>
-        {target && (
+        {target ? (
           <span className="reading-target">
             <span>
               Target {formatReading(target.min, spec)}–{formatReading(target.max, spec)}
             </span>
-            {targetNote && <> <span>({targetNote})</span></>}
+            {targetNote && (
+              <>
+                {" "}
+                <span>({targetNote})</span>
+              </>
+            )}
           </span>
+        ) : (
+          note && <span>{note}</span>
         )}
       </span>
       <span className="reading-value">
@@ -79,6 +92,7 @@ export function ReadingCard({
         {spec.unit && <small>{spec.unit}</small>}
       </span>
       {status && <span className="reading-status">{status}</span>}
+      {about && <span className="reading-about">{about}</span>}
     </div>
   );
 }

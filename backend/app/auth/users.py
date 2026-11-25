@@ -1,7 +1,12 @@
-"""Make the site's first Owner (T1-35).
+"""Make the site's first Owner (T1-35), and other users from the command line.
 
 Run from backend/, after `alembic upgrade head` and the seed (app.db.seed):
     python -m app.auth.users create-owner --email owner@example.org --name "Farm Owner"
+    python -m app.auth.users create-user --email grower@example.org --name "Grower" --role OPERATOR
+
+create-user makes a user of any role (OWNER, AGRONOMIST, OPERATOR, VIEWER), for a site with no
+Users page yet. An Owner needs two-factor at the first sign-in unless the pack's features.json has
+"ownerTwoFactor": false (auth/routes.py).
 
 On the staging server, inside the API container:
     docker compose --env-file infra/.env.staging -f infra/docker-compose.staging.yml \
@@ -28,7 +33,7 @@ from ..db.engine import create_db_engine
 from ..db.models import Site, User, UserSession
 from ..packs import load_pack
 from . import audit
-from .access import OWNER
+from .access import OWNER, ROLES
 from .passwords import hash_password, new_password
 
 
@@ -63,6 +68,33 @@ def create_owner(engine: Engine, site: SiteRef, email: str, name: str) -> tuple[
     return user_id, password
 
 
+def create_user(engine: Engine, site: SiteRef, email: str, name: str, role: str) -> tuple[str, str]:
+    """Add a user of any role. Returns (user_id, password); the password is not stored."""
+    email, name, role = email.strip().lower(), name.strip(), role.strip().upper()
+    if "@" not in email or not name:
+        raise Refused("give an email address and a name")
+    if role not in ROLES:
+        raise Refused(f"role must be one of {', '.join(ROLES)}")
+    password = new_password()
+    user_id = uuid.uuid4().hex
+    with engine.begin() as connection:
+        if connection.scalar(select(Site.site_id).where(Site.org_id == site.org_id, Site.site_id == site.site_id)) is None:
+            raise Refused(f"site {site.org_id}/{site.site_id} isn't in the database: run python -m app.db.seed first")
+        mine = (User.org_id == site.org_id, User.site_id == site.site_id)
+        if connection.scalar(select(User.user_id).where(*mine, func.lower(User.email) == email)) is not None:
+            raise Refused(f"{email} already has an account")
+        connection.execute(
+            insert(User).values(
+                org_id=site.org_id, site_id=site.site_id, user_id=user_id, name=name, email=email,
+                role=role, password_hash=hash_password(password),
+            )
+        )
+        audit.write(connection, site, None, None, "USER_CREATED", target=user_id,
+                    detail={"email": email, "role": role, "by": "python -m app.auth.users create-user",
+                            "at": datetime.now(UTC).isoformat()})
+    return user_id, password
+
+
 def reset_two_factor(engine: Engine, site: SiteRef, email: str) -> None:
     """Turn the user's two-factor off and end their sessions, for a lost or replaced phone."""
     email = email.strip().lower()
@@ -81,11 +113,15 @@ def reset_two_factor(engine: Engine, site: SiteRef, email: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Make the site's first Owner.")
+    parser = argparse.ArgumentParser(description="Make the site's first Owner, or another user.")
     commands = parser.add_subparsers(dest="command", required=True)
     owner = commands.add_parser("create-owner", help="add the first Owner and print its password once")
     owner.add_argument("--email", required=True)
     owner.add_argument("--name", required=True)
+    user = commands.add_parser("create-user", help="add a user of any role and print its password once")
+    user.add_argument("--email", required=True)
+    user.add_argument("--name", required=True)
+    user.add_argument("--role", required=True, help=", ".join(ROLES))
     reset = commands.add_parser("reset-two-factor", help="turn a user's two-factor off, after a lost phone")
     reset.add_argument("--email", required=True)
     args = parser.parse_args(argv)
@@ -98,13 +134,17 @@ def main(argv: list[str] | None = None) -> int:
             reset_two_factor(engine, site, args.email)
             print(f"Two-factor is off for {args.email.strip().lower()}; they set it up again at the next sign-in.")
             return 0
-        _, password = create_owner(engine, site, args.email, args.name)
+        if args.command == "create-user":
+            _, password = create_user(engine, site, args.email, args.name, args.role)
+        else:
+            _, password = create_owner(engine, site, args.email, args.name)
     except Refused as exc:
         print(f"{args.command}: {exc}", file=sys.stderr)
         return 1
     finally:
         engine.dispose()
-    print(f"Owner {args.email.strip().lower()} made for {site.org_id}/{site.site_id}.")
+    role = "Owner" if args.command == "create-owner" else args.role.strip().upper().title()
+    print(f"{role} {args.email.strip().lower()} made for {site.org_id}/{site.site_id}.")
     print()
     print("Password. Put it in the password manager now; it is not stored anywhere else:")
     print()

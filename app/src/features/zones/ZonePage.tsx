@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { useFarm } from "../../api/hooks";
-import type { FarmZone } from "../../api/types";
+import type { Farm, FarmZone } from "../../api/types";
 import { zonePath } from "../../config/readings";
 import { EmptyState } from "../../components/EmptyState";
 import { StatusChip } from "../../components/StatusChip";
@@ -14,14 +14,15 @@ import { ZoneTags } from "./ZoneTags";
 import { DOSE_CARD, goToDoseCard } from "./doseCard";
 import { ZoneActions } from "./ZoneActions";
 import { ZoneDetails } from "./ZoneDetails";
-import { ZoneSensors } from "./ZoneSensors";
+import { ZoneSensorReadings } from "./ZoneSensors";
 import { ResumeZone } from "./ResumeZone";
-import { ZoneReadings, ZoneSourceChip, ZoneStatusChip } from "./ZoneLive";
+import { ZoneSourceChip, ZoneStatusChip } from "./ZoneLive";
 import { useZoneStatus } from "./useZoneStatus";
 
 /** Every alert, as on any other page (Resume in this zone's stopped or E-STOP one, a link to the
     zone for another zone's), then the live readings. */
-function ZoneLive({ zone, zones }: { zone: FarmZone; zones: FarmZone[] }) {
+function ZoneLive({ zone, farm }: { zone: FarmZone; farm: Farm }) {
+  const zones = farm.zones;
   const status = useZoneStatus(zone.id);
   const alerts = useZoneAlerts(zones, { site: true });
   return (
@@ -48,7 +49,7 @@ function ZoneLive({ zone, zones }: { zone: FarmZone; zones: FarmZone[] }) {
           <ZoneStatusChip status={status} />
         </header>
         <ZoneTags zone={zone} status={status} />
-        <ZoneReadings status={status} />
+        <ZoneSensorReadings zone={zone} farm={farm} status={status} />
         <ZoneActions zoneId={zone.id} full />
       </section>
     </>
@@ -91,15 +92,13 @@ export function ZonePage() {
         <EmptyState title="Zone not found">There is no zone called "{zoneId}".</EmptyState>
       ) : (
         <>
-          <ZoneLive key={`live-${zone.id}`} zone={zone} zones={farm.data.zones} />
+          <ZoneLive key={`live-${zone.id}`} zone={zone} farm={farm.data} />
 
           {hasClimateController(farm.data) && <ZoneClimateCard farm={farm.data} />}
 
           <ZoneDetails key={`details-${zone.id}`} zone={zone} />
 
           <DoseCard key={zone.id} zone={zone} />
-
-          <ZoneSensors key={`sensors-${zone.id}`} zone={zone} farm={farm.data} />
 
           <section className="zone-card" aria-labelledby="benches-title">
             <header className="zone-card-head">
