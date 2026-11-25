@@ -45,6 +45,14 @@ const USERS: FakeUser[] = [
     twoFactor: true,
   },
   {
+    id: "u-jack",
+    name: "Jack",
+    email: "jack123@gmail.com",
+    role: "OWNER",
+    password: "12345678",
+    twoFactor: true,
+  },
+  {
     id: "u-new-owner",
     name: "New Owner",
     email: "new-owner@farm.test",
