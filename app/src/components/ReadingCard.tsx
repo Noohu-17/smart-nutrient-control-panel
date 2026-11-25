@@ -46,6 +46,7 @@ export function ReadingCard({
   target,
   stale = false,
   loading = false,
+  note,
 }: {
   spec: ReadingSpec;
   value: number | null | undefined;
@@ -55,6 +56,8 @@ export function ReadingCard({
   stale?: boolean;
   /** still waiting for the first answer */
   loading?: boolean;
+  /** a word in the head where a target would go, e.g. "Simulated" */
+  note?: string;
 }) {
   const tone = readingTone(value, quality, target, stale);
   const status = statusText(tone, value, quality, target, stale, loading);
@@ -62,10 +65,12 @@ export function ReadingCard({
     <div className={`reading reading-${tone}`} role="group" aria-label={spec.label}>
       <span className="reading-head">
         <span>{spec.label}</span>
-        {target && (
+        {target ? (
           <span>
             Target {formatReading(target.min, spec)}–{formatReading(target.max, spec)}
           </span>
+        ) : (
+          note && <span>{note}</span>
         )}
       </span>
       <span className="reading-value">

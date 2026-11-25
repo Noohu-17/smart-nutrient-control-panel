@@ -228,52 +228,18 @@
   color: var(--text-muted);
 }
 
-/* ---------- sensors by farm type (DM-3): fitted ones live, the rest greyed "Not connected" */
-.sensor-cards {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--reading-min)), 1fr));
-  gap: var(--space-3);
-}
-.sensor-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-tile);
-  background: var(--color-surface-subtle);
-}
-.sensor-card.not-connected {
+/* ---------- the zone's readings: every sensor of its farm type (DM-3), the missing ones greyed */
+.reading.not-connected {
   border-style: dashed;
   border-color: var(--dashed-border);
   background: var(--disabled-bg);
   color: var(--disabled-fg);
 }
-.sensor-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-2);
-}
-.sensor-values {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
-}
-.sensor-values.old {
-  color: var(--disabled-fg);
-}
-.sensor-measures,
-.sensor-meta {
-  margin: 0;
+.reading-note {
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line);
-  color: var(--text-secondary);
-}
-.sensor-card.not-connected .sensor-measures,
-.sensor-card.not-connected .sensor-meta {
   color: var(--disabled-fg);
+}
+.readings-count {
+  margin: var(--space-2) 0 0;
 }

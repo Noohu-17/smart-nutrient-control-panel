@@ -1,4 +1,4 @@
-// DM-3 · a card per sensor of the zone's farm type: fitted ones live, the rest greyed "Not connected"
+// DM-3 · the zone's readings: every sensor of its farm type, fitted ones live, the rest greyed "Not connected"
 import { screen, waitFor, within } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { afterEach, describe, expect, it } from "vitest";
@@ -24,8 +24,8 @@ const TEN_SENSORS = [
   "Leak / overflow sensor",
 ];
 
-const sensorsSection = async () =>
-  within((await screen.findByRole("heading", { name: "Sensors" })).closest("section")!);
+const readingsSection = async () =>
+  within((await screen.findByRole("heading", { name: "Readings" })).closest("section")!);
 
 /** The card's value once its answer has come: a number, or a yes/no word such as Dry. */
 const valueOf = async (card: HTMLElement) => {
@@ -79,37 +79,42 @@ describe("sensorText", () => {
   });
 });
 
-describe("Sensors on the zone page", () => {
-  it("shows a card for each of the ten hydroponics sensors from the sheet", async () => {
-    renderAt("/zone/Z1");
-    const section = await sensorsSection();
-    expect(section.getAllByRole("listitem").map((li) => li.getAttribute("aria-label"))).toEqual(TEN_SENSORS);
-    expect(
-      section.getByText("Hydroponics (NFT, DWC, vertical): roots in nutrient water"),
-    ).toBeInTheDocument();
-  });
+// client_A's Zone A has every layout sensor but dissolved oxygen; CO₂ and light have none yet
+const MISSING_ON_A = ["Dissolved oxygen (DO) sensor", "CO₂ sensor", "Light (PAR) sensor"];
 
-  it("client_A: what the layout fits shows live, the rest Not connected", async () => {
+describe("Readings on the zone page", () => {
+  it("client_A: what the layout fits shows live, the rest greyed Not connected, last", async () => {
     renderAt("/zone/Z1");
-    const section = await sensorsSection();
-    expect(section.getByText("7 of 10 connected")).toBeInTheDocument();
-    const card = (name: string) => within(section.getByRole("listitem", { name }));
-    expect(await valueOf(section.getByRole("listitem", { name: "pH sensor" }))).toMatch(/^\d+\.\d{2}$/);
-    expect(await valueOf(section.getByRole("listitem", { name: "Leak / overflow sensor" }))).toBe("Dry");
-    for (const name of ["Dissolved oxygen (DO) sensor", "CO₂ sensor", "Light (PAR) sensor"]) {
-      expect(card(name).getByText("Not connected")).toBeInTheDocument();
-      expect(card(name).getByText(/^Would measure: /)).toBeInTheDocument();
+    const section = await readingsSection();
+    expect(await section.findByText("7 of 10 sensors connected")).toBeInTheDocument();
+    expect(await valueOf(section.getByRole("group", { name: "pH" }))).toMatch(/^\d+\.\d{2}$/);
+    expect(section.getByRole("group", { name: "Solution temp" })).toBeInTheDocument(); // the app's own label
+    expect(await valueOf(section.getByRole("group", { name: "Leak" }))).toBe("Dry");
+    const groups = section.getAllByRole("group").map((g) => g.getAttribute("aria-label"));
+    expect(groups.slice(-3)).toEqual(MISSING_ON_A); // the missing ones last
+    for (const name of MISSING_ON_A) {
+      const card = section.getByRole("group", { name });
+      expect(card).toHaveClass("not-connected");
+      expect(within(card).getByText("Not connected")).toBeInTheDocument();
+      expect(within(card).getByText(/^Would measure: /)).toBeInTheDocument();
     }
-    expect(card("CO₂ sensor").getByText("Typical 400 – 1,000 ppm · Good to have")).toBeInTheDocument();
-    expect(card("pH sensor").getByText("Typical 5.5 – 6.5 · Must have")).toBeInTheDocument();
   });
 
-  it("is left out for a pack without a sensor catalogue", async () => {
+  it("has no separate Sensors section", async () => {
+    renderAt("/zone/Z1");
+    await readingsSection();
+    await screen.findByRole("heading", { name: "Benches" });
+    expect(screen.queryByRole("heading", { name: "Sensors" })).not.toBeInTheDocument();
+  });
+
+  it("shows the zone's main readings as before for a pack without a sensor catalogue", async () => {
     window.history.replaceState(null, "", "/zone/Z1?mock=no-sensors");
     renderAt("/zone/Z1");
-    await screen.findByRole("heading", { name: "Benches" });
+    const section = await readingsSection();
+    for (const name of ["EC", "pH", "Solution temp", "Reservoir level"])
+      expect(await section.findByRole("group", { name })).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 400)); // the 404 has come
-    expect(screen.queryByRole("heading", { name: "Sensors" })).not.toBeInTheDocument();
+    expect(section.queryByText(/sensors connected$/)).not.toBeInTheDocument();
   });
 });
 
@@ -126,7 +131,6 @@ describe("client_B zone pages", () => {
       http.get("/api/farm", () => HttpResponse.json({ ...layout, features })),
       http.get("/api/sensors", () => HttpResponse.json(catalogue)),
     );
-  const LIVE = ["pH sensor", "EC / TDS sensor", "Water temperature sensor", "Water level sensor"];
   const NOT_CONNECTED = [
     "Flow sensor",
     "Dissolved oxygen (DO) sensor",
@@ -136,25 +140,23 @@ describe("client_B zone pages", () => {
   ];
 
   it.each((layout.zones as FarmZone[]).map((z) => [z.id, z.name]))(
-    "%s (%s) shows all ten: four live, the air simulated, the rest Not connected",
+    "%s (%s) shows all ten in Readings: four live, the air simulated, the rest Not connected",
     async (zoneId) => {
       useClientB();
       renderAt(`/zone/${zoneId}`);
-      const section = await sensorsSection();
-      expect(section.getAllByRole("listitem")).toHaveLength(10);
-      expect(section.getByText("5 of 10 connected")).toBeInTheDocument();
-      for (const name of LIVE) {
-        const card = section.getByRole("listitem", { name });
-        expect(within(card).getByText("Live")).toBeInTheDocument();
+      const section = await readingsSection();
+      expect(await section.findByText("5 of 10 sensors connected")).toBeInTheDocument();
+      for (const name of ["EC", "pH", "Solution temp", "Reservoir level"])
+        expect(await valueOf(section.getByRole("group", { name }))).toMatch(/^\d/);
+      for (const name of ["Air temp", "Humidity"]) {
+        const card = section.getByRole("group", { name });
+        expect(within(card).getByText("Simulated")).toBeInTheDocument();
         expect(await valueOf(card)).toMatch(/^\d/);
       }
-      const air = section.getByRole("listitem", { name: "Air temperature & humidity sensor" });
-      expect(within(air).getByText("Simulated")).toBeInTheDocument();
-      expect(within(air).getByText("Air temp")).toBeInTheDocument();
-      expect(within(air).getByText("Humidity")).toBeInTheDocument();
-      expect(await valueOf(air)).toMatch(/^\d+\.\d$/);
+      const groups = section.getAllByRole("group").map((g) => g.getAttribute("aria-label"));
+      expect(groups.slice(-5)).toEqual(NOT_CONNECTED); // the missing ones last
       for (const name of NOT_CONNECTED) {
-        const card = section.getByRole("listitem", { name });
+        const card = section.getByRole("group", { name });
         expect(card).toHaveClass("not-connected");
         expect(within(card).getByText("Not connected")).toBeInTheDocument();
         expect(card.querySelector(".reading-value")).toBeNull();

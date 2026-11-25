@@ -1,21 +1,60 @@
 import { useClimate, useSensors } from "../../api/hooks";
-import type { ClimateStatus, Farm, FarmZone, SensorInfo } from "../../api/types";
+import type { ClimateStatus, Farm, FarmZone, Quality, SensorInfo, SensorReading } from "../../api/types";
+import { ReadingCard } from "../../components/ReadingCard";
 import { StatusChip } from "../../components/StatusChip";
-import {
-  formatSensorValue,
-  isFitted,
-  NECESSITY_TEXT,
-  readingValue,
-  readsClimate,
-  sensorSource,
-  zoneFarmType,
-} from "./sensorText";
-import { ZoneSourceChip } from "./ZoneLive";
-import { useZoneStatus, type ZoneStatus } from "./useZoneStatus";
+import { ZONE_READINGS, type ReadingSpec } from "../../config/readings";
+import { formatSensorValue, isFitted, readingValue, readsClimate, sensorSource, zoneFarmType } from "./sensorText";
+import { ZoneReadings } from "./ZoneLive";
+import type { ZoneStatus } from "./useZoneStatus";
 
-/** One sensor: a fitted one shows its live reading, Live or Simulated; one that isn't fitted is
-    greyed out, "Not connected", with what it would measure. */
-function SensorCard({
+/** The reading card's spec: the app's own for the zone's main readings (the Overview uses the same
+    labels), otherwise the catalogue's label, unit and decimals. */
+function specOf(reading: SensorReading): ReadingSpec {
+  const own = reading.from === "zone.readings" ? ZONE_READINGS.find((s) => s.key === reading.key) : undefined;
+  if (own) return own;
+  return { key: reading.key, label: reading.label, unit: reading.unit ?? "", decimals: reading.decimals ?? 1 };
+}
+
+/** A yes/no reading such as the leak sensor: Dry in green, Wet in red. */
+function StateCard({
+  reading,
+  value,
+  old,
+}: {
+  reading: SensorReading;
+  value: boolean | null | undefined;
+  old: boolean;
+}) {
+  const tone = old || value === null || value === undefined ? "off" : value ? "crit" : "ok";
+  return (
+    <div className={`reading reading-${tone}`} role="group" aria-label={reading.label}>
+      <span className="reading-head">
+        <span>{reading.label}</span>
+      </span>
+      <span className="reading-value">
+        <b>{formatSensorValue(reading, value)}</b>
+      </span>
+    </div>
+  );
+}
+
+/** A sensor the zone doesn't have: greyed, "Not connected", with what it would measure. */
+function NotConnectedCard({ sensor }: { sensor: SensorInfo }) {
+  return (
+    <div className="reading reading-off not-connected" role="group" aria-label={sensor.name}>
+      <span className="reading-head">
+        <span>{sensor.name}</span>
+      </span>
+      <span className="reading-status">Not connected</span>
+      <span className="reading-note">
+        Would measure: {sensor.measures.charAt(0).toLowerCase()}
+        {sensor.measures.slice(1)} · typical {sensor.typical}
+      </span>
+    </div>
+  );
+}
+
+function FittedCards({
   sensor,
   zone,
   farm,
@@ -28,78 +67,60 @@ function SensorCard({
   status: ZoneStatus;
   climate?: ClimateStatus;
 }) {
-  const fitted = isFitted(sensor, zone, farm);
   const fromClimate = sensor.fittedBy === "CLIMATE_CONTROLLER";
-  // old values grey: the zone (or for the air, the climate controller) silent or past fresh
   const old = fromClimate ? climate?.online === false : status.offline || status.stale;
-
+  // only the air can be played by the simulator on a farm whose zones are live (client_B)
+  const note = fromClimate && sensorSource(sensor, zone, farm) === "SIMULATED" ? "Simulated" : undefined;
   return (
-    <li className={`sensor-card${fitted ? "" : " not-connected"}`} aria-label={sensor.name}>
-      <div className="sensor-card-head">
-        <b>{sensor.name}</b>
-        {fitted ? (
-          <ZoneSourceChip source={sensorSource(sensor, zone, farm)} />
-        ) : (
-          <StatusChip tone="off">Not connected</StatusChip>
-        )}
-      </div>
-      {fitted && sensor.readings.length > 0 && (
-        <div className={`sensor-values${old ? " old" : ""}`}>
-          {sensor.readings.map((reading) => (
-            <span key={reading.key} className="reading-value">
-              {sensor.readings.length > 1 && <small>{reading.label}</small>}
-              <b>{formatSensorValue(reading, readingValue(reading, status.t, climate))}</b>
-              {reading.unit && <small>{reading.unit}</small>}
-            </span>
-          ))}
-        </div>
-      )}
-      <p className="sensor-measures">
-        {fitted
-          ? sensor.measures
-          : `Would measure: ${sensor.measures.charAt(0).toLowerCase()}${sensor.measures.slice(1)}`}
-      </p>
-      <p className="sensor-meta">
-        Typical {sensor.typical} · {NECESSITY_TEXT[sensor.necessity]}
-      </p>
-    </li>
+    <>
+      {sensor.readings.map((reading) => {
+        const value = readingValue(reading, status.t, climate);
+        if (typeof value === "boolean" || reading.states)
+          return (
+            <StateCard key={reading.key} reading={reading} value={value as boolean | null | undefined} old={old} />
+          );
+        const quality = (fromClimate ? climate?.quality : status.t?.quality) as Record<string, Quality> | undefined;
+        return (
+          <ReadingCard
+            key={reading.key}
+            spec={specOf(reading)}
+            value={value as number | null | undefined}
+            quality={quality?.[reading.key]}
+            stale={old}
+            loading={fromClimate ? !climate : status.loading}
+            note={note}
+          />
+        );
+      })}
+    </>
   );
 }
 
-/** Every sensor of the zone's farm type (sensors.json, DM-3), fitted or not. None when the pack has
-    no catalogue or none for this zone's growing system. */
-export function ZoneSensors({ zone, farm }: { zone: FarmZone; farm: Farm }) {
-  const catalogue = useSensors();
-  const farmType = catalogue.data ? zoneFarmType(catalogue.data, zone) : null;
-  if (!farmType) return null;
-  return <SensorList zone={zone} farm={farm} name={farmType.name} sensors={farmType.sensors} />;
-}
-
-function SensorList({
+/** The zone page's readings: every sensor of the zone's farm type (sensors.json, DM-3), the fitted
+    ones live and the rest greyed "Not connected". A pack without a catalogue, or none for this
+    zone's growing system, shows the zone's main readings as before. */
+export function ZoneSensorReadings({
   zone,
   farm,
-  name,
-  sensors,
+  status,
 }: {
   zone: FarmZone;
   farm: Farm;
-  name: string;
-  sensors: SensorInfo[];
+  status: ZoneStatus;
 }) {
-  const status = useZoneStatus(zone.id);
+  const catalogue = useSensors();
+  const farmType = catalogue.data ? zoneFarmType(catalogue.data, zone) : null;
+  const sensors = farmType?.sensors ?? [];
   const climate = useClimate({ enabled: readsClimate(sensors) && Boolean(farm.climate.controller) });
-  const connected = sensors.filter((s) => isFitted(s, zone, farm)).length;
+  if (!farmType) return <ZoneReadings status={status} />;
 
+  const fitted = sensors.filter((s) => isFitted(s, zone, farm));
+  const missing = sensors.filter((s) => !isFitted(s, zone, farm));
   return (
-    <section className="zone-card" aria-labelledby="sensors-title">
-      <header className="zone-card-head">
-        <h2 id="sensors-title">Sensors</h2>
-        <StatusChip>{`${connected} of ${sensors.length} connected`}</StatusChip>
-      </header>
-      <p className="empty-note">{name}</p>
-      <ul className="sensor-cards">
-        {sensors.map((sensor) => (
-          <SensorCard
+    <>
+      <div className="readings">
+        {fitted.map((sensor) => (
+          <FittedCards
             key={sensor.id}
             sensor={sensor}
             zone={zone}
@@ -108,7 +129,13 @@ function SensorList({
             climate={climate.data}
           />
         ))}
-      </ul>
-    </section>
+        {missing.map((sensor) => (
+          <NotConnectedCard key={sensor.id} sensor={sensor} />
+        ))}
+      </div>
+      <p className="readings-count">
+        <StatusChip>{`${fitted.length} of ${sensors.length} sensors connected`}</StatusChip>
+      </p>
+    </>
   );
 }
