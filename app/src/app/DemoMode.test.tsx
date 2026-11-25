@@ -38,7 +38,7 @@ describe("demo mode on", () => {
 
   it("keeps the banner on every screen after sign-in", async () => {
     vi.stubEnv("VITE_DEMO_MODE", "true");
-    for (const path of ["/", "/zone/Z1", "/climate", "/alerts", "/history", "/simulator"]) {
+    for (const path of ["/", "/zone/Z1", "/alerts", "/history", "/simulator"]) {
       const { unmount } = renderAt(path);
       expect(await screen.findByRole("note")).toHaveTextContent(BANNER);
       unmount();

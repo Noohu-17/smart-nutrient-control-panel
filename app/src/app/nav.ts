@@ -4,11 +4,11 @@ import { zonePath } from "../config/readings";
 
 export type NavItem = { to: string; label: string; icon: IconName };
 
-/** Monitor group: Overview, one link per zone from GET /api/farm, then Climate. */
+/** Monitor group: Overview, then one link per zone from GET /api/farm. The house climate is on each
+    zone page, not a page of its own. */
 export const navMonitor = (zones: FarmZone[]): NavItem[] => [
   { to: "/", label: "Overview", icon: "grid" },
   ...zones.map((z) => ({ to: zonePath(z.id), label: z.name, icon: "layers" as const })),
-  { to: "/climate", label: "Climate", icon: "therm" },
 ];
 
 /** System group. The Simulator exists only on playground sites (contract 11.4.1). */

@@ -20,9 +20,9 @@ export function BottomTabs({ onMore, moreOpen }: { onMore: () => void; moreOpen:
         <Icon name="layers" />
         Zones
       </NavLink>
-      <NavLink to="/climate">
-        <Icon name="therm" />
-        Climate
+      <NavLink to="/history">
+        <Icon name="clock" />
+        History
       </NavLink>
       <NavLink to="/alerts">
         <Icon name="bell" />

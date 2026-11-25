@@ -23,7 +23,8 @@ const EC_HIGH: ServerAlert = {
   acknowledgedBy: null,
 };
 
-const serve = (items: ServerAlert[]) => server.use(http.get("/api/alerts", () => HttpResponse.json({ items })));
+const serve = (items: ServerAlert[]) =>
+  server.use(http.get("/api/alerts", () => HttpResponse.json({ items })));
 const strip = async () => within(await screen.findByRole("region", { name: "Alerts" }));
 
 describe("server alerts in the app (T2-22)", () => {
@@ -52,7 +53,7 @@ describe("server alerts in the app (T2-22)", () => {
 
   it("shows it on pages with no strip of their own, with a link to the zone", async () => {
     serve([EC_HIGH]);
-    renderAt("/climate");
+    renderAt("/history");
     const s = await strip();
     expect(await s.findByText(/EC in Zone A is 2.8/)).toBeInTheDocument();
     expect(s.getByRole("link", { name: "Open Zone A" })).toHaveAttribute("href", "/zone/Z1");
@@ -74,7 +75,12 @@ describe("server alerts in the app (T2-22)", () => {
         HttpResponse.json({
           items: [
             ackedBy
-              ? { ...EC_HIGH, status: "ACKNOWLEDGED", acknowledgedAt: "2026-11-12T05:12:00.000Z", acknowledgedBy: ackedBy }
+              ? {
+                  ...EC_HIGH,
+                  status: "ACKNOWLEDGED",
+                  acknowledgedAt: "2026-11-12T05:12:00.000Z",
+                  acknowledgedBy: ackedBy,
+                }
               : EC_HIGH,
           ],
         }),

@@ -152,8 +152,8 @@ describe("Demo sign-in", () => {
 describe("The session", () => {
   it("survives a reload: GET /api/me says who is signed in", async () => {
     fakeSignIn("AGRONOMIST");
-    renderFresh("/climate");
-    expect(await screen.findByRole("heading", { name: "Climate" })).toBeInTheDocument();
+    renderFresh("/history");
+    expect(await screen.findByRole("heading", { name: "History" })).toBeInTheDocument();
     expect(topBar().getByText(/· Agronomist/)).toBeInTheDocument();
   });
 

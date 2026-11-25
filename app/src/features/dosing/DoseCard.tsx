@@ -3,12 +3,14 @@ import { useConfirmDose, useDoseLimits, useDoseReview, useZone } from "../../api
 import type { DoseLineAmount, DoseLineLimit, DoseRequest, FarmZone } from "../../api/types";
 import { can, WHY } from "../../auth/roles";
 import { useSession } from "../../auth/session";
+import { Icon } from "../../components/Icon";
 import { LockedButton } from "../../components/LockedButton";
 import { StatusChip } from "../../components/StatusChip";
 import { checkTitle, limitHint, lineName, RESULT_MARK, RESULT_TEXT, RESULT_TONE } from "../../config/dosing";
 import { nutrientText } from "../../config/zoneText";
 import { DOSE_CARD } from "../zones/doseCard";
 import { CommandStatus } from "./CommandStatus";
+import { useStockShown } from "./stockShown";
 
 type Amounts = Record<string, string>;
 
@@ -26,8 +28,9 @@ const infoFor = (info: LineInfo, line: string) => info?.find((l) => l.line === l
 /** The short line describing what a dose line doses (nutrients.json, T2-30); nothing if the pack
     doesn't say. */
 function NutrientNote({ info, id }: { info: DoseLineLimit | undefined; id?: string }) {
+  const [shown] = useStockShown();
   const text = nutrientText(info);
-  return text ? (
+  return text && shown ? (
     <small className="nutrient-note" id={id}>
       {text}
     </small>
@@ -51,6 +54,7 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
   // only a hint while typing, and what each line doses (T2-30): if it can't load, the form works
   // as before and the review checks
   const lineInfo = useDoseLimits(zone.id).data?.lines;
+  const [stockShown, setStockShown] = useStockShown();
   const idBase = useId();
 
   const allowed = role !== null && can(role, "operate");
@@ -85,6 +89,18 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
     <section className="zone-card" id={DOSE_CARD} aria-labelledby="dose-title">
       <header className="zone-card-head">
         <h2 id="dose-title">{cmdId ? "Dose status" : dr ? "Review safety checks" : "Manual dose"}</h2>
+        {lineInfo?.some((l) => nutrientText(l)) && (
+          <button
+            type="button"
+            className="icon-btn"
+            aria-pressed={!stockShown}
+            title={stockShown ? "Hide stock details" : "Show stock details"}
+            onClick={() => setStockShown(!stockShown)}
+          >
+            <Icon name={stockShown ? "eyeOff" : "eye"} size={18} />
+            <span>{stockShown ? "Hide stock" : "Show stock"}</span>
+          </button>
+        )}
       </header>
 
       {cmdId ? (
@@ -117,7 +133,9 @@ export function DoseCard({ zone }: { zone: FarmZone }) {
               const hint = info && limitHint(info, ml);
               const hintId = `${idBase}-${line}-limit`;
               const aboutId = `${idBase}-${line}-about`;
-              const describedBy = [hint && hintId, nutrientText(info) && aboutId].filter(Boolean).join(" ");
+              const describedBy = [hint && hintId, stockShown && nutrientText(info) && aboutId]
+                .filter(Boolean)
+                .join(" ");
               return (
                 <div key={line} className="dose-line">
                   <label htmlFor={`${idBase}-${line}`}>{lineName(line)}</label>

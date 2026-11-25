@@ -205,11 +205,16 @@
 }
 .reading-head {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: 0 var(--space-2);
   font-size: var(--text-label-size);
   line-height: var(--text-label-line);
   color: var(--text-secondary);
+}
+/* the target moves under the label as a whole when the card is narrow, never split mid-number */
+.reading-head > span + span {
+  white-space: nowrap;
 }
 .reading-value {
   display: flex;
@@ -320,4 +325,24 @@
   margin: 0;
   max-width: 48ch;
   color: var(--text-secondary);
+}
+
+/* a small button with an icon and a short label, e.g. the dose card's show / hide stock */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: var(--space-8);
+  padding: 0 var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-button-sm);
+  background: var(--color-surface);
+  color: var(--text-secondary);
+  font-size: var(--text-label-size);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+.icon-btn:hover {
+  color: var(--color-primary);
+  border-color: var(--color-primary);
 }

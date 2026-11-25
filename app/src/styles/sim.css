@@ -116,3 +116,63 @@
 .sim-switch .dose-note {
   margin: 0;
 }
+
+/* ---------- side by side: the page on the left, the Simulator on the right (same page, same API) */
+.sbs-panes {
+  display: grid;
+  gap: 0;
+  align-items: start;
+}
+.sbs-pane {
+  min-width: 0;
+  max-height: calc(100vh - var(--topbar-height) - var(--space-8));
+  overflow: auto;
+  padding: 0 var(--space-2);
+}
+.sbs-pane .wrap {
+  max-width: none;
+}
+/* the divider: a wide, easy-to-grab strip with a thin visible handle in the middle */
+.sbs-divider {
+  position: sticky;
+  top: 0;
+  width: 12px;
+  height: calc(100vh - var(--topbar-height) - var(--space-8));
+  cursor: col-resize;
+  touch-action: none;
+}
+.sbs-divider::before {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+  transition: background 120ms;
+}
+.sbs-divider:hover::before,
+.sbs-divider:focus-visible::before,
+.sbs-panes.dragging .sbs-divider::before {
+  background: var(--color-primary);
+}
+.sbs-divider:focus-visible {
+  outline: none;
+}
+.sbs-panes.dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+/* too narrow for two panes: just the page */
+@media (max-width: 900px) {
+  .sbs-panes {
+    display: block;
+  }
+  .sbs-divider,
+  .sbs-divider + .sbs-pane {
+    display: none;
+  }
+  .sbs-pane {
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+  }
+}

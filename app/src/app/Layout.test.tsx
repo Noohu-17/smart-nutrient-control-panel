@@ -1,4 +1,5 @@
 import { screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 import { server } from "../mocks/node";
@@ -40,12 +41,41 @@ describe("App shell", () => {
   it.each([
     ["/zone/Z1", "Zone A"],
     ["/zone/Z2", "Zone B"],
-    ["/climate", "Climate"],
     ["/alerts", "Alerts"],
     ["/history", "History"],
     ["/nowhere", "Page not found"],
   ])("routes %s to %s", async (path, heading) => {
     renderAt(path);
     expect(await screen.findByRole("heading", { name: heading })).toBeInTheDocument();
+  });
+
+  it("sends an old /climate link to the Overview: the climate is on each zone page now", async () => {
+    renderAt("/climate");
+    expect(await screen.findByRole("heading", { level: 1, name: "Overview" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Climate" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Side by side", () => {
+  it("shows the Simulator beside the page on a playground site, and closes again", async () => {
+    const user = userEvent.setup();
+    renderAt("/zone/Z1");
+    const banner = within(screen.getByRole("banner"));
+    await user.click(await banner.findByRole("button", { name: "Side by side" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Simulator" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: /Zone A/ })).toBeInTheDocument(); // the page stays
+    expect(screen.getByRole("separator", { name: "Resize panes" })).toBeInTheDocument();
+    await user.click(banner.getByRole("button", { name: "Close side by side" }));
+    expect(screen.queryByRole("heading", { level: 1, name: "Simulator" })).not.toBeInTheDocument();
+    localStorage.clear();
+  });
+
+  it("has no Side by side on a real farm, which has no simulator", async () => {
+    window.history.replaceState(null, "", "/?mock=no-playground");
+    renderAt("/");
+    await screen.findByRole("heading", { level: 1, name: "Overview" });
+    expect(screen.queryByRole("button", { name: "Side by side" })).not.toBeInTheDocument();
+    window.history.replaceState(null, "", "/");
+    window.sessionStorage.clear();
   });
 });

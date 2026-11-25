@@ -181,3 +181,17 @@ describe("Manual dose and review", () => {
     expect(screen.getByLabelText("Stock A")).toHaveValue(120);
   });
 });
+
+describe("Stock details", () => {
+  it("shows what each stock is, until the eye button hides it; the choice is remembered", async () => {
+    const { user, card } = await enter({});
+    const stock = /Calcium nitrate and iron chelate/;
+    expect(await card.findByText(stock)).toBeInTheDocument();
+    await user.click(card.getByRole("button", { name: "Hide stock" }));
+    expect(card.queryByText(stock)).not.toBeInTheDocument();
+    expect(localStorage.getItem("snm.showStock")).toBe("hidden");
+    await user.click(card.getByRole("button", { name: "Show stock" }));
+    expect(card.getByText(stock)).toBeInTheDocument();
+    expect(localStorage.getItem("snm.showStock")).toBeNull();
+  });
+});

@@ -72,10 +72,19 @@
   font-size: var(--text-label-size);
   color: var(--text-secondary);
 }
-.zone-climate-line a {
+.zone-climate-line a,
+.zone-climate-line b {
   color: var(--color-primary);
   font-weight: var(--weight-semibold);
   text-decoration: none;
+}
+
+/* a small heading inside a card, e.g. the house climate positions */
+.card-subhead {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-label-size);
+  font-weight: var(--weight-semibold);
+  color: var(--text-secondary);
 }
 
 /* no data from the zone: dashed and muted, values show "--" */
